@@ -336,6 +336,8 @@ async function secSettings() {
     '<label class="switch-row"><span>开放注册（注册始终需要邀请码）</span><input type="checkbox" id="sr"' + (s.registration_open ? ' checked' : '') + '></label>' +
     '<label>公开访问地址（域名，供微软在线放映抓取）<input id="spb" type="text" placeholder="例: http://t.fyx.best" value="' + UI.esc(s.public_base_url || '') + '"><p class="muted">微软 Office 放映要求域名+80/443 端口。填了它，即使用 IP 打开 FLA，直链也走此域名；留空则按当前浏览器地址生成</p></label>' +
     '<label>站点背景（登录页 / 前台 / 后台通用）<input id="sbg" type="text" placeholder="留空=默认; #1a2233; 或图片URL" value="' + UI.esc(s.site_bg || '') + '"><p class="muted">填 #颜色 或 http(s):// 图片链接；保存后刷新生效</p></label>' +
+    '<hr><h4>课件放映与白板</h4>' +
+    '<label class="switch-row"><span>放映时工具栏常驻显示（不自动收回，便于翻页与板书）</span><input type="checkbox" id="stb"' + (s.toolbar_keep ? ' checked' : '') + '><p class="muted">开启后全屏放映时底栏与顶栏始终显示，避免上课时找不到画笔或翻页键</p></label>' +
     '<hr><h4>社区权限</h4>' +
     '<label class="switch-row"><span>开启论坛</span><input type="checkbox" id="sforum"' + (s.forum_enabled ? ' checked' : '') + '></label>' +
     '<label class="switch-row"><span>开启聊天区</span><input type="checkbox" id="schat"' + (s.chat_enabled ? ' checked' : '') + '></label>' +
@@ -348,6 +350,7 @@ async function secSettings() {
         registration_open: $('#sr').checked,
         public_base_url: $('#spb').value.trim(),
         site_bg: $('#sbg').value.trim(),
+        toolbar_keep: $('#stb').checked,
         forum_enabled: $('#sforum').checked,
         chat_enabled: $('#schat').checked,
         allow_group_create: $('#sgrp').checked,

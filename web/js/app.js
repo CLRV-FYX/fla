@@ -362,16 +362,19 @@ function viewLogin() {
       afterLoginGo();
     } catch (err) { toast(err.message, 'err'); }
   };
-  /* v1.26: 扫码登录 — 显示二维码 + 轮询授权状态 */
+  /* v1.26: 扫码登录 — 显示二维码 + 轮询授权状态 (v1.27 修: 显式切换 display, 彻底防止双框重叠) */
   const switchTab = qr => {
     $('#lt-pw').classList.toggle('on', !qr);
     $('#lt-qr').classList.toggle('on', qr);
     $('#f').classList.toggle('hidden', qr);
     $('#qrbox').classList.toggle('hidden', !qr);
+    if ($('#f')) $('#f').style.display = qr ? 'none' : 'block';
+    if ($('#qrbox')) $('#qrbox').style.display = qr ? 'grid' : 'none';
     if (qr) startQrLogin(); else stopQrLogin();
   };
   $('#lt-pw').onclick = () => switchTab(false);
   $('#lt-qr').onclick = () => switchTab(true);
+  switchTab(false);   /* 初始默认密码登录, 强制隐藏二维码框 */
 
   let qrTimers = [];
   function stopQrLogin() { qrTimers.forEach(t => clearInterval(t) || clearTimeout(t)); qrTimers = []; }

@@ -1051,8 +1051,11 @@
       }
       return false;
     }
-    for (const pt of s.pts) {
-      if (segDist(pt, [a.x, a.y], [b.x, b.y]) <= r + half) return true;
+    if (s.pts && s.pts.length) {
+      if (s.pts.length === 1) return segDist(s.pts[0], [a.x, a.y], [b.x, b.y]) <= r + half;
+      for (let j = 0; j < s.pts.length - 1; j++) {
+        if (segsegDist([a.x, a.y], [b.x, b.y], s.pts[j], s.pts[j + 1]) <= r + half) return true;
+      }
     }
     return false;
   }

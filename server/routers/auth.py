@@ -36,7 +36,11 @@ class QrApproveIn(BaseModel):
 
 @router.get("/config")
 def config():
-    return {"registration_open": db.get_setting("registration_open", "1") == "1", "site_bg": db.get_setting("site_bg", "")}
+    return {
+        "registration_open": db.get_setting("registration_open", "1") == "1",
+        "site_bg": db.get_setting("site_bg", ""),
+        "toolbar_keep": db.get_setting("toolbar_keep", "1") == "1",
+    }
 
 
 @router.post("/register")

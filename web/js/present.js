@@ -1102,23 +1102,32 @@
     return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
   }
   function eraseAt(pt) {
+    if (!pt) return;
     var pid = curPage().pid;
     var arr = S.strokes[pid] || [];
     var r = (S.eraser.width || 28) / 2;
+    var px = (typeof pt.x === 'number') ? pt.x : (typeof pt[0] === 'number' ? pt[0] : 0);
+    var py = (typeof pt.y === 'number') ? pt.y : (typeof pt[1] === 'number' ? pt[1] : 0);
+    var p = [px, py];
+    var changed = false;
     for (var i = arr.length - 1; i >= 0; i--) {
       var s = arr[i], hit = false;
+      var half = (s.width || 3) / 2;
       if (s.tool === 'text') {
-        hit = pt[0] >= s.pts[0][0] - 20 && pt[0] <= s.pts[0][0] + (String(s.text || '').length * s.width * .6 + 20) &&
-              pt[1] >= s.pts[0][1] - 10 && pt[1] <= s.pts[0][1] + s.width * 1.4;
-      } else {
-        for (var j = 0; j < s.pts.length; j++) {
-          var a = s.pts[j], b = s.pts[Math.min(j + 1, s.pts.length - 1)];
-          if (segDist(pt, a, b) < r) { hit = true; break; }
+        hit = px >= s.pts[0][0] - 20 && px <= s.pts[0][0] + (String(s.text || '').length * s.width * .6 + 20) &&
+              py >= s.pts[0][1] - 10 && py <= s.pts[0][1] + s.width * 1.4;
+      } else if (s.pts && s.pts.length) {
+        if (s.pts.length === 1) {
+          hit = Math.hypot(px - s.pts[0][0], py - s.pts[0][1]) <= r + half;
+        } else {
+          for (var j = 0; j < s.pts.length - 1; j++) {
+            if (segDist(p, s.pts[j], s.pts[j + 1]) <= r + half) { hit = true; break; }
+          }
         }
       }
-      if (hit) { arr.splice(i, 1); saveSoon(); }
+      if (hit) { arr.splice(i, 1); changed = true; }
     }
-    inkRedraw();
+    if (changed) { saveSoon(); inkRedraw(); }
   }
 
   /* ---------- 激光笔 ---------- */
@@ -1169,9 +1178,9 @@
   function onKey(e) {
     if (e.target && /INPUT|TEXTAREA|SELECT|VIDEO|AUDIO/.test(e.target.tagName)) return;
     var k = e.key;
-    if (k === 'ArrowRight' || k === ' ' || k === 'PageDown' || k === 'Enter') { e.preventDefault(); advance(); }
-    else if (k === '.' || k === 'ArrowDown') { e.preventDefault(); revealAll(); }
-    else if (k === 'ArrowLeft' || k === 'PageUp') { e.preventDefault(); prevPage(); }
+    if (k === 'ArrowRight' || k === ' ' || k === 'PageDown' || k === 'Enter' || k === 'ArrowDown') { e.preventDefault(); advance(); }
+    else if (k === '.') { e.preventDefault(); revealAll(); }
+    else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'ArrowUp') { e.preventDefault(); prevPage(); }
     else if (k === 'Home') showPage(0);
     else if (k === 'End') showPage(S.pages.length - 1);
     else if (k === 'Escape') exitPresent();

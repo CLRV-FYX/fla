@@ -116,7 +116,8 @@
       dirty: false, saveT: 0, dead: false, t0: Date.now(),
       rect: null, frames: [], fcur: -1, loading: 0,
       sync: st('fla_ms_sync', 'deep'), thumbs: {}, pdf: null, pdfBusy: false,
-      bbOpen: false, bbCur: 0, cfg: null, hideT: 0, align: null, dpr: 1
+      bbOpen: false, bbCur: 0, cfg: null, hideT: 0, align: null, dpr: 1,
+      keepToolbar: st('fla_keep_toolbar', '1') !== '0'   /* 默认工具栏常驻不收起 */
     };
     var CFG_DEFAULT = {
       pen: { color: '#ef4444', width: 4 },
@@ -170,6 +171,7 @@
       '<span class="ms-sep"></span>' +
       '<button class="ms-tb" data-a="film" title="缩略图导航 (G)">' + icon('film', 17) + '</button>' +
       '<button class="ms-tb" data-a="sync" id="msSync" title="板书与微软画面的同步方式">' + icon('sync', 17) + '<em id="msSyncT">我方驱动</em></button>' +
+      '<button class="ms-tb' + (S.keepToolbar ? ' on' : '') + '" data-a="pin" id="msPin" title="工具栏常驻显示 / 自动收起">' + icon('lock', 16) + '<em id="msPinTxt">' + (S.keepToolbar ? '工具栏常驻' : '自动收起') + '</em></button>' +
       '<button class="ms-tb" data-a="align" title="微调板书区域(对准幻灯片)">' + icon('move', 17) + '</button>' +
       '<span class="ms-sep"></span>' +
       '<button class="ms-tb" data-a="time" id="msTime" title="点击归零">00:00</button>' +
@@ -589,23 +591,37 @@
       S.strokes[p] = []; S.selId = null; redraw();
       toast('已清空第 ' + S.page + ' 页板书 (Ctrl+Z 可撤销)');
     }
+    function distToSeg(p, a, b) {
+      var dx = b[0] - a[0], dy = b[1] - a[1];
+      var l2 = dx * dx + dy * dy;
+      if (!l2) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+      var t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2));
+      return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+    }
     function eraseAt(vx, vy) {
       var p = pid(), arr = S.strokes[p] || [], w = S.cfg.eraser.width;
+      var r = w / 2 + 8, pt = [vx, vy], changed = false;
       for (var i = arr.length - 1; i >= 0; i--) {
         var s = arr[i], hit = false, b = bounds(s);
+        var half = (s.width || 3) / 2;
         if (s.tool === 'shape' || s.tool === 'text') {
-          hit = vx >= b.x0 - 12 && vx <= b.x1 + 12 && vy >= b.y0 - 12 && vy <= b.y1 + 12;
-        } else {
-          hit = (s.pts || []).some(function (q) {
-            return Math.abs(q[0] - vx) < w / 2 + 8 && Math.abs(q[1] - vy) < w / 2 + 8;
-          });
+          hit = vx >= b.x0 - r && vx <= b.x1 + r && vy >= b.y0 - r && vy <= b.y1 + r;
+        } else if (s.pts && s.pts.length) {
+          if (s.pts.length === 1) {
+            hit = Math.hypot(vx - s.pts[0][0], vy - s.pts[0][1]) <= r + half;
+          } else {
+            for (var j = 0; j < s.pts.length - 1; j++) {
+              if (distToSeg(pt, s.pts[j], s.pts[j + 1]) <= r + half) { hit = true; break; }
+            }
+          }
         }
         if (hit) {
           arr.splice(i, 1); opPush(p, { op: 'del', s: s });
           if (S.selId === s.id) S.selId = null;
-          redraw(); return;
+          changed = true;
         }
       }
+      if (changed) redraw();
     }
     function pickAt(vx, vy) {
       var arr = S.strokes[pid()] || [];
@@ -1202,6 +1218,7 @@
     function wakeUI() {
       wrap.classList.remove('idle');
       clearTimeout(S.hideT);
+      if (S.keepToolbar) return;   /* 常驻模式: 老师上课工具栏不收起 */
       if (S.mode === 'present') {
         S.hideT = setTimeout(function () {
           if (S.tool === 'cursor' && !S.bbOpen && pop.classList.contains('hidden')) wrap.classList.add('idle');
@@ -1280,6 +1297,18 @@
           break;
         case 'film': toggleFilm(); break;
         case 'sync': syncMenu(); break;
+        case 'pin':
+          S.keepToolbar = !S.keepToolbar;
+          stSet('fla_keep_toolbar', S.keepToolbar ? '1' : '0');
+          var pinEl = wrap.querySelector('#msPin');
+          if (pinEl) {
+            pinEl.classList.toggle('on', S.keepToolbar);
+            var pinT = pinEl.querySelector('#msPinTxt');
+            if (pinT) pinT.textContent = S.keepToolbar ? '工具栏常驻' : '自动收起';
+          }
+          wakeUI();
+          toast(S.keepToolbar ? '已开启【工具栏常驻】(上课不收回)' : '已恢复【自动收起】(移至屏幕边缘唤出)');
+          break;
         case 'align': S.align ? exitAlign() : enterAlign(); break;
         case 'time': S.t0 = Date.now(); break;
         case 'full': toggleFull(); break;
@@ -1335,11 +1364,24 @@
       var k = (e.key || '').toLowerCase();
       if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); return; }
-      if ((e.ctrlKey || e.metaKey) && (k === 'arrowleft')) { e.preventDefault(); prevPage(); return; }
-      if ((e.ctrlKey || e.metaKey) && (k === 'arrowright')) { e.preventDefault(); nextPage(); return; }
+      if ((e.ctrlKey || e.metaKey) && (k === 'arrowleft' || k === 'pageup' || k === 'arrowup')) { e.preventDefault(); prevPage(); return; }
+      if ((e.ctrlKey || e.metaKey) && (k === 'arrowright' || k === 'pagedown' || k === 'arrowdown')) { e.preventDefault(); nextPage(); return; }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); nextPage(); }
-      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prevPage(); }
+
+      var isNext = (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowDown');
+      var isPrev = (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'ArrowUp');
+
+      if (isNext) {
+        if (S.sync === 'follow') {
+          /* 微软自翻模式: 翻页笔按键不阻止默认行为, 让事件自然流进微软播动画; 提示老师可用 Ctrl+→ 对齐板书 */
+          return;
+        }
+        e.preventDefault(); nextPage();
+      }
+      else if (isPrev) {
+        if (S.sync === 'follow') return;
+        e.preventDefault(); prevPage();
+      }
       else if (e.key === 'Home') { e.preventDefault(); goPage(1); }
       else if (e.key === 'End') { e.preventDefault(); goPage(total()); }
       else if (e.key === 'Escape') {

@@ -15,6 +15,7 @@
   --ease: cubic-bezier(.22, .8, .36, 1);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+.hidden { display: none !important; }
 html { color-scheme: light; }
 html, body { margin: 0; padding: 0; height: 100%; }
 body {
