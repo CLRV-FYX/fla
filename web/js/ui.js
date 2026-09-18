@@ -59,6 +59,17 @@
     pin: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/>',
     send: '<path d="m22 2-7 20-4-9-9-4 20-7z"/><path d="M22 2 11 13"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    /* v1.27: 微信级聊天所需图标 */
+    mic: '<rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21M8.5 21h7"/>',
+    image: '<rect x="2.5" y="4" width="19" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="m3 17 5.5-5 4 3.5L16 12l5 5"/>',
+    smile: '<circle cx="12" cy="12" r="9.2"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9.5h.01M15 9.5h.01" stroke-width="2.6"/>',
+    search: '<circle cx="11" cy="11" r="7.2"/><path d="m21 21-4.3-4.3"/>',
+    bellOff: '<path d="M8.7 3.6A6 6 0 0 1 18 8c0 3.1.5 4.7 1.4 6"/><path d="M17 17H4s3-2.6 3-9c0-.5.06-1 .18-1.4"/><path d="M10.3 21a2 2 0 0 0 3.4 0"/><path d="m2 2 20 20"/>',
+    more: '<circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none"/>',
+    reply: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5V20"/>',
+    at: '<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.9 7.9"/>',
+    phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/>',
+    pinOff: '<path d="M12 17v5"/><path d="M15 4.5 9.5 10 5 15.2V16a1 1 0 0 0 1 1h4"/><path d="M19 9.5V6h1a2 2 0 0 0 0-4H8"/><path d="m2 2 20 20"/>',
   };
 
   function icon(name, size) {

@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (API.token) {
     try { App.user = await API.get('/api/auth/me'); } catch (e) { /* token 失效 */ }
   }
+  if (window.Chat && App.user) Chat.startBadge();   /* v1.27: 全局聊天未读角标 */
   route();
 });
 
@@ -34,10 +35,11 @@ function route() {
   }
   if (parts[0] === 'login' || parts[0] === 'register') { location.hash = '#/library'; return; }
   refreshAnnBadge();   /* v1.26: 公告未读红点 */
+  if (window.Chat) Chat.refreshBadge();   /* v1.27: 聊天未读角标 */
   if (!parts.length || parts[0] === 'library') return viewLibrary();
   if (parts[0] === 'profile') return viewProfile();
   if (parts[0] === 'forum') return viewForum(parts[1] ? parseInt(parts[1], 10) : 0);
-  if (parts[0] === 'chat') return viewChat();
+  if (parts[0] === 'chat') return Chat.view();   /* v1.27: 微信级聊天(web/js/chat.js) */
   if (parts[0] === 'qr-approve') return viewQrApprove();
   if (parts[0] === 'admin') {
     if (App.user.role !== 'admin') { toast('需要管理员权限', 'err'); location.hash = '#/library'; return; }
@@ -138,7 +140,8 @@ function shell(content, active) {
     '<nav class="nav">' +
     '<a class="' + (active === 'library' ? 'on' : '') + '" href="#/library">我的课件</a>' +
     '<a class="' + (active === 'forum' ? 'on' : '') + '" href="#/forum">' + UI.icon('forum', 15) + ' 论坛</a>' +
-    '<a class="' + (active === 'chat' ? 'on' : '') + '" href="#/chat">' + UI.icon('chat', 15) + ' 聊天</a>' +
+    '<a class="' + (active === 'chat' ? 'on' : '') + '" href="#/chat">' + UI.icon('chat', 15) +
+    ' 聊天<i class="nav-badge hidden" id="chat-badge"></i></a>' +
     '<a class="' + (active === 'profile' ? 'on' : '') + '" href="#/profile">个人中心</a>' +
     (u.role === 'admin' ? '<a class="' + (active === 'admin' ? 'on' : '') + '" href="#/admin">管理后台</a>' : '') +
     '</nav>' +
@@ -789,135 +792,16 @@ function forumBoardsAdmin(boards) {
   };
 }
 
-/* ---------- 聊天 ---------- */
-App.chat = { room: 0, lastId: 0, timer: 0, msgs: {} };
-
-async function viewChat() {
-  document.title = '聊天 - FLA';
-  $('#app').innerHTML = shell(
-    '<div class="chat-wrap"><aside class="chat-side" id="chat-side"></aside><main class="chat-main" id="chat-main"><div class="empty" style="padding-top:120px">选择或加入一个群组开始聊天</div></main></div>',
-    'chat');
-  bindLogout();
-  const stop = () => { clearInterval(App.chat.timer); App.chat.timer = 0; };
-  App.setCleanup(stop);
-  await loadChatRooms();
-  if (App.chat.room) openRoom(App.chat.room);
-}
-
-async function loadChatRooms() {
-  let r;
-  try { r = await API.get('/api/chat/rooms'); } catch (e) { toast(e.message, 'err'); return; }
-  const admin = App.user.role === 'admin';
-  $('#chat-side').innerHTML =
-    '<div class="chat-side-head"><b>群组</b>' +
-    (r.allow_create ? '<button class="btn xs" id="cr-new" title="创建群组">' + UI.icon('plus', 13) + '</button>' : '') +
-    '</div>' +
-    r.items.map(rm =>
-      '<button class="chat-room' + (App.chat.room === rm.id ? ' on' : '') + '" data-id="' + rm.id + '">' +
-      '<span class="cr-name">' + (rm.official ? '<i class="cr-official">官方</i>' : '') + UI.esc(rm.name) + '</span>' +
-      '<span class="cr-sub">' + rm.messages + ' 条 · ' + rm.members + ' 人</span>' +
-      (rm.last ? '<span class="cr-last">' + UI.esc(rm.last.content.slice(0, 20)) + '</span>' : '') +
-      (admin && !rm.official ? '<span class="cr-del" data-del="' + rm.id + '" title="解散">✕</span>' : '') +
-      '</button>').join('') || '<div class="empty">暂无群组</div>';
-  $$('.chat-room', $('#chat-side')).forEach(b => b.onclick = e => {
-    if (e.target.dataset.del) return;
-    openRoom(+b.dataset.id);
-  });
-  $$('.cr-del', $('#chat-side')).forEach(d => d.onclick = async e => {
-    e.stopPropagation();
-    if (!confirm('解散该群组?')) return;
-    try {
-      await API.del('/api/chat/rooms/' + d.dataset.del);
-      if (App.chat.room === +d.dataset.del) { App.chat.room = 0; $('#chat-main').innerHTML = '<div class="empty" style="padding-top:120px">选择或加入一个群组开始聊天</div>'; }
-      loadChatRooms();
-    } catch (err) { toast(err.message, 'err'); }
-  });
-  const nb = $('#cr-new');
-  if (nb) nb.onclick = () => {
-    const m = UI.modal({ title: '创建群组', body: '<label>群组名<input id="nr-name" maxlength="30"></label>' });
-    m.foot.innerHTML = '<button class="btn" id="nr-c">取消</button><button class="btn primary" id="nr-ok">创建</button>';
-    m.foot.querySelector('#nr-c').onclick = m.close;
-    m.foot.querySelector('#nr-ok').onclick = async () => {
-      try {
-        const r2 = await API.post('/api/chat/rooms', { name: $('#nr-name').value });
-        m.close(); loadChatRooms(); openRoom(r2.id);
-      } catch (e2) { toast(e2.message, 'err'); }
-    };
-  };
-}
-
-async function openRoom(rid) {
-  App.chat.room = rid;
-  App.chat.lastId = 0;
-  $$('.chat-room').forEach(b => b.classList.toggle('on', +b.dataset.id === rid));
-  const main = $('#chat-main');
-  main.innerHTML =
-    '<div class="chat-msgs" id="chat-msgs"></div>' +
-    '<div class="chat-input"><input id="chat-inp" maxlength="500" placeholder="发送消息… (Enter)">' +
-    '<button class="btn primary" id="chat-send">' + UI.icon('send', 15) + '</button></div>';
-  try { await API.post('/api/chat/rooms/' + rid + '/join', {}); } catch (e) { }
-  await pollRoom(true);
-  clearInterval(App.chat.timer);
-  App.chat.timer = setInterval(() => pollRoom(false), 2500);
-  const inp = $('#chat-inp');
-  const send = async () => {
-    const c = inp.value.trim();
-    if (!c) return;
-    inp.value = '';
-    try { await API.post('/api/chat/rooms/' + rid + '/messages', { content: c }); pollRoom(false); }
-    catch (e) { toast(e.message, 'err'); }
-  };
-  inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); send(); } };
-  $('#chat-send').onclick = send;
-  inp.focus();
-}
-
-async function pollRoom(full) {
-  const rid = App.chat.room;
-  if (!rid || !$('#chat-msgs')) return;
-  let r;
-  try {
-    r = await API.get('/api/chat/rooms/' + rid + '/messages?after=' + (full ? 0 : App.chat.lastId));
-  } catch (e) { return; }
-  const box = $('#chat-msgs');
-  const admin = App.user.role === 'admin';
-  const renderMsg = m => {
-    if (m.deleted) return '<div class="chat-msg deleted"><span class="cm-del">消息已删除</span></div>';
-    const mine = m.uid === App.user.id;
-    return '<div class="chat-msg' + (mine ? ' mine' : '') + '" data-id="' + m.id + '">' +
-      (mine ? '' : '<span class="cm-av">' + avatarHTML(m.author, 28) + '</span>') +
-      '<div class="cm-body">' +
-      (mine ? '' : '<div class="cm-name">' + UI.esc(m.author.nickname) + certHTML(m.author) + '</div>') +
-      '<div class="cm-text">' + UI.esc(m.content) + '</div>' +
-      '<div class="cm-meta">' + (m.created_at || '').slice(11, 16) + (m.edited ? ' · 已编辑' + (m.edited_by_admin ? '(管理员)' : '') : '') +
-      ((mine || admin) ? ' · <a data-op="edit">编辑</a> <a data-op="del">删除</a>' : '') +
-      '</div></div></div>';
-  };
-  if (full) { box.innerHTML = r.items.map(renderMsg).join('') || '<div class="cm-empty">还没有消息, 说点什么吧</div>'; App.chat.msgs = {}; }
-  else if (r.items.length) box.insertAdjacentHTML('beforeend', r.items.map(renderMsg).join(''));
-  r.items.forEach(m => { App.chat.msgs[m.id] = m; });   /* v1.26 修: 缓存全部消息, 编辑旧消息不再丢原文 */
-  if (r.items.length) {
-    App.chat.lastId = r.items[r.items.length - 1].id;
-    box.scrollTop = box.scrollHeight;
-    $$('[data-op]', box).forEach(a => a.onclick = async () => {
-      const mid = +a.closest('.chat-msg').dataset.id;
-      if (a.dataset.op === 'del') {
-        if (!confirm('删除这条消息?')) return;
-        try { await API.del('/api/chat/messages/' + mid); pollRoom(true); } catch (e) { toast(e.message, 'err'); }
-      } else {
-        const msg = App.chat.msgs[mid] || r.items.find(x => x.id === mid);
-        const m = UI.modal({ title: '编辑消息', body: '<textarea id="em-txt" rows="3" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit">' + UI.esc(msg ? msg.content : '') + '</textarea>' });
-        m.foot.innerHTML = '<button class="btn" id="em-cancel">取消</button> <button class="btn primary" id="em-ok">保存</button>';
-        m.foot.querySelector('#em-cancel').onclick = m.close;
-        m.foot.querySelector('#em-ok').onclick = async () => {
-          const v = m.body.querySelector('#em-txt').value.trim();
-          if (!v) return;
-          try { await API.patch('/api/chat/messages/' + mid, { content: v }); m.close(); pollRoom(true); } catch (e) { toast(e.message, 'err'); }
-        };
-      }
-    });
-  }
-}
+/* ---------- 聊天 ----------
+ * v1.27: 聊天整体迁到 web/js/chat.js(window.Chat), 做到微信级:
+ *   私聊/群聊/官方大厅 · 未读角标与免打扰小红点 · 置顶 · 已读回执 ·
+ *   正在输入 · 引用回复 · 表情回应 · @提醒 · 图片/文件/语音消息 ·
+ *   群资料抽屉(改名/公告/群昵称/邀请/移出/转让/退群/解散) · 聊天记录搜索 ·
+ *   向上翻页加载历史 · 拖拽与粘贴发图 · 桌面通知
+ * 路由 #/chat → Chat.view(); 其它页面通过 Chat.refreshBadge() 维护导航角标,
+ * 需要私聊某人时调用 Chat.openDM(uid)。
+ */
+window.openChatDM = function (uid) { if (window.Chat) Chat.openDM(uid); };
 
 /* ---------- 顶栏公告/扫码 绑定(事件委托, 跨视图重渲染存活) ---------- */
 document.addEventListener('click', e => {

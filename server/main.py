@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import converter, db, security
 from .deps import user_public
-from .routers import admin, announcements, auth, files, social, users
+from .routers import admin, announcements, auth, chat, files, social, users
 
 app = FastAPI(title="FLA", docs_url=None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
@@ -27,7 +27,8 @@ app.include_router(users.avatars)
 app.include_router(files.router)
 app.include_router(admin.router)
 app.include_router(announcements.router)   # v1.26: 公告
-app.include_router(social.router)          # v1.26: 论坛 + 聊天
+app.include_router(social.router)          # v1.26: 论坛
+app.include_router(chat.router)            # v1.27: 聊天(微信级)
 
 
 def _ensure_admin():

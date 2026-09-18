@@ -56,6 +56,7 @@
     if (V._keyHandler) window.removeEventListener('keydown', V._keyHandler);
     if (V._gestureStop) document.removeEventListener('gesturestart', V._gestureStop);
     if (V._resizeHandler) window.removeEventListener('resize', V._resizeHandler);
+    if (V.msStage) { try { V.msStage.destroy(); } catch (e) { } V.msStage = null; }
     V = null;
   }
 
@@ -75,6 +76,7 @@
       officeMode: false, oo: null, ooHolder: null, ooPage: null, _loadedScripts: {},
       laserPts: [], laserActive: false, laserT: 0,
       textEdit: null, timerInt: null, timerEl: null, timerRun: false, timerEnd: 0, timerLeft: 0,
+      msStage: null,
     };
     loadCfg();
     screenMsg('<div class="spin"></div><p>正在加载课件…</p>');
@@ -120,55 +122,33 @@
   }
 
   /* ---------- v1.19 微软嵌入视图: Office 文档零静态渲染 ---------- */
+  /* ---------- v1.27 微软嵌入视图 → 委托 MSStage (web/js/msstage.js) ----------
+   * 老大难修复: 微软 Office 在线视图是【跨域 iframe】, 父页面既读不到它当前在第
+   * 几页, 也没法命令它翻页 → 以前板书画布永远停在第 1 页, 与画面脱节。
+   * MSStage 改由【我方】掌握页码: 翻页 = 换 iframe.src 的定位参数(wdStartOn /
+   * wdSlideId), 双 iframe 乒乓 + 预载下一页, 交叉淡入; 画布坐标绑定幻灯区域
+   * (按真实宽高比 letterbox, 可手动微调并存到服务器)。浏览页与放映页共用同一
+   * 套舞台与同一份批注数据(pid: m0/m1… 幻灯片, x0… 附加板书页, bb0… 板中板)。 */
   async function msViewer() {
     const app = document.getElementById('app');
-    let sl;
-    try { sl = await API.get('/api/files/' + V.id + '/share-link'); }
-    catch (e) { screenMsg('<p class="err-t">' + UI.esc(e.message) + '</p><button class="btn" onclick="location.hash=\'#/library\'">返回</button>'); return; }
-    const m = V.meta;
-    const isPpt = /^(ppt|pptx)$/.test(m.ext || '');
-    let ar = 1.77778;
-    if (isPpt) {
-      try { const a = await API.get('/api/files/' + V.id + '/anim'); if (a && a.slideW && a.slideH) ar = a.slideW / a.slideH; } catch (e) { }
+    if (!window.MSStage) {
+      screenMsg('<p class="err-t">查看组件未载入，请强制刷新 (Ctrl+F5)</p>' +
+        '<button class="btn" onclick="location.reload()">重新加载</button>');
+      return;
     }
-    /* v1.20: PPT 用放映模式嵌入(动画可直接播放), 审阅模式无法播放动画 */
-    const msUrl = 'https://view.officeapps.live.com/op/embed.aspx?src=' +
-      encodeURIComponent(sl.direct) + (isPpt ? '&wdStartOn=1&wdPrint=0&wdEmbedCode=0&wdAr=' + ar : '');
-    document.title = (m.name || '课件') + ' - FLA';
-    const btnCss = 'background:#1c2027;color:#e5e7eb;border:1px solid #3a4150;border-radius:10px;' +
-      'padding:8px 14px;cursor:pointer;font:13px inherit;white-space:nowrap';
-    const warn = sl.ms_ok ? '' :
-      '<div style="margin-top:10px;color:#fbbf24;font-size:12px">⚠ 直链(' + UI.esc(sl.direct) + ')疑似不符合微软要求(需域名+80/443), 请管理员在后台设置公开访问地址</div>';
-    app.innerHTML =
-      '<div style="position:fixed;inset:0;display:flex;flex-direction:column;background:#101216">' +
-      '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #2a2f3a;color:#e5e7eb;flex-wrap:wrap">' +
-      '<button id="msv-back" style="' + btnCss + '">‹ 返回</button>' +
-      '<b style="flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + UI.esc(m.name || '') + '</b>' +
-      '<span style="color:#9ca3af;font-size:12px">' + (m.pages ? m.pages + ' 页 · ' : '') + UI.fmtSize(m.size) + ' · 微软渲染</span>' +
-      '<button id="msv-present" style="' + btnCss + ';border-color:#e5e7eb">▶ 全屏放映</button>' +
-      '<button id="msv-dl" style="' + btnCss + '">⬇ 下载</button>' +
-      '<button id="msv-refresh" style="' + btnCss + '">⟳ 刷新</button>' +
-      '</div>' +
-      '<div style="flex:1;position:relative;background:#000">' +
-      '<iframe id="msv-frame" allowfullscreen="true" style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe>' +
-      '<div id="msv-load" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;color:#e5e7eb;font:14px/1.9 inherit;background:rgba(0,0,0,.82);padding:20px 30px;border-radius:14px;max-width:84%">' +
-      '微软服务器正在抓取课件（首次约 30–60 秒）…<br>' +
-      '<span style="font-size:12px;color:#9ca3af">加载完成后可翻页浏览；板书与放映请点右上「全屏放映」（放映内右侧工具栏拿笔）</span>' + warn +
-      '</div></div></div>';
-    const fr = document.getElementById('msv-frame');
-    fr.src = msUrl;
-    fr.onload = () => setTimeout(() => { const l = document.getElementById('msv-load'); if (l) l.style.display = 'none'; }, 4000);
-    setTimeout(() => { const l = document.getElementById('msv-load'); if (l) l.style.display = 'none'; }, 90000);
-    document.getElementById('msv-back').onclick = () => location.hash = '#/library';
-    document.getElementById('msv-present').onclick = openPresent;
-    document.getElementById('msv-dl').onclick = () =>
-      window.open('/api/files/' + V.id + '/download?token=' + API.token, '_blank');
-    document.getElementById('msv-refresh').onclick = () => {
-      const l = document.getElementById('msv-load');
-      if (l) l.style.display = '';
-      fr.src = msUrl + '&r=' + Date.now();
-    };
+    app.innerHTML = '';
+    try {
+      V.msStage = await window.MSStage.mount({
+        fid: V.id, token: API.token, meta: V.meta, mode: 'view', mount: app,
+        onExit: () => { location.hash = '#/library'; },
+      });
+      if (window.App && App.setCleanup) App.setCleanup(() => destroy());
+    } catch (e) {
+      screenMsg('<p class="err-t">' + UI.esc(e.message) + '</p>' +
+        '<button class="btn" onclick="location.reload()">重试</button>');
+    }
   }
+
 
   function failedScreen() {
     const err = V.meta.error || '转换失败';

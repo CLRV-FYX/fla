@@ -1,16 +1,19 @@
 #!/bin/bash
 # ================================================================
-#  FLA (FYX Lesson All) 日常管理脚本
-#  用法:  sudo bash run.sh {status|start|stop|restart|logs|update|screen}
-#    status   查看容器与服务的运行状态
+#  FLA (FYX Lesson All) 日常管理脚本 v1.27
+#  用法:  sudo bash run.sh {status|start|stop|restart|logs|update|screen|edge|ssl}
+#    status   查看容器/服务状态 + 80/443 边缘网关 + 证书到期时间
 #    start    启动(开机也会自动启动, 此为手动停止后再启动)
 #    stop     停止(容器保留, 数据不丢)
 #    restart  重启
 #    logs     查看实时日志, 可选指定服务: run.sh logs [app|nginx|documentserver]
 #    update   更新/重新部署版本(智能重建容器, 数据保留, 自动进 screen)
 #    screen   查看正在进行的安装会话(如果有)
+#    edge     查看/重建边缘网关(nginx 占 80/443 接管所有域名 → 反代 FLA 端口)
+#             run.sh edge [status|reload|setup 域名...]
+#    ssl      证书相关: run.sh ssl [status|renew|签发新域名...]
 #    doctor   一键诊断: 收集全部容器日志/网络/健康检查到 doctor.log
-#    ds-remove 删除 OnlyOffice 容器并重启 (v1.19: Office 已改用微软在线渲染)
+#    ds-remove 删除 OnlyOffice 容器并重启 (Office 默认走微软在线渲染)
 # ================================================================
 set -u
 cd "$(dirname "$0")"
@@ -39,7 +42,8 @@ PROF=$(cat deploy/.compose_profile 2>/dev/null)
 DCP=""
 [ -n "$PROF" ] && DCP="--profile $PROF"
 PORT=$(grep -E '^PORT=' deploy/.env 2>/dev/null | head -1 | cut -d= -f2)
-PORT=${PORT:-80}
+PORT=${PORT:-8306}
+PUBLIC_URL=$(grep -E '^PUBLIC_BASE_URL=' deploy/.env 2>/dev/null | head -1 | cut -d= -f2-)
 
 case "${1:-help}" in
   https)
@@ -52,11 +56,57 @@ case "${1:-help}" in
     echo ""
     echo "── 健康检查 ──"
     if curl -sf -m 4 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
-      echo "✔ 服务正常  http://127.0.0.1:$PORT/"
+      echo "✔ 应用正常  http://127.0.0.1:$PORT/"
     else
-      echo "✘ 服务未响应 (http://127.0.0.1:$PORT/api/health)"
+      echo "✘ 应用未响应 (http://127.0.0.1:$PORT/api/health)"
       echo "  排查: sudo bash run.sh logs app"
     fi
+    echo ""
+    echo "── 边缘网关 (80/443 接管所有域名 → 127.0.0.1:$PORT) ──"
+    if [ -f /etc/nginx/conf.d/fla-edge.conf ]; then
+      echo "✔ 配置存在: /etc/nginx/conf.d/fla-edge.conf"
+      systemctl is-active nginx >/dev/null 2>&1 && echo "✔ 宿主机 nginx 运行中" || echo "✘ 宿主机 nginx 未运行: systemctl restart nginx"
+      command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -E ':(80|443)\s' | awk '{print "  监听: "$4}'
+      curl -sf -m 4 -H 'Host: run.sh.local' http://127.0.0.1/api/health >/dev/null 2>&1 \
+        && echo "✔ 80  → FLA 连通" || echo "✘ 80  → FLA 不通 (sudo bash edge.sh status 排查)"
+      curl -sfk -m 4 -H 'Host: run.sh.local' https://127.0.0.1/api/health >/dev/null 2>&1 \
+        && echo "✔ 443 → FLA 连通" || echo "⚠ 443 → FLA 不通 (证书缺失? sudo bash https.sh 域名)"
+    else
+      echo "⚠ 未部署边缘网关 — 只能用 http://IP:$PORT 访问"
+      echo "  部署: sudo bash edge.sh --port $PORT setup [域名...]"
+    fi
+    echo ""
+    echo "── SSL 证书 ──"
+    if [ -s /etc/fla/ssl/fullchain.pem ]; then
+      openssl x509 -in /etc/fla/ssl/fullchain.pem -noout -enddate 2>/dev/null | sed 's/notAfter=/到期: /'
+      openssl x509 -in /etc/fla/ssl/fullchain.pem -noout -issuer 2>/dev/null | grep -q 'FLA Edge' \
+        && echo "⚠ 自签兜底证书 → sudo bash https.sh 域名 签发正式证书" \
+        || echo "✔ 正式证书 (Let's Encrypt, 自动续期)"
+      crontab -l 2>/dev/null | grep -q fla-cert-renew && echo "✔ 自动续期已配置" || echo "⚠ 自动续期未配置: sudo bash https.sh --renew"
+    else
+      echo "⚠ 无证书 (443 不可用)"
+    fi
+    [ -n "$PUBLIC_URL" ] && echo "" && echo "── 公开访问地址 (微软放映直链用) ──" && echo "  $PUBLIC_URL"
+    ;;
+  edge)
+    shift
+    SUB="${1:-status}"
+    case "$SUB" in
+      reload) exec bash ./edge.sh --port "$PORT" reload ;;
+      setup)  shift; exec bash ./edge.sh --port "$PORT" setup "$@" ;;
+      remove) exec bash ./edge.sh remove ;;
+      *)      exec bash ./edge.sh status ;;
+    esac
+    ;;
+  ssl)
+    shift
+    SUB="${1:-status}"
+    case "$SUB" in
+      status) exec bash ./https.sh --status ;;
+      renew)  exec bash ./https.sh --renew ;;
+      check)  exec bash ./https.sh --check ;;
+      *)      exec bash ./https.sh --port "$PORT" "$@" ;;
+    esac
     ;;
   start)
     echo ">> 启动 FLA ..."
@@ -126,6 +176,23 @@ case "${1:-help}" in
       docker ps -a --filter name=fla --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
       echo "--- 健康检查 (本地:$PORT) ---"
       curl -sf -m 4 "http://127.0.0.1:$PORT/api/health" && echo " <- OK" || echo "✘ 本地 $PORT 不通"
+      echo "--- 边缘网关 (宿主机 nginx 80/443) ---"
+      if command -v nginx >/dev/null 2>&1; then
+        nginx -v 2>&1; systemctl is-active nginx 2>&1
+        [ -f /etc/nginx/conf.d/fla-edge.conf ] && { echo "[fla-edge.conf]"; cat /etc/nginx/conf.d/fla-edge.conf; } || echo "(无 fla-edge.conf)"
+        nginx -t 2>&1 | head -5
+      else
+        echo "(宿主机未安装 nginx)"
+      fi
+      echo "80/443 监听:"; ss -ltnp 2>/dev/null | grep -E ':(80|443)\s' | head -6
+      echo "80 → FLA:"; curl -sf -m 4 -H 'Host: doctor.local' http://127.0.0.1/api/health && echo " OK" || echo " ✘ 不通"
+      echo "443 → FLA:"; curl -sfk -m 4 -H 'Host: doctor.local' https://127.0.0.1/api/health && echo " OK" || echo " ✘ 不通"
+      echo "--- SSL 证书 ---"
+      if [ -s /etc/fla/ssl/fullchain.pem ]; then
+        openssl x509 -in /etc/fla/ssl/fullchain.pem -noout -subject -issuer -enddate 2>&1
+      else echo "(无证书)"; fi
+      echo "--- 证书续期任务 ---"; crontab -l 2>/dev/null | grep -i 'cert\|acme' || echo "(无)"
+      echo "--- 公开访问地址 ---"; grep -E '^PUBLIC_BASE_URL=' deploy/.env 2>/dev/null || echo "(未设置)"
       echo "--- 容器网络 ---"
       docker inspect fla --format 'fla 网络: {{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' 2>/dev/null
       docker inspect nginx --format 'nginx 网络: {{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' 2>/dev/null || echo "(nginx 不存在)"
