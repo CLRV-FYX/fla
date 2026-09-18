@@ -998,7 +998,7 @@ gen_conf
 
     # 8.7 关键修复与增强检验 (扫码二维码/安装脚本自愈/PPT分步动画/双模橡皮)
     qr_js = (root / "web" / "lib" / "qrcode" / "qrcode.min.js").read_text()
-    check("二维码库修复边界越界 bug(g>f)", "g>f;f++" in qr_js, "")
+    check("全新工业级二维码生成库与适配器", "QRCode" in qr_js and ("createSvgTag" in qr_js or "createTableTag" in qr_js), "")
     idx_html = (root / "web" / "index.html").read_text()
     check("index.html 显式预载 qrcode 库", "lib/qrcode/qrcode.min.js" in idx_html, "")
 

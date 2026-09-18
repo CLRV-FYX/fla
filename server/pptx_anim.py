@@ -932,20 +932,20 @@ def build_and_store(src_path, outdir, ext=None, main_pages=None):
                                 "--outdir", str(outdir), str(tmp2)],
                                capture_output=True, text=True, timeout=900)
                 bgcand = outdir / "_anim_bg.pdf"
-                if bgcand.exists() and (main_pages is None or _pdf_pages(bgcand) == main_pages):
+                if bgcand.exists() and _pdf_pages(bgcand) > 0:
+                    bg_pages = _pdf_pages(bgcand)
                     bgcand.rename(outdir / "bg.pdf")
                     bg_ok = True
+                    for p in manifest["pages"]:
+                        if p.get("mode") == "elements" and p.get("n", 0) >= bg_pages:
+                            p["bgfail"] = 1
             finally:
                 if tmp2.exists():
                     tmp2.unlink()
         if not bg_ok:
-            # 背景失败: 前端会将 elements 页退回主 PDF 显示(内容不丢)
             for p in manifest["pages"]:
                 if p["mode"] == "elements":
                     p["bgfail"] = 1
-            bgp = outdir / "bg.pdf"
-            if bgp.exists():
-                bgp.unlink()
 
         (outdir / "anim.json").write_text(
             json.dumps(manifest, ensure_ascii=False), encoding="utf-8")

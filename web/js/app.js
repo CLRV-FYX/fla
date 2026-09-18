@@ -380,9 +380,15 @@ function viewLogin() {
   function stopQrLogin() { qrTimers.forEach(t => clearInterval(t) || clearTimeout(t)); qrTimers = []; }
   async function startQrLogin() {
     stopQrLogin();
-    try { await loadScript('/lib/qrcode/qrcode.min.js'); } catch (e) { toast('二维码组件加载失败', 'err'); return; }
     const holder = $('#qr-holder');
+    if (!holder) return;
     holder.innerHTML = '<div class="qr-spin"></div>';
+    if (!window.QRCode) {
+      try { await loadScript('lib/qrcode/qrcode.min.js'); }
+      catch (e) {
+        try { await loadScript('/lib/qrcode/qrcode.min.js'); } catch (e2) { }
+      }
+    }
     let ticket = '';
     const refresh = async () => {
       try {
@@ -390,7 +396,20 @@ function viewLogin() {
         ticket = r.ticket;
         const url = location.origin + '/#/qr-approve?ticket=' + encodeURIComponent(ticket);
         holder.innerHTML = '';
-        new window.QRCode(holder, { text: url, width: 190, height: 190, correctLevel: window.QRCode.CorrectLevel.M });
+        if (window.QRCode) {
+          new window.QRCode(holder, {
+            text: url,
+            width: 190,
+            height: 190,
+            colorDark: '#0b0c0f',
+            colorLight: '#ffffff',
+            correctLevel: (window.QRCode.CorrectLevel && window.QRCode.CorrectLevel.M) || 'M'
+          });
+        } else if (typeof renderQrSvgFallback === 'function') {
+          renderQrSvgFallback(holder, url, 190);
+        } else {
+          holder.innerHTML = '<p class="qr-tip" style="color:var(--mut)">正在加载二维码，请稍候...</p>';
+        }
       } catch (e) { toast(e.message, 'err'); }
     };
     refresh();
@@ -688,7 +707,9 @@ function openFile(f) {
 
 function loadScript(src) {
   return new Promise((res, rej) => {
-    if (document.querySelector('script[data-fla="' + src + '"]')) return res();
+    if (src.includes('qrcode') && window.QRCode) return res();
+    if (src.includes('jsqr') && window.jsQR) return res();
+    if (document.querySelector('script[src*="' + src + '"]') || document.querySelector('script[data-fla="' + src + '"]')) return res();
     const s = document.createElement('script');
     s.src = src; s.setAttribute('data-fla', src);
     s.onload = () => res(); s.onerror = () => rej(new Error('组件加载失败'));

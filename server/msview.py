@@ -143,6 +143,7 @@ def embed_url(direct: str, ext: str, page: int = 1, slide_id: int = 0,
     else:
         q += ["wdPrint=0", "wdEmbedCode=0"]
     q.append("ui=zh-CN")
+    q.append("sftc=1")  # 启用微软 Office Online postMessage 双向握手通信
     return MS_EMBED + "?" + "&".join(q)
 
 

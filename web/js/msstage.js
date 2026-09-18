@@ -117,7 +117,8 @@
       rect: null, frames: [], fcur: -1, loading: 0,
       sync: st('fla_ms_sync', 'deep'), thumbs: {}, pdf: null, pdfBusy: false,
       bbOpen: false, bbCur: 0, cfg: null, hideT: 0, align: null, dpr: 1,
-      keepToolbar: st('fla_keep_toolbar', '1') !== '0'   /* 默认工具栏常驻不收起 */
+      keepToolbar: st('fla_keep_toolbar', '1') !== '0',   /* 默认工具栏常驻不收起 */
+      manifest: null, stepInSlide: 0
     };
     var CFG_DEFAULT = {
       pen: { color: '#ef4444', width: 4 },
@@ -402,6 +403,24 @@
     /* ==================================================================
      *  微软 iframe: 双缓冲 + 预载下一页
      * ================================================================== */
+    function getSlideStepCount(slideIndex1Based) {
+      if (!S.manifest || !S.manifest.pages) return 0;
+      var p = S.manifest.pages[slideIndex1Based - 1];
+      if (!p || !p.elements) return 0;
+      var gs = {};
+      p.elements.forEach(function (e) {
+        (e.steps || []).forEach(function (st) {
+          if (st.g >= 0) gs[st.g] = 1;
+        });
+      });
+      return Object.keys(gs).length;
+    }
+    function focusIframe() {
+      var f = curFrame();
+      if (f && f.contentWindow) {
+        try { f.contentWindow.focus(); } catch (e) { }
+      }
+    }
     function urlFor(n) {
       if (!S.mv) return '';
       if (!S.mv.deep_link || n <= 1) return S.mv.url;
@@ -1435,6 +1454,106 @@
     }
 
     /* ==================================================================
+     *  浮动常驻同步胶囊 (微软放映跟随/对齐)
+     * ================================================================== */
+    var syncPill = el('div', 'ms-sync-pill');
+    syncPill.innerHTML =
+      '<button class="msp-b" data-sp="prev" title="上一页 (PageUp)">‹</button>' +
+      '<span class="msp-txt" id="mspText">第 1 / ' + (S.slides || 1) + ' 页</span>' +
+      '<button class="msp-b" data-sp="next" title="下一页 (PageDown)">›</button>' +
+      '<button class="msp-sync" data-sp="sync" title="点击或按 Tab 一键同步板书">同步</button>';
+    wrap.appendChild(syncPill);
+
+    function updatePill() {
+      var txt = syncPill.querySelector('#mspText');
+      if (txt) {
+        var stepCount = getSlideStepCount(S.page);
+        if (S.sync === 'follow' && stepCount > 0) {
+          txt.textContent = '第 ' + S.page + ' / ' + total() + ' 页 · 动 ' + S.stepInSlide + '/' + stepCount;
+        } else {
+          txt.textContent = '第 ' + S.page + ' / ' + total() + ' 页';
+        }
+      }
+    }
+
+    function syncCurrentPage() {
+      toast('当前板书页: 第 ' + S.page + ' 页 · 笔迹已保存对齐 ✓', 2000);
+      var syncBtn = syncPill.querySelector('[data-sp=sync]');
+      if (syncBtn) {
+        syncBtn.classList.add('synced');
+        syncBtn.textContent = '已同步 ✓';
+        setTimeout(function () {
+          syncBtn.classList.remove('synced');
+          syncBtn.textContent = '同步';
+        }, 2000);
+      }
+    }
+
+    syncPill.onclick = function (e) {
+      var b = e.target.closest('[data-sp]');
+      if (!b) return;
+      var sp = b.getAttribute('data-sp');
+      if (sp === 'prev') {
+        prevPage();
+        focusIframe();
+      } else if (sp === 'next') {
+        nextPage();
+        focusIframe();
+      } else if (sp === 'sync') {
+        syncCurrentPage();
+      }
+      updatePill();
+    };
+
+    /* ==================================================================
+     *  微软 PostMessage 通信与自动跟随
+     * ================================================================== */
+    function onMsMessage(e) {
+      if (S.dead || !e || !e.data) return;
+      var msg = e.data;
+      if (typeof msg === 'string') {
+        try { msg = JSON.parse(msg); } catch (err) { }
+      }
+      if (!msg) return;
+
+      // 微软 Office Online 握手协议 (通过 &sftc=1 激活)
+      if (msg.MessageId === 'App_IsFrameTrusted') {
+        var f = curFrame();
+        if (f && f.contentWindow) {
+          try {
+            f.contentWindow.postMessage(JSON.stringify({
+              MessageId: 'Host_IsFrameTrusted',
+              SendTime: Date.now(),
+              Values: { isTopFrameTrusted: true }
+            }), '*');
+            f.contentWindow.postMessage(JSON.stringify({
+              MessageId: 'Host_PostmessageReady',
+              SendTime: Date.now(),
+              Values: {}
+            }), '*');
+          } catch (err2) { }
+        }
+        return;
+      }
+
+      // 检测页码更新广播
+      var p = null;
+      if (typeof msg.page === 'number') p = msg.page;
+      else if (typeof msg.slide === 'number') p = msg.slide;
+      else if (typeof msg.slideIndex === 'number') p = msg.slideIndex + 1;
+      else if (msg.Values) {
+        if (typeof msg.Values.page === 'number') p = msg.Values.page;
+        else if (typeof msg.Values.slide === 'number') p = msg.Values.slide;
+        else if (typeof msg.Values.slideIndex === 'number') p = msg.Values.slideIndex + 1;
+      }
+      if (p && p >= 1 && p <= total() && p !== S.page) {
+        console.log('[MSStage] 收到微软页面变更通知:', p);
+        goPage(p);
+      }
+    }
+    window.addEventListener('message', onMsMessage, false);
+
+    /* ==================================================================
      *  键盘
      * ================================================================== */
     function onKey(e) {
@@ -1447,20 +1566,49 @@
       if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); return; }
       if ((e.ctrlKey || e.metaKey) && (k === 'arrowleft' || k === 'pageup' || k === 'arrowup')) { e.preventDefault(); prevPage(); return; }
       if ((e.ctrlKey || e.metaKey) && (k === 'arrowright' || k === 'pagedown' || k === 'arrowdown')) { e.preventDefault(); nextPage(); return; }
+      if (e.key === 'Tab') { e.preventDefault(); syncCurrentPage(); return; }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-      var isNext = (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowDown');
-      var isPrev = (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'ArrowUp');
+      var isNext = (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowDown' ||
+                    e.key === 'Right' || e.key === 'Down' || e.key === 'Next' || e.code === 'PageDown' || e.code === 'ArrowDown' ||
+                    e.keyCode === 34 || e.keyCode === 40 || e.keyCode === 39 || e.keyCode === 32 || e.keyCode === 13);
+      var isPrev = (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'ArrowUp' ||
+                    e.key === 'Left' || e.key === 'Up' || e.key === 'Prior' || e.code === 'PageUp' || e.code === 'ArrowUp' ||
+                    e.keyCode === 33 || e.keyCode === 38 || e.keyCode === 37);
 
       if (isNext) {
         if (S.sync === 'follow') {
-          /* 微软自翻模式: 翻页笔按键不阻止默认行为, 让事件自然流进微软播动画; 提示老师可用 Ctrl+→ 对齐板书 */
-          return;
+          var stepCount = getSlideStepCount(S.page);
+          if (stepCount > 0 && S.stepInSlide < stepCount) {
+            S.stepInSlide++;
+            focusIframe();
+            updatePill();
+            return;
+          } else {
+            S.stepInSlide = 0;
+            focusIframe();
+            nextPage();
+            updatePill();
+            return;
+          }
         }
         e.preventDefault(); nextPage();
       }
       else if (isPrev) {
-        if (S.sync === 'follow') return;
+        if (S.sync === 'follow') {
+          if (S.stepInSlide > 0) {
+            S.stepInSlide--;
+            focusIframe();
+            updatePill();
+            return;
+          } else {
+            S.stepInSlide = 0;
+            focusIframe();
+            prevPage();
+            updatePill();
+            return;
+          }
+        }
         e.preventDefault(); prevPage();
       }
       else if (e.key === 'Home') { e.preventDefault(); goPage(1); }
@@ -1543,9 +1691,10 @@
       if (t) t.textContent = S.meta.name || '课件';
       return Promise.all([
         jget('/api/files/' + S.fid + '/ms-view'),
-        jget('/api/files/' + S.fid + '/annotations').catch(function () { return null; })
+        jget('/api/files/' + S.fid + '/annotations').catch(function () { return null; }),
+        jget('/api/files/' + S.fid + '/anim').catch(function () { return null; })
       ]).then(function (rs) {
-        S.mv = rs[0]; S.ann = rs[1];
+        S.mv = rs[0]; S.ann = rs[1]; S.manifest = rs[2];
         if (!S.mv || !S.mv.direct) throw new Error('无法取得微软在线视图直链');
         S.slides = Math.max(1, S.mv.pages || 1);
         S.strokes = (S.ann && S.ann.strokes) || {};
@@ -1604,6 +1753,7 @@
         S.dead = true;
         flushSave();
         window.removeEventListener('keydown', onKey, true);
+        window.removeEventListener('message', onMsMessage, false);
         /* 摘掉全部窗口级监听与定时器: 反复进出放映不累积泄漏 */
         window.removeEventListener('beforeunload', flushSave);
         if (S._onResize) window.removeEventListener('resize', S._onResize);

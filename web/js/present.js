@@ -458,11 +458,14 @@
 
   function renderPdfPage(p, canvas, box, layer, mySeq) {
     var n = p.n || 0, mp = mPage(n);
-    var useBg = mp && mp.mode === 'elements' && !S.compare && !mp.bgfail && !S.bgFailed;
+    var hasElements = mp && mp.elements && mp.elements.length;
+    var useBg = hasElements && !S.compare && !mp.bgfail && !S.bgFailed;
     var docP = useBg ? ensureBg() : Promise.resolve(S.doc);
     return docP.then(function (doc) {
       if (mySeq !== S.seq) throw { stale: true };
-      return (doc || S.doc).getPage(n + 1);
+      var targetDoc = (useBg && doc) ? doc : S.doc;
+      var pageNum = Math.min(n + 1, targetDoc.numPages);
+      return targetDoc.getPage(pageNum);
     }).then(function (page) {
       if (mySeq !== S.seq) throw { stale: true };
       var vp = page.getViewport({ scale: 1 });
@@ -482,7 +485,7 @@
       }).promise;
     }).then(function () {
       if (mySeq !== S.seq) throw { stale: true };
-      if (useBg) return buildElements(mp, layer, p);
+      if (hasElements && !S.compare) return buildElements(mp, layer, p, useBg);
     });
   }
 
@@ -609,7 +612,7 @@
     });
   }
 
-  function buildElements(mp, layer, p) {
+  function buildElements(mp, layer, p, useBg) {
     var ef = emuFactor();
     var recs = [];
     (mp.elements || []).forEach(function (e) {
@@ -626,6 +629,10 @@
       buildContent(e, inner, ef);
       var visibleInitially = !(e.steps || []).some(function (st) { return st.t === 'in'; });
       d.style.visibility = visibleInitially ? 'visible' : 'hidden';
+      if (!visibleInitially && !useBg) {
+        d.setAttribute('data-masked', '1');
+        d.style.backgroundColor = '#ffffff';
+      }
       layer.appendChild(d);
       recs.push({ e: e, d: d, inner: inner });
     });
@@ -843,6 +850,10 @@
     var d = rec.d, inner = rec.inner;
     var dur = instant ? 0 : (st.dur || 500);
     d.style.visibility = 'visible';
+    if (d.getAttribute('data-masked')) {
+      d.style.backgroundColor = 'transparent';
+      d.removeAttribute('data-masked');
+    }
     d.offsetHeight;
     if (st.e === 'appear' || dur <= 0) {
       d.style.transition = 'none'; d.style.opacity = '';

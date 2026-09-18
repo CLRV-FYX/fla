@@ -1679,6 +1679,30 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 .ms-alignbar button:hover { background: #fff; color: #111; }
 .ms-alignbar span { font-size: 11px; color: rgba(255,255,255,.5); }
 
+/* ---------- 浮动常驻同步条 (微软放映跟随/对齐) ---------- */
+.ms-sync-pill {
+  position: absolute; right: 20px; bottom: 20px; z-index: 45; display: flex; align-items: center; gap: 6px;
+  background: rgba(15, 18, 24, 0.88); backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 30px;
+  padding: 5px 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  user-select: none; transition: opacity .25s ease, transform .25s ease;
+}
+.ms-stage.idle .ms-sync-pill { opacity: 0.35; }
+.ms-sync-pill:hover { opacity: 1 !important; transform: scale(1.02); }
+.msp-b {
+  width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1);
+  color: #fff; font-size: 14px; font-weight: bold; cursor: pointer; display: grid; place-items: center;
+  transition: background .15s ease;
+}
+.msp-b:hover { background: rgba(255,255,255,0.25); }
+.msp-txt { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.9); padding: 0 4px; min-width: 72px; text-align: center; }
+.msp-sync {
+  padding: 4px 10px; border-radius: 20px; border: none; background: #3b82f6; color: #fff;
+  font-size: 11px; font-weight: 700; cursor: pointer; transition: all .16s ease;
+}
+.msp-sync:hover { background: #2563eb; transform: scale(1.04); }
+.msp-sync.synced { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+
 /* ---------- 弹窗 / 同步模式 / 跳页 ---------- */
 .ms-modal-ovl {
   position: absolute; inset: 0; z-index: 60; display: grid; place-items: center; padding: 18px;
