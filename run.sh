@@ -52,7 +52,7 @@ case "${1:-help}" in
     ;;
   status)
     echo "── FLA 容器状态 (compose: $CF ${PROF:+profile:$PROF}) ──"
-    docker ps -a --filter name=fla --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+    docker ps -a --filter name=fla --filter name=nginx --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
     echo ""
     echo "── 健康检查 ──"
     if curl -sf -m 4 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
