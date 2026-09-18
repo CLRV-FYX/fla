@@ -277,7 +277,7 @@ server {
     listen [::]:80 default_server;
     server_name _;                                # ← 接管所有域名 (catch-all)
 
-    # Let's Encrypt 文件验证 (HTTP-01): 必须最先匹配, 且不受跳转影响
+    # Let's Encrypt 文件验证 (HTTP-01): 必须永远能用 http 取到
     location ^~ /.well-known/acme-challenge/ {
         root $WEBROOT;
         default_type "text/plain";
@@ -285,7 +285,13 @@ server {
         try_files \$uri =404;
     }
 
-    if (\$fla_force_https) { return 301 https://\$host\$request_uri; }
+    # 已签发证书的域名 → 跳 https。
+    # 注意: server 级 if 在 SERVER_REWRITE 阶段执行(早于 location 匹配),
+    # 所以必须显式排除 ACME 路径, 否则续期请求会被 301 到 https, 文件验证失败。
+    set \$fla_redir 0;
+    if (\$fla_force_https) { set \$fla_redir 1; }
+    if (\$uri ~ "^/.well-known/acme-challenge/") { set \$fla_redir 0; }
+    if (\$fla_redir) { return 301 https://\$host\$request_uri; }
 
 __PROXY__
 }

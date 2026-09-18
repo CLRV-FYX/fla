@@ -21,6 +21,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -804,6 +805,116 @@ def run(c):
     check("删除课件", r.status_code == 200, r.text[:160])
     r = c.get(f"/api/files/{fid}/ms-view", headers=H)
     check("删除后 ms-view 404", r.status_code == 404, r.status_code)
+
+    section("8. 部署脚本静态校验(沙箱里没有 docker/nginx, 只能静态验 + 真渲染配置)")
+    import subprocess
+    root = Path(__file__).resolve().parent.parent
+
+    # 8.1 所有 shell 脚本语法自检
+    scripts = sorted(root.glob("*.sh")) + sorted((root / "deploy").glob("*.sh"))
+    check("仓库里有部署脚本", len(scripts) >= 6, [x.name for x in scripts])
+    for sh in scripts:
+        r = subprocess.run(["bash", "-n", str(sh)], capture_output=True, text=True)
+        check(f"bash -n {sh.name}", r.returncode == 0, r.stderr.strip()[:160])
+
+    # 8.2 真渲染 edge.sh 的 nginx 配置(gen_conf), 验证语法级正确性
+    edge = (root / "edge.sh").read_text()
+    lines = edge.split("\n")
+    i0 = lines.index("gen_conf(){")
+    i1 = next(i for i in range(i0, len(lines)) if lines[i].strip() == 'chmod 644 "$CONF"')
+    i2 = next(i for i in range(i1, len(lines)) if lines[i] == "}")
+    func = "\n".join(lines[i0:i2 + 1])
+
+    def render(port, doms, nginx_version, cert_exists):
+        cert = _TMP + "/cert.pem" if cert_exists else _TMP + "/no-such-cert.pem"
+        if cert_exists:
+            Path(cert).write_text("stub")
+        harness = f"""set -u
+PORT={port}; WEBROOT=/var/www/fla-acme; DOMS="{doms}"; CONF={_TMP}/edge.conf; LOG={_TMP}/e.log
+log(){{ :; }}; try(){{ "$@" 2>/dev/null || true; }}
+nginx_ver(){{ echo "{nginx_version}"; }}
+ver_ge(){{ [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]; }}
+CERT={cert}; KEY={cert}
+{func}
+gen_conf
+"""
+        hs = Path(_TMP) / "h.sh"
+        hs.write_text(harness)
+        rr = subprocess.run(["bash", str(hs)], capture_output=True, text=True)
+        assert rr.returncode == 0, rr.stderr[:300]
+        return Path(_TMP, "edge.conf").read_text()
+
+    conf = render(8306, "class.fyx.best t.clrv.top", "1.20.1", True)
+    check("渲染出的 nginx 配置没有残留占位符", "__PROXY__" not in conf, conf.count("__PROXY__"))
+    check("大括号平衡", conf.count("{") == conf.count("}"), f'{conf.count("{")}/{conf.count("}")}')
+    check("80 + 443 两个 server 块", len(re.findall(r"^server \{", conf, re.M)) == 2, "")
+    check("80 是 default_server(接管所有域名)", "listen 80 default_server;" in conf, "")
+    check("443 也是 default_server", "listen 443 ssl http2;" in conf or "listen 443 ssl;" in conf, "")
+    check("catch-all server_name _", conf.count("server_name _;") == 2, conf.count("server_name _;"))
+    check("反代到 127.0.0.1:8306", "server 127.0.0.1:8306" in conf and "proxy_pass http://fla_backend;" in conf, "")
+    check("WebSocket 升级头", "$connection_upgrade" in conf and "$http_upgrade" in conf, "")
+    check("X-Forwarded-Proto 传给后端", "X-Forwarded-Proto" in conf, "")
+    check("大文件上传不拦", "client_max_body_size" in conf, "")
+    check("ACME 文件验证目录挂在 80 上",
+          "location ^~ /.well-known/acme-challenge/" in conf and "root /var/www/fla-acme;" in conf, "")
+    check("跳 https 时豁免 ACME 路径(否则续期会被 301 打断)",
+          "set $fla_redir 0;" in conf and 'if ($uri ~ "^/.well-known/acme-challenge/")' in conf
+          and "if ($fla_redir)" in conf, "")
+    check("已签证书的域名进 force-https map",
+          "class.fyx.best" in conf and "www.class.fyx.best" in conf, "")
+    check("老 nginx 用 listen 443 ssl http2 写法", "http2 on;" not in conf, "")
+
+    conf2 = render(8306, "a.com", "1.27.1", True)
+    check("新 nginx(1.25.1+) 改用 http2 on;", "http2 on;" in conf2 and "listen 443 ssl;" in conf2, "")
+    conf3 = render(8310, "b.com", "1.20.1", False)
+    # 没有证书时绝不能写出 listen 443(否则 nginx -t 直接失败, 整站起不来)
+    check("没有证书时只生成 80 的 server(不写 listen 443)",
+          len(re.findall(r"^server \{", conf3, re.M)) == 1
+          and not re.search(r"^\s*listen[^;]*443", conf3, re.M), "")
+    check("换端口后反代目标跟着变", "server 127.0.0.1:8310" in conf3, "")
+    conf4 = render(8306, "", "1.20.1", True)
+    check("纯 IP(无域名)也能生成且大括号平衡", conf4.count("{") == conf4.count("}"), "")
+
+    # 8.3 SSL: 必须是文件验证(HTTP-01), 不能抢占 80
+    hs = (root / "https.sh").read_text()
+    check("https.sh 用 --webroot 文件验证", "--webroot" in hs and '-w "$WEBROOT"' in hs, "")
+    # --standalone 只允许出现在注释里(说明为什么不用), 绝不能出现在真实命令中
+    standalone_cmds = [l for l in hs.split("\n")
+                       if "--standalone" in l and not l.strip().startswith("#")]
+    check("https.sh 不用 --standalone 抢占 80(无需停 nginx, 无停机窗口)", not standalone_cmds,
+          standalone_cmds[:2])
+    check("webroot 与 edge.sh 一致(/var/www/fla-acme)",
+          'WEBROOT="/var/www/fla-acme"' in hs and 'WEBROOT="/var/www/fla-acme"' in edge, "")
+    check("certbot 缺失时降级 acme.sh(同样是文件验证)", "acme.sh" in hs and "--webroot" in hs, "")
+    check("签发前有连通性预检", "/.well-known/acme-challenge/" in hs, "")
+    check("自动续期(cron + systemd timer)", "cron" in hs.lower() and "OnCalendar" in hs, "")
+    check("续期后重载 nginx", "reload" in hs, "")
+    check("写入 PUBLIC_BASE_URL(微软放映直链要用 https 域名)", "PUBLIC_BASE_URL" in hs, "")
+
+    # 8.4 install.sh 必须自动串起网关 + 证书
+    ins = (root / "install.sh").read_text()
+    check("install.sh 自动调用 edge.sh(装 80/443 网关)", "edge.sh" in ins, "")
+    check("install.sh 自动调用 https.sh(签证书)", "https.sh" in ins, "")
+    check("默认端口 8306 且被占自动顺延", "8306" in ins and "8307" in ins and "8310" in ins, "")
+    check("80/443 留给边缘网关(不再由 FLA 直接占)", "--port" in ins, "")
+
+    # 8.5 彻底重装: 删所有容器 + docker 本体, 再重装
+    cn = (root / "completely_new_install.sh").read_text()
+    check("删掉所有容器(不止 FLA)", "docker ps -aq" in cn or "docker rm -f" in cn, "")
+    check("删镜像/卷/网络", "docker system prune" in cn or ("docker volume" in cn and "docker network" in cn), "")
+    check("卸载 docker 本体", re.search(r"(yum|dnf|apt-get)[^\n]*(remove|erase|purge)[^\n]*docker", cn) is not None, "")
+    check("清 /var/lib/docker 与 /etc/docker", "/var/lib/docker" in cn and "/etc/docker" in cn, "")
+    check("默认先备份 fla-data 卷", "fla-backup" in cn or "BACKUP_FILE" in cn, "")
+    check("有 --keep-data / --no-backup / --force 开关",
+          "--keep-data" in cn and "--no-backup" in cn and "--force" in cn, "")
+    check("需要确认词 YES-DELETE-ALL", "YES-DELETE-ALL" in cn, "")
+    check("清完会重新装 docker 并转交 install.sh", "install.sh" in cn, "")
+
+    # 8.6 容器内 nginx(打包进镜像的那份)也要有 WS 升级
+    napp = (root / "deploy" / "nginx-app.conf").read_text()
+    check("容器内 nginx 有 WebSocket 升级头",
+          "$connection_upgrade" in napp and "Upgrade" in napp, "")
+    check("容器内 nginx 反代到 app:8000", "app_upstream" in napp or "app:8000" in napp, "")
 
     return finish()
 
