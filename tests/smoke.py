@@ -484,6 +484,244 @@ def run(c):
     r = c.get("/api/admin/settings", headers=H)
     check("系统设置可读", r.status_code < 500, r.status_code)
 
+    section("5e. 其余接口补测: 资料 / 头像 / 改密 / 扫码登录 / 公告 / 论坛 / 邀请码 / 文件直读")
+    PNG = b"\x89PNG\r\n\x1a\n" + b"fla-smoke-avatar-bytes"
+
+    # --- 个人资料 ---
+    r = c.put("/api/users/profile", headers=sh, json={"nickname": "冒烟老师(改)", "signature": "认真上课"})
+    check("PUT /api/users/profile", r.status_code == 200 and (r.json() or {}).get("nickname") == "冒烟老师(改)",
+          r.text[:200])
+    r = c.put("/api/users/profile", headers=sh, json={"nickname": "  "})
+    check("空昵称被拒", r.status_code == 400, r.status_code)
+    r = c.put("/api/users/profile", headers=sh, json={"signature": "长" * 201})
+    check("超长签名被拒", r.status_code == 400, r.status_code)
+
+    # --- 头像: 自己传 + 管理员代传 + 静态取回 ---
+    r = c.post("/api/users/avatar", headers=sh, files={"file": ("a.png", PNG, "image/png")})
+    av = (r.json() or {}).get("avatar", "") if r.status_code == 200 else ""
+    check("POST /api/users/avatar", r.status_code == 200 and av.startswith("/api/avatars/"), r.text[:200])
+    r = c.get(av or "/api/avatars/none.png")
+    check("GET /api/avatars/{name} 取回原图", r.status_code == 200 and r.content == PNG, r.status_code)
+    r = c.post("/api/users/avatar", headers=sh, files={"file": ("a.exe", b"MZ\x90", "application/octet-stream")})
+    check("非图片头像被拒", r.status_code == 400, r.status_code)
+    r = c.post(f"/api/admin/users/{uid_t}/avatar", headers=H, files={"file": ("b.png", PNG, "image/png")})
+    check("管理员代传头像", r.status_code == 200 and (r.json() or {}).get("avatar"), r.text[:200])
+
+    # --- 改密码 ---
+    r = c.post("/api/auth/change_password", headers=sh,
+               json={"old_password": "pw-smoke-123", "new_password": "pw-smoke-456"})
+    check("POST /api/auth/change_password", r.status_code == 200, r.text[:200])
+    r = c.post("/api/auth/change_password", headers=sh,
+               json={"old_password": "不对", "new_password": "pw-smoke-789"})
+    check("原密码错误被拒", r.status_code == 400, r.status_code)
+    r = c.post("/api/auth/change_password", headers=sh, json={"old_password": "pw-smoke-456", "new_password": "123"})
+    check("新密码太短被拒", r.status_code == 400, r.status_code)
+    r = c.post("/api/auth/login", json={"username": "smoke_t1", "password": "pw-smoke-456"})
+    check("改密后新密码可登录", r.status_code == 200 and (r.json() or {}).get("token"), r.text[:200])
+
+    # --- 扫码登录全链路(票据 → 已登录设备批准 → 取 token → 一次作废) ---
+    r = c.post("/api/auth/qr/ticket")
+    tk = (r.json() or {}).get("ticket", "")
+    check("POST /api/auth/qr/ticket", r.status_code == 200 and tk.startswith("qr"), r.text[:200])
+    r = c.get("/api/auth/qr/status", params={"ticket": tk})
+    check("未批准时 status=pending", (r.json() or {}).get("status") == "pending", r.text[:160])
+    r = c.post("/api/auth/qr/approve", headers=sh, json={"ticket": tk})
+    check("POST /api/auth/qr/approve", r.status_code == 200, r.text[:200])
+    r = c.get("/api/auth/qr/status", params={"ticket": tk})
+    qs = r.json() if r.status_code == 200 else {}
+    check("批准后拿到 token + 用户信息", qs.get("status") == "ok" and bool(qs.get("token")) and qs.get("user"),
+          r.text[:200])
+    if qs.get("token"):
+        rr = c.get("/api/auth/me", headers={"Authorization": "Bearer " + qs["token"]})
+        check("扫码换来的 token 可用", rr.status_code == 200, rr.status_code)
+    r = c.get("/api/auth/qr/status", params={"ticket": tk})
+    check("票据一次作废(第二次取不到 token)", (r.json() or {}).get("status") != "ok", r.text[:160])
+    r = c.get("/api/auth/qr/status", params={"ticket": "qr-不存在"})
+    check("无效票据 → invalid", (r.json() or {}).get("status") == "invalid", r.text[:160])
+    r = c.post("/api/auth/qr/approve", headers=sh, json={"ticket": "qr-不存在"})
+    check("批准不存在的票据被拒(404)", r.status_code == 404, r.status_code)
+
+    # --- 公告: 管理端 CRUD + 用户端读取/已读 ---
+    r = c.post("/api/admin/announcements", headers=H,
+               json={"title": "期中考试安排", "content": "周五下午两点", "level": "imp"})
+    aid_g = (r.json() or {}).get("id")
+    check("POST /api/admin/announcements(全局)", r.status_code == 200 and aid_g, r.text[:200])
+    r = c.post("/api/admin/announcements", headers=H,
+               json={"title": "给你的专属通知", "content": "补交作业", "level": "warn",
+                     "scope": "user", "target_uid": uid_t})
+    aid_u = (r.json() or {}).get("id")
+    check("定向公告(指定用户)", r.status_code == 200 and aid_u, r.text[:200])
+    r = c.post("/api/admin/announcements", headers=H, json={"title": "短"})
+    check("公告标题太短被拒", r.status_code == 400, r.status_code)
+    r = c.post("/api/admin/announcements", headers=H, json={"title": "级别非法", "level": "urgent"})
+    check("公告级别非法被拒", r.status_code == 400, r.status_code)
+    r = c.post("/api/admin/announcements", headers=H, json={"title": "定向没选人", "scope": "user"})
+    check("定向公告缺 target_uid 被拒", r.status_code == 400, r.status_code)
+    r = c.post("/api/admin/announcements", headers=sh, json={"title": "学生想发公告"})
+    check("非管理员发公告被拒", r.status_code in (401, 403), r.status_code)
+
+    r = c.get("/api/admin/announcements", headers=H)
+    al = r.json() if r.status_code == 200 else []
+    check("GET /api/admin/announcements", r.status_code == 200 and isinstance(al, list) and len(al) >= 2,
+          r.text[:160])
+    r = c.get("/api/announcements", headers=sh)
+    ann = r.json() if r.status_code == 200 else {}
+    ids = [x.get("id") for x in ann.get("items", [])]
+    check("用户端收到全局 + 专属公告", aid_g in ids and aid_u in ids, ids)
+    check("专属公告带 personal 标记",
+          any(x.get("id") == aid_u and x.get("personal") is True for x in ann.get("items", [])), "")
+    check("未读数与 items 一致",
+          ann.get("unread") == sum(1 for x in ann.get("items", []) if not x.get("read")), ann.get("unread"))
+    r = c.get("/api/announcements", headers=s3)
+    check("别人收不到定向公告", aid_u not in [x.get("id") for x in (r.json() or {}).get("items", [])], "")
+    r = c.post("/api/announcements/read", headers=sh, json={"ids": [aid_g, aid_u]})
+    check("POST /api/announcements/read", r.status_code == 200, r.text[:160])
+    r = c.get("/api/announcements", headers=sh)
+    check("上报已读后 unread 归零", (r.json() or {}).get("unread") == 0, (r.json() or {}).get("unread"))
+    r = c.patch(f"/api/admin/announcements/{aid_g}", headers=H,
+                json={"title": "期中考试安排(顺延)", "content": "下周五", "level": "warn",
+                      "scope": "global", "active": False})
+    check("PATCH 公告(改标题 + 停用)", r.status_code == 200, r.text[:200])
+    r = c.get("/api/announcements", headers=sh)
+    check("停用后用户端不再看到", aid_g not in [x.get("id") for x in (r.json() or {}).get("items", [])], "")
+    r = c.delete(f"/api/admin/announcements/{aid_u}", headers=sh)
+    check("非管理员删公告被拒", r.status_code in (401, 403), r.status_code)
+    r = c.delete(f"/api/admin/announcements/{aid_u}", headers=H)
+    check("DELETE /api/admin/announcements/{aid}", r.status_code == 200, r.text[:160])
+
+    # --- 论坛: 板块 CRUD + 发帖/回复/编辑/锁定/删除 ---
+    r = c.post("/api/admin/forum/boards", headers=H, json={"name": "冒烟板块", "descr": "临时用", "sort": 9})
+    bid = (r.json() or {}).get("id")
+    check("POST /api/admin/forum/boards", r.status_code == 200 and bid, r.text[:200])
+    r = c.post("/api/admin/forum/boards", headers=H, json={"name": "短"})
+    check("板块名太短被拒", r.status_code == 400, r.status_code)
+    r = c.get("/api/forum/boards", headers=sh)
+    boards = (r.json() or {}).get("items", [])
+    check("GET /api/forum/boards", r.status_code == 200 and any(b.get("id") == bid for b in boards), r.text[:200])
+    r = c.get("/api/forum/boards")
+    check("未登录看板块被拒", r.status_code in (401, 403), r.status_code)
+
+    r = c.post("/api/forum/threads", headers=sh, json={"board_id": bid, "title": "第一帖", "content": "正文内容"})
+    tid = (r.json() or {}).get("id")
+    check("POST /api/forum/threads", r.status_code == 200 and tid, r.text[:200])
+    r = c.post("/api/forum/threads", headers=sh, json={"board_id": bid, "title": "", "content": "无标题"})
+    check("空标题发帖被拒", r.status_code == 400, r.status_code)
+    r = c.get("/api/forum/threads", headers=sh, params={"board": bid})
+    check("GET /api/forum/threads?board=",
+          r.status_code == 200 and any(t.get("id") == tid for t in (r.json() or {}).get("items", [])), r.text[:200])
+    r = c.get(f"/api/forum/threads/{tid}", headers=sh)
+    det = r.json() if r.status_code == 200 else {}
+    check("GET /api/forum/threads/{tid}", r.status_code == 200 and det.get("title") == "第一帖", r.text[:200])
+    r = c.post(f"/api/forum/threads/{tid}/posts", headers=s3, json={"content": "路人回复"})
+    check("POST /api/forum/threads/{tid}/posts", r.status_code == 200, r.text[:200])
+    r = c.post(f"/api/forum/threads/{tid}/posts", headers=s3, json={"content": "   "})
+    check("空回复被拒", r.status_code == 400, r.status_code)
+    r = c.get(f"/api/forum/threads/{tid}", headers=sh)
+    posts = (r.json() or {}).get("posts", [])
+    pid = posts[-1].get("id") if posts else None
+    check("回复进了帖子(带回复数)", bool(pid) and (r.json() or {}).get("total") == 1, len(posts))
+    r = c.patch(f"/api/forum/posts/{pid}", headers=s3, json={"content": "改过的回复"})
+    check("PATCH /api/forum/posts/{pid}(作者可改)", r.status_code == 200, r.text[:200])
+    r = c.patch(f"/api/forum/posts/{pid}", headers=sh, json={"content": "别人想改"})
+    check("非作者改回复被拒", r.status_code in (401, 403), r.status_code)
+    r = c.get(f"/api/forum/threads/{tid}", headers=sh)
+    check("改过的回复带 edited 标记", (r.json() or {}).get("posts", [{}])[0].get("edited") is True, "")
+    r = c.patch(f"/api/forum/threads/{tid}", headers=sh, json={"title": "第一帖(作者改过)"})
+    check("PATCH /api/forum/threads/{tid}(作者改标题)", r.status_code == 200, r.text[:200])
+    r = c.patch(f"/api/forum/threads/{tid}", headers=sh, json={"pinned": True})
+    check("非管理员置顶被拒", r.status_code == 403, r.status_code)
+    r = c.patch(f"/api/forum/threads/{tid}", headers=H, json={"pinned": True, "locked": True})
+    check("管理员置顶 + 锁定", r.status_code == 200, r.text[:200])
+    r = c.get(f"/api/forum/threads/{tid}", headers=sh)
+    dd = r.json() or {}
+    check("置顶/锁定已生效", dd.get("pinned") is True and dd.get("locked") is True, dd)
+    r = c.post(f"/api/forum/threads/{tid}/posts", headers=s3, json={"content": "锁了还想回复"})
+    check("锁定帖普通用户回复被拒", r.status_code == 403, r.status_code)
+    r = c.post(f"/api/forum/threads/{tid}/posts", headers=H, json={"content": "管理员可回复锁定帖"})
+    check("管理员可回复锁定帖", r.status_code == 200, r.text[:200])
+    r = c.delete(f"/api/forum/posts/{pid}", headers=s3)
+    check("DELETE /api/forum/posts/{pid}(作者可删)", r.status_code == 200, r.text[:200])
+    r = c.delete(f"/api/forum/threads/{tid}", headers=s3)
+    check("非作者删帖被拒", r.status_code == 403, r.status_code)
+    r = c.delete(f"/api/forum/threads/{tid}", headers=sh)
+    check("DELETE /api/forum/threads/{tid}(作者可删)", r.status_code == 200, r.text[:200])
+    r = c.get(f"/api/forum/threads/{tid}", headers=sh)
+    check("删掉的帖子取不到(404)", r.status_code == 404, r.status_code)
+    r = c.patch(f"/api/admin/forum/boards/{bid}", headers=H, json={"name": "冒烟板块(改名)", "descr": "", "sort": 1})
+    check("PATCH /api/admin/forum/boards/{bid}", r.status_code == 200, r.text[:200])
+    r = c.delete(f"/api/admin/forum/boards/{bid}", headers=H)
+    check("DELETE /api/admin/forum/boards/{bid}", r.status_code == 200, r.text[:200])
+    r = c.delete(f"/api/admin/forum/boards/{bid}", headers=H)
+    check("重复删板块 → 404", r.status_code == 404, r.status_code)
+
+    # --- 邀请码: 批量生成 / 列表 / 删除 ---
+    r = c.post("/api/admin/invites/batch", headers=H,
+               json={"count": 3, "max_uses": 2, "prefix": "SMK", "note": "批量"})
+    items = (r.json() or {}).get("items", [])
+    check("POST /api/admin/invites/batch",
+          r.status_code == 200 and len(items) == 3 and all(i.get("code", "").startswith("SMK-") for i in items),
+          r.text[:200])
+    r = c.post("/api/admin/invites/batch", headers=H, json={"count": 0})
+    check("批量数量非法被拒", r.status_code == 400, r.status_code)
+    r = c.post("/api/admin/invites/batch", headers=H, json={"count": 2, "prefix": "小写前缀"})
+    check("非法前缀被拒", r.status_code == 400, r.status_code)
+    r = c.get("/api/admin/invites", headers=H)
+    il = r.json() if r.status_code == 200 else []
+    iid = next((x.get("id") for x in il if str(x.get("code", "")).startswith("SMK-")), None)
+    check("GET /api/admin/invites", r.status_code == 200 and isinstance(il, list) and bool(iid), r.text[:160])
+    check("邀请码状态字段正确", any(x.get("status") == "active" for x in il), "")
+    r = c.get("/api/admin/invites", headers=sh)
+    check("非管理员看邀请码被拒", r.status_code in (401, 403), r.status_code)
+    r = c.delete(f"/api/admin/invites/{iid}", headers=H)
+    check("DELETE /api/admin/invites/{iid}", r.status_code == 200, r.text[:200])
+
+    # --- 管理端: 看某人的文件 / 重置密码 ---
+    r = c.get(f"/api/admin/users/{uid_t}/files", headers=H)
+    check("GET /api/admin/users/{uid}/files", r.status_code == 200 and isinstance(r.json(), list), r.text[:200])
+    r = c.get(f"/api/admin/users/{uid_t}/files", headers=sh)
+    check("非管理员查他人文件被拒", r.status_code in (401, 403), r.status_code)
+    r = c.post(f"/api/admin/users/{uid_t}/reset_password", headers=H)
+    npw = (r.json() or {}).get("password", "")
+    check("POST /api/admin/users/{uid}/reset_password", r.status_code == 200 and npw.startswith("YJT"), r.text[:200])
+    r = c.post("/api/auth/login", json={"username": "smoke_t1", "password": npw})
+    check("重置后的新密码可登录", r.status_code == 200 and (r.json() or {}).get("token"), r.text[:200])
+    r = c.post(f"/api/admin/users/{uid_t}/reset_password", headers=sh)
+    check("非管理员重置他人密码被拒", r.status_code in (401, 403), r.status_code)
+
+    # --- 文件直读: 原文件 / 下载 / 转换产物优雅降级 ---
+    r = c.get(f"/api/files/{fid}/raw", headers=H)
+    check("GET /api/files/{fid}/raw 返回原文件", r.status_code == 200 and r.content == pptx, r.status_code)
+    r = c.get(f"/api/files/{fid}/download", headers=H)
+    check("GET /api/files/{fid}/download 带 attachment 头",
+          r.status_code == 200 and "attachment" in (r.headers.get("content-disposition") or ""),
+          r.headers.get("content-disposition"))
+    r = c.get(f"/api/files/{fid}/raw", headers=s3)
+    check("越权读原文件被拒", r.status_code in (401, 403, 404), r.status_code)
+    r = c.get(f"/api/files/{fid}/pdf", headers=H)
+    check("GET /pdf 未转换完成时优雅返回(409 而非 5xx)", r.status_code in (200, 409), r.status_code)
+    for ep in ("anim", "bgpdf", "anim-media/none.png", "onlyoffice/verify"):
+        rr = c.get(f"/api/files/{fid}/{ep}", headers=H)
+        check(f"GET /{ep} 不炸 5xx", rr.status_code < 500, f"{rr.status_code} {rr.text[:100]}")
+    # OnlyOffice 未部署时 config 就是应当明确报 503(前端据此提示"未启用"), 不是崩溃
+    rr = c.get(f"/api/files/{fid}/onlyoffice/config", headers=H)
+    check("GET /onlyoffice/config 未启用 DS 时明确 503(带中文说明)",
+          rr.status_code == 503 and "OnlyOffice" in rr.text, f"{rr.status_code} {rr.text[:100]}")
+    r = c.get(f"/api/files/{fid}/onlyoffice/verify", headers=H)
+    check("未启用 OnlyOffice 时 verify 明确返回 ok=false",
+          r.status_code == 200 and (r.json() or {}).get("ok") is False, r.text[:160])
+    r = c.post(f"/api/files/{fid}/retry", headers=H)
+    check("POST /api/files/{fid}/retry 重新排队",
+          r.status_code == 200 and (r.json() or {}).get("status") in ("converting", "ready", "failed"), r.text[:200])
+    r = c.post(f"/api/files/{fid}/retry", headers=s3)
+    check("越权重试转换被拒", r.status_code in (401, 403, 404), r.status_code)
+
+    # --- 官方大厅: 普通用户主动 join(幂等) ---
+    if official and official.get("id"):
+        r = c.post(f"/api/chat/rooms/{official['id']}/join", headers=s3)
+        check("POST /api/chat/rooms/{rid}/join(官方大厅)", r.status_code == 200, r.text[:200])
+        r = c.post(f"/api/chat/rooms/{official['id']}/leave", headers=s3)
+        check("官方大厅不允许退群", r.status_code in (400, 403), r.status_code)
+
     section("6. 前端资源")
     r = c.get("/")
     check("首页引入 msstage.js", r.status_code == 200 and "msstage.js" in r.text, r.status_code)
