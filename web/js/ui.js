@@ -112,8 +112,11 @@
     opts = opts || {};
     const ov = document.createElement('div');
     ov.className = 'ovl';
+    /* v1.27 安全修复: 标题默认转义 —— 群名/用户名等是用户可控内容,
+       直接拼进 innerHTML 会变成存储型 XSS。确实要放图标/标记的调用方显式传 titleHTML: true */
+    const ttl = opts.titleHTML ? (opts.title || '') : esc(opts.title || '');
     ov.innerHTML = '<div class="modal" style="' + (opts.width ? 'max-width:' + opts.width : '') + '">' +
-      '<div class="m-head"><b>' + (opts.title || '') + '</b><button class="m-x" type="button">×</button></div>' +
+      '<div class="m-head"><b>' + ttl + '</b><button class="m-x" type="button">×</button></div>' +
       '<div class="m-body"></div>' +
       (opts.footer === false ? '' : '<div class="m-foot"></div>') + '</div>';
     const body = ov.querySelector('.m-body');

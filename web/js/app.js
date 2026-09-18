@@ -716,7 +716,8 @@ async function openAnnPanel() {
     (a.content ? '<div class="ann-body">' + UI.esc(a.content).replace(/\n/g, '<br>') + '</div>' : '') +
     '<div class="ann-time">' + UI.fmtDate(a.created_at) + '</div></div>'
   ).join('') : '<div class="empty">暂无公告</div>';
-  const m = UI.modal({ title: UI.icon('horn', 18) + ' 公告', body: '<div class="ann-list">' + items + '</div>' });
+  const m = UI.modal({ title: UI.icon('horn', 18) + ' 公告', titleHTML: true,
+    body: '<div class="ann-list">' + items + '</div>' });
   const unread = r.items.filter(a => !a.read).map(a => a.id);
   if (unread.length) API.post('/api/announcements/read', { ids: unread }).then(refreshAnnBadge).catch(() => { });
   refreshAnnBadge();
@@ -724,7 +725,7 @@ async function openAnnPanel() {
 
 /* ---------- 扫码(登录其他设备) ---------- */
 async function openScanModal() {
-  const m = UI.modal({ title: UI.icon('qr', 18) + ' 扫码登录其他设备',
+  const m = UI.modal({ title: UI.icon('qr', 18) + ' 扫码登录其他设备', titleHTML: true,
     body: '<div class="scan-box"><video id="scan-v" playsinline muted></video>' +
     '<div class="scan-tip" id="scan-tip">正在启动相机…</div></div>' +
     '<div class="scan-manual"><span>相机不可用？手动输入票据:</span>' +
@@ -818,7 +819,8 @@ async function renderForumList() {
   try { boards = (await API.get('/api/forum/boards')).items; } catch (e) { toast(e.message, 'err'); return; }
   const th = App.forum.board ? (await API.get('/api/forum/threads?board=' + App.forum.board).catch(() => null)) : null;
   const threads = th ? th.items : [];
-  const boardName = id => { const b = boards.find(x => x.id === id); return b ? b.name : '全站'; };
+  /* v1.27 安全修复: 板块名是后台可改的文本, 拼进 innerHTML 前必须转义 */
+  const boardName = id => { const b = boards.find(x => x.id === id); return b ? UI.esc(b.name) : '全站'; };
   box.innerHTML =
     '<div class="lib-head"><h2>论坛</h2><div class="lib-actions">' +
     '<select id="fb-sel" class="inp" style="width:auto;margin-top:0">' +

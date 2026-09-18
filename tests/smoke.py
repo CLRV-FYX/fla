@@ -765,6 +765,26 @@ def run(c):
     check("证书大图弹层样式", ".cc-zoom" in css and ".cc-big" in css, "")
     check("尊重 prefers-reduced-motion", css.count("prefers-reduced-motion") >= 3, css.count("prefers-reduced-motion"))
 
+    section("6c. 安全: 存储型 XSS 防护(用户可控文本进 innerHTML 前必须转义)")
+    r = c.get("/js/ui.js")
+    uij = r.text if r.status_code == 200 else ""
+    check("弹窗标题默认转义(群名/用户名可控)",
+          "opts.titleHTML ? (opts.title || '') : esc(opts.title || '')" in uij, "")
+    r = c.get("/js/app.js")
+    aj = r.text if r.status_code == 200 else ""
+    check("需要放图标的标题显式 titleHTML", aj.count("titleHTML: true") >= 2, aj.count("titleHTML: true"))
+    check("论坛板块名渲染前转义", "return b ? UI.esc(b.name) : '全站'" in aj, "")
+    check("帖子/回复正文先转义再换行", aj.count("UI.esc(t.content).replace(/\\n/g, '<br>')") >= 1
+          and aj.count("UI.esc(p.content).replace(/\\n/g, '<br>')") >= 1, "")
+    r = c.get("/js/chat.js")
+    cj = r.text if r.status_code == 200 else ""
+    check("聊天正文 richText 先 esc 再识别链接/@", "var t = esc(s || '');" in cj, "")
+    check("系统灰条消息转义", "esc(m.content)" in cj, "")
+    check("群名/昵称/签名进卡片前转义",
+          "esc(u.nickname)" in cj and "esc(u.username)" in cj and "esc(u.signature)" in cj, "")
+    r = c.get("/js/admin.js")
+    check("后台用户表格转义昵称", r.status_code == 200 and "UI.esc(u.nickname)" in r.text, r.status_code)
+
     section("7. 删除与清理")
     r = c.delete(f"/api/files/{fid}", headers=H)
     check("删除课件", r.status_code == 200, r.text[:160])
