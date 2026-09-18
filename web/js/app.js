@@ -16,6 +16,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     try { App.user = await API.get('/api/auth/me'); } catch (e) { /* token 失效 */ }
   }
   if (window.Chat && App.user) Chat.startBadge();   /* v1.27: 全局聊天未读角标 */
+  /* v1.27: 顶栏滚动后收紧(加阴影), 用 passive 监听 + rAF 合并, 不卡滚动 */
+  let stickRaf = 0;
+  const onScroll = () => {
+    if (stickRaf) return;
+    stickRaf = requestAnimationFrame(() => {
+      stickRaf = 0;
+      const t = document.querySelector('.topbar');
+      if (!t) return;
+      const want = (window.scrollY || document.documentElement.scrollTop || 0) > 6;
+      /* 每次路由都会重画顶栏, 所以状态以元素自身为准, 不用外部缓存 */
+      if (t.classList.contains('stuck') !== want) t.classList.toggle('stuck', want);
+    });
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
   route();
 });
 

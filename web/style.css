@@ -923,6 +923,7 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
    布局: 会话列表 | 消息区 | 资料抽屉(可收起)
    动画: 只用 transform / opacity, 统一 var(--ease) ============================== */
 .wx {
+  position: relative;                /* 窄屏时侧栏 absolute 定位的参照 */
   display: grid; grid-template-columns: 288px minmax(0, 1fr) 0;
   gap: 14px; height: calc(100vh - 150px); min-height: 480px;
   transition: grid-template-columns .34s var(--ease);
@@ -1706,4 +1707,111 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 @media (prefers-reduced-motion: reduce) {
   .ms-stage, .ms-pill-l, .ms-pill-r, .ms-pop, .ms-film, .ms-modal, .ms-load, .ms-vbtn.on::after { animation: none; }
   .ms-frame, .ms-top, .ms-pill, .ms-toast { transition-duration: .01s; }
+}
+
+/* ================================================================
+   v1.27 全局动效与观感打磨
+   原则: 只动 transform / opacity / box-shadow(GPU 合成, 不触发重排);
+        统一缓动 var(--ease); 入场做交错(stagger), 交互给即时反馈;
+        全站尊重 prefers-reduced-motion。
+   ================================================================ */
+/* --- 滚动条(全站统一, 细而克制) --- */
+* { scrollbar-width: thin; scrollbar-color: rgba(11, 12, 15, .22) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(11, 12, 15, .18); border-radius: 99px; border: 3px solid transparent; background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(11, 12, 15, .34); background-clip: content-box; }
+
+/* --- 顶栏: 滚动后收紧 + 毛玻璃 + 细阴影 --- */
+.topbar { transition: box-shadow .3s var(--ease), background .3s var(--ease), padding .3s var(--ease); }
+.topbar.stuck { box-shadow: 0 1px 0 var(--line), 0 10px 30px rgba(11, 12, 15, .07); }
+.nav a { position: relative; transition: color .18s var(--ease), opacity .18s; }
+.nav a::after {
+  content: ""; position: absolute; left: 50%; bottom: -6px; width: 0; height: 2px; border-radius: 2px;
+  background: var(--ink); transform: translateX(-50%); transition: width .28s var(--ease);
+}
+.nav a:hover::after { width: 62%; }
+.nav a.on::after { width: 100%; }
+
+/* --- 页面入场: 交错上浮(比整块淡入更有层次) --- */
+.page > * { animation: pageIn .42s var(--ease) both; }
+.page > *:nth-child(2) { animation-delay: .05s; }
+.page > *:nth-child(3) { animation-delay: .1s; }
+.page > *:nth-child(4) { animation-delay: .15s; }
+.page > *:nth-child(n+5) { animation-delay: .19s; }
+@keyframes pageIn { from { opacity: 0; transform: translateY(10px); } }
+
+/* --- 课件卡: 交错入场 + 悬停微抬 + 高光扫过 + 封面轻放大 --- */
+.files-grid > * { animation: cardIn .46s var(--ease) both; }
+.files-grid > *:nth-child(1) { animation-delay: .02s; }
+.files-grid > *:nth-child(2) { animation-delay: .06s; }
+.files-grid > *:nth-child(3) { animation-delay: .1s; }
+.files-grid > *:nth-child(4) { animation-delay: .14s; }
+.files-grid > *:nth-child(5) { animation-delay: .18s; }
+.files-grid > *:nth-child(6) { animation-delay: .22s; }
+.files-grid > *:nth-child(n+7) { animation-delay: .26s; }
+@keyframes cardIn { from { opacity: 0; transform: translateY(14px) scale(.985); } }
+.file-card { position: relative; overflow: hidden; }
+.file-card::after {
+  content: ""; position: absolute; top: -60%; bottom: -60%; left: -70%; width: 45%; pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .5), transparent);
+  transform: skewX(-16deg); opacity: 0; transition: left .7s var(--ease), opacity .3s;
+}
+.file-card:hover::after { left: 130%; opacity: 1; }
+.file-card:active { transform: translateY(-1px) scale(.995); }
+.file-card .thumb, .file-card .fc-thumb, .file-card img { transition: transform .5s var(--ease); }
+.file-card:hover .thumb, .file-card:hover .fc-thumb { transform: scale(1.035); }
+
+/* --- 按钮: 按压反馈更干脆 --- */
+.btn { transition: background .18s var(--ease), color .18s var(--ease), transform .16s var(--ease), box-shadow .22s var(--ease), border-color .18s; }
+.btn:active:not(:disabled) { transform: translateY(0) scale(.972); transition-duration: .06s; }
+.icon-btn { transition: background .18s var(--ease), color .18s, transform .18s var(--ease); }
+.icon-btn:hover { transform: translateY(-1px); }
+.icon-btn:active { transform: scale(.92); }
+
+/* --- 弹窗: 轻微弹簧感(过冲 3%) --- */
+.ovl { animation: ovlIn .22s var(--ease) both; }
+@keyframes ovlIn { from { opacity: 0; } }
+.modal { animation: modalIn .34s cubic-bezier(.34, 1.24, .5, 1) both; }
+@keyframes modalIn { from { opacity: 0; transform: translateY(16px) scale(.965); } }
+
+/* --- 提示条: 从上方弹入, 停留更稳 --- */
+.toast { transition: opacity .3s var(--ease), transform .38s cubic-bezier(.34, 1.24, .5, 1); }
+
+/* --- 表格行 / 列表项: 悬停过渡更顺滑 --- */
+.tbl tbody tr { transition: background .16s var(--ease); }
+.tbl tbody tr:hover { background: rgba(11, 12, 15, .028); }
+
+/* --- 输入框: 聚焦时轻微上浮的光环 --- */
+input, textarea, select { transition: border-color .18s var(--ease), box-shadow .22s var(--ease), background .18s; }
+
+/* --- 上传进度条: 条纹流动(表示"还在动") --- */
+.bar > i, .pbar > i, .up-bar > i {
+  background-image: linear-gradient(115deg, rgba(255, 255, 255, .28) 25%, transparent 25%, transparent 50%,
+    rgba(255, 255, 255, .28) 50%, rgba(255, 255, 255, .28) 75%, transparent 75%);
+  background-size: 18px 18px;
+  animation: barMove .8s linear infinite;
+}
+@keyframes barMove { to { background-position: 18px 0; } }
+
+/* --- 链接: 下划线渐显 --- */
+a { transition: color .16s var(--ease), text-decoration-color .2s var(--ease); }
+
+/* --- 认证徽章: 悬停轻微放大(在密集列表里也能看清) --- */
+.cert { transition: transform .2s var(--ease), box-shadow .25s var(--ease); }
+.cert:hover { transform: translateY(-1px) scale(1.05); }
+
+/* --- 空状态: 缓慢呼吸, 不那么死板 --- */
+.empty svg { animation: emptyFloat 5.5s ease-in-out infinite; }
+@keyframes emptyFloat { 0%, 100% { transform: translateY(0); opacity: .22; } 50% { transform: translateY(-5px); opacity: .34; } }
+
+/* --- 全站减少动效 --- */
+@media (prefers-reduced-motion: reduce) {
+  .page > *, .files-grid > *, .modal, .ovl, .empty svg, .file-card::after,
+  .bar > i, .pbar > i, .up-bar > i { animation: none !important; }
+  .btn, .icon-btn, .file-card, .card, .cert, .nav a::after, .topbar { transition-duration: .01s !important; }
+  .file-card:hover { transform: none; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(11, 12, 15, .18); background-clip: content-box; }
 }
