@@ -223,9 +223,15 @@ detect_default_conflicts(){
 
 free_ports(){
   local f moved=0
-  # 发行版默认站点(改名保留, 不删)
+  # 清理历史遗留的就地改名残留: Debian include /etc/nginx/sites-enabled/*; 仍会加载它们!
+  for f in /etc/nginx/conf.d/*.fla-disabled /etc/nginx/sites-enabled/*.fla-disabled; do
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    disable_file "$f" && moved=$((moved+1))
+  done
+  # 发行版默认站点(移出 include 目录, 不删)
   for f in /etc/nginx/conf.d/default.conf /etc/nginx/sites-enabled/default \
-           /etc/nginx/sites-enabled/000-default.conf /etc/nginx/default.d/*.conf; do
+           /etc/nginx/sites-enabled/000-default.conf /etc/nginx/sites-enabled/*default* \
+           /etc/nginx/default.d/*.conf; do
     [ -e "$f" ] || continue
     if grep -Eq 'listen[^;]*(default_server|80|443)|/usr/share/nginx/html' "$f" 2>/dev/null; then
       disable_file "$f" && moved=$((moved+1))
