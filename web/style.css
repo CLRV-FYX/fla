@@ -338,6 +338,71 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 /* 铂金 / 白银 / 青铜等级色微调 */
 .tier-platinum { --cc: #e6ecfa; --cc-soft: rgba(214, 226, 255, .6); --cc-faint: rgba(214, 226, 255, .16); --cc-line: rgba(226, 232, 245, .4); }
 .tier-silver .cc-title, .tier-graphite .cc-title { letter-spacing: 4px; }
+/* ================================================================
+   v1.27 补齐: 后台「编辑用户」弹窗(此前 .edit-user / .cip / .ccp 等
+   完全没有样式 —— 选中态看不出来, 图标色板挤成一团)
+   ================================================================ */
+.edit-user { display: block; }
+.edit-user > label:first-of-type { margin-top: 4px; }
+.eu-av { display: flex; align-items: center; gap: 14px; margin: 2px 0 6px; }
+.eu-av .avatar { border-radius: 50%; object-fit: cover; box-shadow: var(--shadow-sm); }
+.eu-av > span { display: inline-flex; line-height: 0; }
+.eu-av .btn { margin: 0; }
+
+/* 认证自定义区: 与上面的基础资料分开, 加浅色分组底 */
+.eu-cert-custom {
+  margin: 14px -4px 4px; padding: 12px 14px 14px; border: 1px solid var(--line);
+  border-radius: 14px; background: var(--soft);
+}
+.eu-cert-custom > label:first-child { margin-top: 2px; }
+
+/* 图标选择: 网格排布, 选中态用认证色描边 + 打勾 */
+.cert-icon-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px; margin-top: 6px; }
+.cip {
+  position: relative; display: grid; place-items: center; height: 44px; padding: 0; cursor: pointer;
+  aspect-ratio: 1;                       /* 支持的浏览器改成方格, 不支持就用上面的 44px 高 */
+  background: var(--paper); color: var(--ink2); border: 1.5px solid var(--line); border-radius: 12px;
+  transition: transform .18s var(--ease), border-color .18s, color .18s, box-shadow .22s var(--ease), background .18s;
+}
+.cip svg { color: var(--cc, #f0d488); transition: transform .22s var(--ease); }
+.cip:hover { transform: translateY(-2px); border-color: #cfcec8; box-shadow: var(--shadow-sm); }
+.cip:active { transform: scale(.94); }
+.cip.on {
+  border-color: var(--cc, #f0d488); color: var(--ink);
+  background: #fdf6e6;                                          /* 兜底: 不支持 color-mix 时用暖白 */
+  background: color-mix(in srgb, var(--cc, #f0d488) 12%, var(--paper));
+  box-shadow: 0 0 0 3px rgba(11, 12, 15, .10);                   /* 兜底 */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cc, #f0d488) 22%, transparent);
+}
+.cip.on svg { transform: scale(1.1); }
+.cip.on::after {
+  content: ""; position: absolute; top: 3px; right: 3px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--cc, #f0d488); border: 2px solid var(--paper);
+}
+
+/* 颜色选择: 圆片色板 + 自定义取色器 */
+.cert-color-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 6px; }
+.ccp {
+  position: relative; width: 30px; height: 30px; padding: 0; cursor: pointer; border-radius: 50%;
+  border: 2px solid rgba(11, 12, 15, .12); box-shadow: inset 0 -2px 5px rgba(0, 0, 0, .16);
+  transition: transform .18s var(--ease), box-shadow .22s var(--ease);
+}
+.ccp:hover { transform: scale(1.14); }
+.ccp:active { transform: scale(.94); }
+.ccp.on {
+  transform: scale(1.1); border-color: var(--paper);
+  box-shadow: 0 0 0 2.5px var(--ink), inset 0 -2px 5px rgba(0, 0, 0, .16);
+}
+.ccp.on::after {
+  content: "✓"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; font-weight: 800;
+  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
+}
+.cert-color-pick input[type="color"] {
+  width: 34px; height: 30px; padding: 2px; cursor: pointer; background: var(--paper);
+  border: 1.5px dashed #cfcec8; border-radius: 9px;
+}
+.cert-color-pick input[type="color"]:hover { border-color: var(--ink); }
+
 /* 管理后台: 证书实时预览 */
 .eu-cert-preview { margin: 2px 0 4px; }
 .eu-cert-preview .cert-card { margin-top: 0; transform: none !important; }
@@ -1708,6 +1773,11 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
   .ms-stage, .ms-pill-l, .ms-pill-r, .ms-pop, .ms-film, .ms-modal, .ms-load, .ms-vbtn.on::after { animation: none; }
   .ms-frame, .ms-top, .ms-pill, .ms-toast { transition-duration: .01s; }
 }
+
+/* v1.27 补齐: 引用条图标 / 会话标签(置顶·免打扰) —— 此前无样式 */
+.wx-q-i { display: inline-flex; align-items: center; color: var(--mut); flex: none; }
+.wx-tag.pin { color: #b45309; background: rgba(245, 158, 11, .16); border-color: rgba(245, 158, 11, .3); }
+.wx-tag.mute { color: var(--mut); background: rgba(11, 12, 15, .06); border-color: var(--line); }
 
 /* ================================================================
    v1.27 全局动效与观感打磨

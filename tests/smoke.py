@@ -785,6 +785,20 @@ def run(c):
     r = c.get("/js/admin.js")
     check("后台用户表格转义昵称", r.status_code == 200 and "UI.esc(u.nickname)" in r.text, r.status_code)
 
+    section("6d. 后台「编辑用户」弹窗样式补齐(v1.27 之前完全没样式)")
+    r = c.get("/style.css")
+    css2 = r.text if r.status_code == 200 else ""
+    for sel in (".edit-user", ".eu-av", ".eu-cert-custom", ".cert-icon-pick", ".cip", ".cip.on",
+                ".cert-color-pick", ".ccp", ".ccp.on"):
+        check(f"样式存在 {sel}", sel + " " in css2 or sel + "{" in css2 or sel + " {" in css2
+              or (sel + ":") in css2 or (sel + ",") in css2, "")
+    check("图标选中态看得出来(描边 + 打勾)", ".cip.on::after" in css2, "")
+    check("颜色选中态看得出来(勾 + 外环)", ".ccp.on::after" in css2, "")
+    check("新特性有老浏览器兜底(color-mix / aspect-ratio)",
+          css2.count("color-mix") >= 2 and "height: 44px" in css2, "")
+    check("聊天引用条图标与置顶/免打扰标签有样式",
+          ".wx-q-i" in css2 and ".wx-tag.pin" in css2 and ".wx-tag.mute" in css2, "")
+
     section("7. 删除与清理")
     r = c.delete(f"/api/files/{fid}", headers=H)
     check("删除课件", r.status_code == 200, r.text[:160])
