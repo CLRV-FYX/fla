@@ -696,6 +696,13 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 }
 .seg-b:hover { color: var(--ink); }
 .seg-b.on { background: var(--grad-ink); color: #fff; box-shadow: 0 2px 8px rgba(11,12,15,.25); }
+.ms-seg-row { display: flex; background: rgba(255,255,255,.08); border-radius: 11px; padding: 3px; gap: 4px; margin-bottom: 8px; }
+.ms-seg-b {
+  flex: 1; padding: 7px 8px; border: none; border-radius: 8px; background: transparent;
+  color: rgba(255,255,255,.75); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all .16s ease;
+}
+.ms-seg-b:hover { color: #fff; background: rgba(255,255,255,.1); }
+.ms-seg-b.on { background: #fff; color: #0b0c0f; font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
 #selbar {
   position: absolute; z-index: 125; display: flex; align-items: center; gap: 4px;
   background: var(--glass); backdrop-filter: blur(18px); border: 1px solid var(--line);

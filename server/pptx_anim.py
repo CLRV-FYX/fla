@@ -161,7 +161,9 @@ def parse_timing(slide_el):
         st = outer.find(q("p:stCondLst"))
         first = st.find(q("p:cond")) if st is not None else None
         d = first.get("delay", "0") if first is not None else "0"
-        if d == "indefinite":
+        evt = first.get("evt", "") if first is not None else ""
+        is_new_click = (d == "indefinite" or evt in ("onNext", "onClick") or outer.get("nodeType") == "clickEffect")
+        if is_new_click:
             group += 1
         g = group if group >= 0 else -1
         for ctn in outer.iter(q("p:cTn")):
@@ -172,12 +174,24 @@ def parse_timing(slide_el):
             if not spid:
                 continue
             cls = (ctn.get("presetClass") or "entr").strip()
+            if g < 0 and nt == "clickEffect":
+                group = max(0, group + 1)
+                g = group
             kind, dirn, dur, extra = _classify(ctn, cls)
             e = {"spid": spid, "group": g, "node": nt, "cls": cls,
                  "delay": _cond_delay(ctn), "dur": dur or 500,
                  "kind": kind, "dir": dirn}
             e.update(extra)
             effects.append(e)
+
+    # 兜底校验: 若包含多个 clickEffect 但全落在同一个组或负数组，按顺序为各 clickEffect 独立分配组号
+    click_nodes = [e for e in effects if e.get("node") == "clickEffect"]
+    if len(click_nodes) > 1 and len(set(e.get("group") for e in click_nodes)) == 1:
+        cur_g = -1
+        for e in effects:
+            if e.get("node") == "clickEffect":
+                cur_g += 1
+            e["group"] = max(0, cur_g)
     return effects
 
 

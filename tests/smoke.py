@@ -996,6 +996,31 @@ gen_conf
           "$connection_upgrade" in napp and "Upgrade" in napp, "")
     check("容器内 nginx 反代到 app:8000", "app_upstream" in napp or "app:8000" in napp, "")
 
+    # 8.7 关键修复与增强检验 (扫码二维码/安装脚本自愈/PPT分步动画/双模橡皮)
+    qr_js = (root / "web" / "lib" / "qrcode" / "qrcode.min.js").read_text()
+    check("二维码库修复边界越界 bug(g>f)", "g>f;f++" in qr_js, "")
+    idx_html = (root / "web" / "index.html").read_text()
+    check("index.html 显式预载 qrcode 库", "lib/qrcode/qrcode.min.js" in idx_html, "")
+
+    check("install.sh 保护 nginx 日志打印(仅当容器存在时输出)",
+          "grep -qx 'nginx'" in ins and "docker logs --tail 40 nginx" in ins, "")
+    check("install.sh 具备容器内部健康探针(防止回环 NAT 误杀)",
+          "check_fla_internal" in ins, "")
+
+    pptx_anim_py = (root / "server" / "pptx_anim.py").read_text()
+    check("pptx_anim 独立区分 clickEffect 步进动画",
+          "click_nodes" in pptx_anim_py and "clickEffect" in pptx_anim_py, "")
+
+    ms_js = (root / "web" / "js" / "msstage.js").read_text()
+    check("放映舞台支持对象橡皮与像素橡皮双模式",
+          "data-em=\"object\"" in ms_js and "data-em=\"pixel\"" in ms_js, "")
+    check("放映舞台支持橡皮粗细无级滑动设定",
+          "6, 120" in ms_js and "erasePixelSeg" in ms_js, "")
+
+    pres_js = (root / "web" / "js" / "present.js").read_text()
+    check("内部放映页支持激光笔多键位步进动画",
+          "isNext" in pres_js and "advance()" in pres_js, "")
+
     return finish()
 
 

@@ -1178,9 +1178,15 @@
   function onKey(e) {
     if (e.target && /INPUT|TEXTAREA|SELECT|VIDEO|AUDIO/.test(e.target.tagName)) return;
     var k = e.key;
-    if (k === 'ArrowRight' || k === ' ' || k === 'PageDown' || k === 'Enter' || k === 'ArrowDown') { e.preventDefault(); advance(); }
+    var isNext = (k === 'ArrowRight' || k === ' ' || k === 'PageDown' || k === 'Enter' || k === 'ArrowDown' ||
+                  k === 'Right' || k === 'Down' || k === 'Next' || e.code === 'PageDown' || e.code === 'ArrowDown' ||
+                  e.keyCode === 34 || e.keyCode === 40 || e.keyCode === 39 || e.keyCode === 32 || e.keyCode === 13);
+    var isPrev = (k === 'ArrowLeft' || k === 'PageUp' || k === 'ArrowUp' ||
+                  k === 'Left' || k === 'Up' || k === 'Prior' || e.code === 'PageUp' || e.code === 'ArrowUp' ||
+                  e.keyCode === 33 || e.keyCode === 38 || e.keyCode === 37);
+    if (isNext) { e.preventDefault(); advance(); }
+    else if (isPrev) { e.preventDefault(); prevPage(); }
     else if (k === '.') { e.preventDefault(); revealAll(); }
-    else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'ArrowUp') { e.preventDefault(); prevPage(); }
     else if (k === 'Home') showPage(0);
     else if (k === 'End') showPage(S.pages.length - 1);
     else if (k === 'Escape') exitPresent();

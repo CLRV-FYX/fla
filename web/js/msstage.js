@@ -124,7 +124,7 @@
       marker: { color: '#fde047', width: 18 },
       shape: { type: 'rect', color: '#ef4444', width: 3 },
       text: { color: '#ef4444', size: 30 },
-      eraser: { width: 28 },
+      eraser: { width: 28, mode: 'object' },
       boardBg: 'w'
     };
     try {
@@ -598,6 +598,48 @@
       var t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2));
       return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
     }
+    function erasePixelSeg(a, b, r) {
+      var p = pid(), arr = S.strokes[p] || [];
+      var changed = false, out = [];
+      for (var i = 0; i < arr.length; i++) {
+        var s = arr[i];
+        var half = (s.width || 3) / 2;
+        if (s.tool === 'shape' || s.tool === 'text') {
+          var bx = bounds(s);
+          if (a[0] >= bx.x0 - r && a[0] <= bx.x1 + r && a[1] >= bx.y0 - r && a[1] <= bx.y1 + r) {
+            changed = true; opPush(p, { op: 'del', s: s }); continue;
+          }
+          out.push(s); continue;
+        }
+        if (!s.pts || !s.pts.length) continue;
+        var touched = false, runs = [], curRun = [];
+        for (var j = 0; j < s.pts.length; j++) {
+          var pt = s.pts[j];
+          var d = distToSeg(pt, a, b);
+          if (d <= r + half) {
+            touched = true;
+            if (curRun.length) { runs.push(curRun); curRun = []; }
+          } else {
+            curRun.push(pt);
+          }
+        }
+        if (curRun.length) runs.push(curRun);
+        if (!touched) {
+          out.push(s);
+        } else {
+          changed = true;
+          opPush(p, { op: 'del', s: s });
+          for (var k = 0; k < runs.length; k++) {
+            if (runs[k].length > 0) {
+              var piece = { id: uid(), tool: s.tool, color: s.color, width: s.width, pts: runs[k] };
+              out.push(piece);
+              opPush(p, { op: 'add', s: piece });
+            }
+          }
+        }
+      }
+      if (changed) { S.strokes[p] = out; redraw(); }
+    }
     function eraseAt(vx, vy) {
       var p = pid(), arr = S.strokes[p] || [], w = S.cfg.eraser.width;
       var r = w / 2 + 8, pt = [vx, vy], changed = false;
@@ -653,7 +695,12 @@
       var v = toVirt(e.clientX, e.clientY);
       wakeUI();
       if (S.tool === 'laser') { S.laserDots.push({ x: v[0], y: v[1], t: Date.now() }); laserLoop(); return; }
-      if (S.tool === 'eraser') { eraseAt(v[0], v[1]); return; }
+      if (S.tool === 'eraser') {
+        S.lastEraserPt = v;
+        if (S.cfg.eraser.mode === 'pixel') erasePixelSeg(v, v, (S.cfg.eraser.width || 28) / 2);
+        else eraseAt(v[0], v[1]);
+        return;
+      }
       if (S.tool === 'text') {
         commitText();
         var g = slideRect(), sc = g.w / VW;
@@ -697,7 +744,15 @@
       if (S.tool === 'cursor') return;
       var v = toVirt(e.clientX, e.clientY);
       if (S.tool === 'laser') { S.laserDots.push({ x: v[0], y: v[1], t: Date.now() }); laserLoop(); return; }
-      if (S.tool === 'eraser') { if (e.buttons || e.pointerType === 'touch') eraseAt(v[0], v[1]); return; }
+      if (S.tool === 'eraser') {
+        if (e.buttons || e.pointerType === 'touch') {
+          var prev = S.lastEraserPt || v;
+          S.lastEraserPt = v;
+          if (S.cfg.eraser.mode === 'pixel') erasePixelSeg(prev, v, (S.cfg.eraser.width || 28) / 2);
+          else eraseAt(v[0], v[1]);
+        }
+        return;
+      }
       if (S.tool === 'select' && S.selOff && (e.buttons || e.pointerType === 'touch')) {
         var s = S.selOff.s, dx = v[0] - S.selOff.start[0], dy = v[1] - S.selOff.start[1];
         s.pts = S.selOff.before.map(function (q) { return [q[0] + dx, q[1] + dy]; });
@@ -711,6 +766,7 @@
       redraw();
     });
     function endStroke() {
+      S.lastEraserPt = null;
       if (S.drawing) {
         if (S.drawing.tool === 'shape') {
           var d = Math.abs(S.drawing.pts[1][0] - S.drawing.pts[0][0]) + Math.abs(S.drawing.pts[1][1] - S.drawing.pts[0][1]);
@@ -837,9 +893,34 @@
         var h = el('p', 'ms-pop-hint'); h.textContent = '点击画面输入, Enter 确认, Shift+Enter 换行';
         pop.appendChild(h);
       } else if (t === 'eraser') {
-        pop.appendChild(sliderRow('橡皮大小', 8, 120, S.cfg.eraser.width, function (v) { S.cfg.eraser.width = v; }));
-        var h2 = el('p', 'ms-pop-hint'); h2.textContent = '划过即擦掉整条笔迹 · Ctrl+Z 可撤销';
-        pop.appendChild(h2);
+        var modeRow = el('div', 'ms-pop-row ms-seg-row');
+        modeRow.innerHTML =
+          '<button class="ms-seg-b' + (S.cfg.eraser.mode !== 'pixel' ? ' on' : '') + '" data-em="object">对象橡皮</button>' +
+          '<button class="ms-seg-b' + (S.cfg.eraser.mode === 'pixel' ? ' on' : '') + '" data-em="pixel">像素橡皮</button>';
+        var hint = el('p', 'ms-pop-hint');
+        function updateEraserHint() {
+          hint.textContent = S.cfg.eraser.mode === 'pixel'
+            ? '像素橡皮：精细局部擦除，划过哪截切断哪截 · 设定下方粗细'
+            : '对象橡皮：碰触整条笔画删除 · 适合快速清掉整行字或图形';
+        }
+        updateEraserHint();
+        Array.prototype.forEach.call(modeRow.querySelectorAll('button'), function (b) {
+          b.onclick = function () {
+            S.cfg.eraser.mode = b.getAttribute('data-em');
+            saveCfg();
+            Array.prototype.forEach.call(modeRow.querySelectorAll('button'), function (x) { x.classList.remove('on'); });
+            b.classList.add('on');
+            updateEraserHint();
+          };
+        });
+        pop.appendChild(modeRow);
+        pop.appendChild(sliderRow('粗细 / 大小', 6, 120, S.cfg.eraser.width || 28, function (v) { S.cfg.eraser.width = v; }));
+        var clearBtn = el('button', 'btn danger block');
+        clearBtn.textContent = '清空本页板书';
+        clearBtn.style.marginTop = '10px';
+        clearBtn.onclick = function () { clearPage(); pop.classList.add('hidden'); };
+        pop.appendChild(clearBtn);
+        pop.appendChild(hint);
       } else { pop.classList.add('hidden'); return; }
       pop.setAttribute('data-tool', t);
       pop.classList.remove('hidden');
