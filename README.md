@@ -1,7 +1,9 @@
 # FLA · FYX Lesson All
 
-面向课堂教学的课件与互动白板系统：上传课件（Office / PDF / 图片 / 音视频），在教室大屏或任意设备上打开、写画、圈选、放映，带完整用户系统、论坛、聊天区与管理后台。由学生为老师打造。
+面向课堂教学的课件与互动白板系统：上传课件（Office / PDF / 图片 / 音视频），在教室大屏或任意设备上打开、写画、圈选、放映，带完整用户系统、论坛、微信级聊天与管理后台。由学生为老师打造。
 
+> **v1.27**：微软放映**板书画布严格随页切换**（老大难修复）· 聊天升级到**微信级**（私聊/未读角标/已读回执/正在输入/引用/回应/@/图片文件语音/群管理/搜索）· **认证证书大升级**（3D 全息证书 + 二维码核验 + 打印存 PDF + 后台实时预览）· **nginx 接管 80/443 反代 8306**（`edge.sh`）· **SSL 自动签发用文件验证**（`https.sh`，HTTP-01）· **`completely_new_install.sh` 连 Docker 一起铲掉重装** · 全站动效打磨 · 147 项冒烟测试
+>
 > **v1.26**：图片放映修复 · 通用视频格式（mkv/mov/wmv/avi…）自动转 MP4 · 扫码登录 · 论坛 · 聊天 · 公告（全局/专属）· 认证图标颜色自定义 · 站长认证（铂金极光）· 默认端口 8306
 
 ---
@@ -14,7 +16,57 @@ cd FLA
 sudo bash install.sh
 ```
 
-脚本会自动完成：修复 CentOS 7 EOL 源 → 安装 Docker（已装自动跳过）→ 安装 docker compose → 选端口（被占用自动换）→ 生成配置 → 构建启动 → 健康检查。全程写入 `install.log`。
+脚本会自动完成：修复 CentOS 7 EOL 源 → 安装 Docker（已装自动跳过）→ 安装 docker compose → 选端口（默认 **8306**，被占用自动顺延 8307…8310）→ **装宿主机 nginx 网关（占 80 + 443，反代到 FLA 端口）** → **自动签发 SSL 证书（文件验证 HTTP-01）** → 生成配置 → 构建启动 → 健康检查。全程写入 `install.log`。
+
+### 🌐 nginx 接管 80 / 443（`edge.sh`）
+
+FLA 自己跑在 **8306**，但**所有指向本机的域名**都由宿主机 nginx 收下并反代过去——这样微软 Office 在线放映要求的"域名 + 80/443 公开直链"天然满足，不用把 FLA 塞进 80。
+
+```bash
+sudo bash edge.sh setup 你的域名 [更多域名...]    # 装网关: 80+443 catch-all → 127.0.0.1:8306
+sudo bash edge.sh --port 8310 setup 域名          # FLA 不在 8306 时指定反代端口
+sudo bash edge.sh status                          # 看当前网关配置/证书/端口/80占用情况
+sudo bash edge.sh reload                          # 改完重载(先 nginx -t 自检, 不通过就不重载)
+sudo bash edge.sh remove                          # 卸掉网关(FLA 仍可用 8306 直连)
+```
+
+- 生成 `/etc/nginx/conf.d/fla-edge.conf`：80 + 443 双 `default_server`（**任意域名**都接）、WebSocket 升级头、`/.well-known/acme-challenge/` 走本地 webroot、大文件上传不拦（`client_max_body_size 0`）
+- 没有证书时先用**自签引导证书**把 443 撑起来（`/etc/fla/ssl/`），签好真证书自动替换
+- 状态记录在 `/etc/fla/edge.state`；反代目标端口跟着 FLA 实际端口走
+- **换端口**：`sudo bash install.sh --port 8310`，或改 `deploy/.env` 里的 `PORT` 后 `sudo bash run.sh restart && sudo bash edge.sh setup 域名`
+
+### 🔒 SSL 证书：文件验证，全自动（`https.sh`）
+
+```bash
+sudo bash https.sh                      # 交互输入域名(可多个), 自动签发 + 自动续期
+sudo bash https.sh class.fyx.best       # 直接指定域名
+sudo bash https.sh --yes 域名           # 免交互(安装脚本内部就是这么调的)
+sudo bash https.sh --status             # 看证书到期时间/续期任务
+sudo bash https.sh --renew              # 手动续期一次(平时不用管)
+```
+
+- **只用文件验证（HTTP-01 webroot `/var/www/fla-acme`）**：不停 80 端口、不抢占 nginx，正在上课也能签
+- 优先 `certbot`，没有就自动装；装不上再退到 `acme.sh`（都不行会明确告诉你为什么，例如域名没解析到本机）
+- 签发成功后自动：写入 `PUBLIC_BASE_URL=https://域名`（微软放映直链、扫码登录、分享链接都用它）→ 装续期钩子 → **重建 app 容器**让配置生效
+- **自动续期**：cron + systemd timer 双保险（每天 03:17 / 15:17 各试一次），续期后自动重载 nginx
+- 证书放在 `/etc/letsencrypt/live/域名/`，并复制到 `/etc/fla/ssl/` 供网关使用
+
+### 🧨 彻底重装（`completely_new_install.sh`）
+
+**删掉所有 Docker 容器 + Docker 本身，再从零装一遍。** 用于 Docker 坏掉、iptables 混乱、内核升级后容器起不来等"救不回来"的场景。
+
+```bash
+sudo bash completely_new_install.sh                # 交互确认(要手打 YES-DELETE-ALL)
+sudo bash completely_new_install.sh --keep-data    # 保留 fla-data 卷
+sudo bash completely_new_install.sh --no-backup    # 连自动备份都不做(不可恢复!)
+sudo bash completely_new_install.sh --keep-docker  # 只清空容器/镜像/卷, 不卸载 docker 本体
+sudo bash completely_new_install.sh --skip-install # 只清理, 不重装
+sudo bash completely_new_install.sh --force        # 完全无人值守(危险)
+# 其余参数原样转给 install.sh:
+sudo bash completely_new_install.sh --port 8306 --domain t.clrv.top --lite
+```
+
+会依次：**先把 `fla-data` 备份成 `fla-backup-*.tar.gz`**（默认行为，`--no-backup` 可关）→ 停并删**所有**容器（不止 FLA）→ 删所有镜像/卷/网络 → 卸载 docker / docker-ce / containerd 及残留配置 → 清 `/var/lib/docker`、`/etc/docker` → 重新安装 Docker + compose → 接着按你给的参数跑 `install.sh`。全过程写 `reinstall.log`。**不会动**：本目录源码与 `deploy/.env`、宿主机 nginx 网关与 Let's Encrypt 证书、已有的备份文件。
 
 ### 🖥 自动后台保活（screen）
 
@@ -45,25 +97,29 @@ tail -f install.log     # 或者看日志文件
 ### 🛠 日常管理：run.sh
 
 ```bash
-sudo bash run.sh status    # 查看容器与服务状态
+sudo bash run.sh status    # 查看容器与服务状态(含网关/证书)
 sudo bash run.sh start     # 启动
 sudo bash run.sh stop      # 停止(数据不丢)
 sudo bash run.sh restart   # 重启
 sudo bash run.sh logs      # 实时日志 (可指定 app|nginx|documentserver)
 sudo bash run.sh update    # 更新版本 = 智能重建, 数据保留
+sudo bash run.sh edge      # 宿主机 nginx 网关(80/443) → 转 edge.sh status
+sudo bash run.sh ssl       # 证书状态/到期时间 → 转 https.sh --status
 sudo bash run.sh screen    # 查看进行中的安装会话
 sudo bash run.sh doctor    # 一键诊断(收集全部日志到 doctor.log, 出问题时发给开发者)
 ```
 
 ### 其他选项
 
-默认端口 **8306**（被占自动顺延）· `--port 80` 若要 FLA 直接占用 80（微软放映直链要求域名+80/443，通常由你自己的反代提供） · `--password XXX` 指定初始密码 · `--lite` 精简模式（不用 OnlyOffice，省 2G 内存）· `--foreground` 强制前台执行（调试用）· OnlyOffice 镜像拉取失败自动降级精简模式，网络恢复后重跑即升级。
+默认端口 **8306**（被占自动顺延）· `--port 80` 若要 FLA 直接占用 80 · `--password XXX` 指定初始密码 · `--lite` 精简模式（不用 OnlyOffice，省 2G 内存）· `--foreground` 强制前台执行（调试用）· OnlyOffice 镜像拉取失败自动降级精简模式，网络恢复后重跑即升级。
 
 **开机自启**：容器 `restart: unless-stopped` + docker 服务 enabled（复用外部 OnlyOffice 时同样自动设置），服务器重启后整套服务自动拉起。
 
 **排错**：任何一步失败都会打印排错建议。仍解决不了就把 `install.log` 发给开发者（自愈过程已把容器诊断日志都写进去了）。
 
-**卸载**：`sudo bash uninstall.sh`（删容器和数据卷，需输入 yes；**镜像默认保留**，防止误删你自己修改过的镜像，需要删加 `--images`）。
+**卸载**：`sudo bash uninstall.sh`（需输入 yes）
+- 默认：删 FLA 容器 + 数据卷，**镜像保留**（防止误删你自己改过的镜像）
+- `--images` 连镜像一起删 · `--edge` 连宿主机 nginx 网关与证书一起卸 · `--keep-data` 只删容器保留数据 · `--backup` 先把 `fla-data` 打包到当前目录再删
 
 > 首次登录后请立即修改 admin 密码。备份 Docker 卷 `fla-data` 即备份全部数据。
 
@@ -71,7 +127,30 @@ sudo bash run.sh doctor    # 一键诊断(收集全部日志到 doctor.log, 出�
 
 ## 二、功能清单
 
+### 🎬 微软放映舞台（v1.27 · 板书画布严格随页切换）
+
+Office 课件用**微软 Office 在线视图**打开/放映（真字体、真动画）。它有个天生的硬伤：微软画面是**跨域 iframe**，父页面既读不到它当前在第几页，也没法命令它翻页——所以老版本的板书画布永远停在第一页，翻几页后板书和画面完全脱节。
+
+v1.27 的解法（`web/js/msstage.js` + `server/msview.py` + `GET /api/files/{id}/ms-view`）：
+
+| 能力 | 说明 |
+|---|---|
+| **我方掌握页码** | 翻页 = 换 `iframe.src` 的定位参数（`wdStartOn` / `wdSlideId`，slide id 从 pptx 的 `sldIdLst` 里真读出来）。页码是我方状态，**画布层自然严格跟着走** |
+| **翻页不卡** | 双 iframe 乒乓 + **后台预载下一页**，220ms 交叉淡入，不闪黑屏；`src` 不变 → 微软侧转换缓存可复用，不用重新转换 |
+| **画布对准幻灯区域** | 按文档**真实宽高比** letterbox 计算板书区域，笔迹落在幻灯片上而不是黑边；还能**手动微调**（拖动/四角缩放，存到服务器，换设备一致） |
+| 缩略图导航（G） | pdf.js 懒加载真实缩略图 + 有板书的页打点标记，点一下就跳页 |
+| 附加板书页 | 幻灯片讲完了继续加空白板书页（白/黑板/绿黑板），与幻灯页数互不干扰 |
+| 板中板 | 从顶部滑落的独立小黑板（可加页、可清空），不遮挡主画面 |
+| 全套板书工具 | 选择/笔/荧光笔/几何图形（直线·箭头·矩形·椭圆·三角形，45° 吸附）/文本/激光笔/橡皮 + 撤销重做 + 选中拖动 |
+| **两种同步模式** | **我方驱动 deep**（默认，‹ › / 缩略图 / 数字键直接翻页，画布同步）· **微软自翻 follow**（老师点微软画面翻页，动画最顺，板书用 ‹ › 或 Ctrl+← → 对齐） |
+| 首次对齐自检 | 第一次进放映会提示"翻一页看微软画面有没有跟着跳"，没跟着跳就一键切到 follow 模式并记住选择 |
+| 兜底 | 顶栏「本地引擎」随时切到完全离线的高保真渲染（LibreOffice→PDF，含自研动画放映） |
+| 快捷键 | ← → 空格翻页 · 1–7 选工具 · Ctrl+Z/Y 撤销重做 · G 缩略图 · B 黑屏 · F 全屏 · Esc 逐级退出 |
+
+> **前提**：微软抓取器要求直链是 **域名 + 80/443**。装好 `edge.sh` + `https.sh` 后自动满足（`PUBLIC_BASE_URL` 会写进配置）。用 IP 或 8306 直连时，界面会明确提示，并可一键切「本地引擎」。
+
 ### ✏️ 白板（教室模式）
+
 | 工具 | 说明 |
 |---|---|
 | 选择 (1) | 套索圈选任意元素（笔迹/图形/文本）→ 批量**复制 / 拖动 / 角点缩放 / 删除**；再点图标弹出**全选 / 删除所选**；Ctrl+A 全选、Delete 删除；此状态**双指缩放**整个画面 |
@@ -95,26 +174,59 @@ sudo bash run.sh doctor    # 一键诊断(收集全部日志到 doctor.log, 出�
 
 所有批注按页自动保存到服务器，任何设备登录都能继续。
 
+### 💬 聊天（v1.27 · 微信级）
+
+| 分类 | 能力 |
+|---|---|
+| 会话 | **私聊**（1:1，重复发起复用同一会话）· **群聊**（自建/邀请/官方大厅）· 会话列表带头像、最后一条摘要（`[图片]` `[语音]` `[文件]`）、相对时间 |
+| 未读 | 每会话独立未读数 → **导航栏角标**（20 秒轮询）；**免打扰**的会话只显小红点不显数字；**置顶**会话排最前 |
+| 已读回执 | 群里显示「已读 n/m」，私聊显示「已读 / 未读」（由 `chat_members.last_read` 推出，零额外写入） |
+| 正在输入 | 输入时上报（2 秒节流），对方会话与标题栏显示「xx 正在输入…」，6 秒时效 |
+| 消息类型 | 文本（2000 字）· **图片**（点击看大图/下载）· **文件**（200MB，带大小与下载）· **语音**（MediaRecorder 录制，自制播放条 + 时长，60 秒上限）· 系统灰条（进群/退群/改名/转让） |
+| 发送方式 | 按钮选择、**拖拽进窗口**、**Ctrl+V 直接粘贴截图**，带上传进度条 |
+| 引用回复 | 引用条显示原文摘要，点击可**跳转定位**（不在当前页会自动向前翻并高亮闪烁） |
+| 表情回应 | ❤ 👍 😂 🎉 👀 🙏 一键回应，再点取消，多人自动聚合成计数；可查看"谁回应了" |
+| @提醒 | 输入 `@` 弹出**成员自动补全**（方向键/Tab 选，Esc 关），被 @ 的人会话列表显示红色「[有人@我]」 |
+| 撤回/编辑 | 自己 **2 分钟内可撤回**（全员看到"撤回了一条消息"）；文字消息可编辑（标「已编辑」）；管理员可代管任意消息（标「已编辑·管理员」） |
+| 群管理 | 群名/群公告（群主可改）· **我在本群的昵称** · 邀请成员 · 移出成员 · **转让群主** · 退群（群主需先转让）· 解散 |
+| 查找 | 侧栏搜索框：先过滤会话，再**全文搜索聊天记录**（关键词高亮，点击定位到那条消息） |
+| 历史 | 向上滚动自动加载更早消息（保持视口不动）；增量拉新 2.5 秒；**页面隐藏自动停轮询**，回到前台立即补拉 |
+| 通知 | 可选**桌面通知**（需授权，只在切到别的标签页时提醒，免打扰会话不提醒） |
+| 窄屏 | 单列布局：列表 ↔ 会话滑动切换，顶栏返回按钮 |
+| 后台管控 | 聊天总开关 · 建群权限 · 单人禁言 · 解散任意群 |
+
 ### 📁 课件与文件
 - 类型：`ppt/pptx/pps/ppsx/pot/potx`、`doc/docx/dot/dotx/rtf/txt`、`xls/xlsx/csv`、`odt/ods/odp`、`pdf`、`png/jpg/jpeg/webp/gif/bmp/svg`、`mp3/wav/ogg/m4a/aac/flac`、`mp4/webm/mkv/mov/m4v/avi/wmv/flv/ts/3gp`
 - Office 文档服务端 LibreOffice 自动转高保真 PDF；图片原生放映（可加板书页）；**非浏览器通用格式（mkv/mov/wmv/avi/flv/ts/3gp…）服务端 ffmpeg 自动转 MP4** 后可直接播放（开源离线，不依赖外部 API）；**直接上传的 PDF 自动统计页数**（旧数据由前端打开时自动校正）
+- **公开直链**：`/api/files/share/FYXxxxxxxxx.pptx`（纯 ASCII，微软抓取器不接受中文路径），免登录可取，支持 HEAD 与 Range
 - **字体保障（不出方框）**：内置思源黑体/宋体、霞鹜文楷等开源字体；fontconfig 把微软雅黑/宋体/黑体/楷体/仿宋/隶书等映射为度量相近的开源字体（商业字体无法合法分发）；转出的 PDF **内嵌字体**，任何设备显示一致；启动时自动检测并联网补齐缺失的开源字体；上传时提示文档引用了哪些未安装字体
 
 ### 👥 用户系统
 - 注册需**邀请码**；bcrypt 密码加密 + JWT 令牌
 - 头像 / 昵称 / 个性签名设置
 - 教师默认 500MB 空间（后台可改默认值与单人配额）
-- **教师认证**：管理员勾选 + 自定义称号（如"高级认证教师"）+ **自选图标（奖牌/星/皇冠/奖杯等 10 种）与颜色**（8 预设或任意色），徽章与证书卡全程联动配色；**站长认证**独立体系：铂金极光证书卡 + 三层光环，明显区别于教师金
-- **扫码登录**：登录页「密码 / 扫码」双页签；二维码本地生成（开源 qrcode.js，不连外部服务）；已登录设备顶栏扫码图标 → 相机扫码（jsQR）或手动输票据授权；也可用手机相机扫码打开授权页确认；票据 150 秒有效、一次作废
+- **扫码登录**：登录页「密码 / 扫码」双页签；二维码本地生成（开源 qrcode.js，不连外部服务）；已登录设备顶栏扫码图标 → 相机扫码（jsQR）或手动输票据授权；票据 150 秒有效、一次作废
 
-### 💬 社区（v1.26）
-- **论坛**：多板块（默认 教学/答疑/分享 + 全站聚合）；发帖 / 回复；作者或管理员可编辑、删除；管理员可置顶、锁定；板块由后台管理
-- **聊天区**：官方大厅（人人可进，不可删）+ 用户自建群组（后台可关）；消息 2.5 秒增量轮询；发言者或管理员可编辑 / 删除（官方群消息管理员可删不可误删群）；后台可对单人**禁言**
-- **公告**：顶栏铃铛 + 未读红点；全局公告与**指定用户专属公告**（列表带「专属」标记）；三级级别（公告/注意/重要）；打开面板自动上报已读
-- 以上三个模块均可在后台**独立开关**，关闭后导航自动隐藏
+### 🏅 认证证书（v1.27 大升级）
+
+| 要素 | 说明 |
+|---|---|
+| **等级体系** | 站长 = **铂金极光**（PLATINUM AURORA）；教师按认证颜色自动判级：**黄金 / 白银 / 青铜 / 墨金 / 蓝宝 / 翡翠 / 定制** |
+| **3D 全息** | 鼠标跟随**倾斜 + 分层视差**（奖章浮得比证书高）；**全息箔层**随倾斜角度流动变色（真证书上那层彩虹膜） |
+| 工艺细节 | 雕刻底纹（guilloché）· 旋转光束 · 三重光环 · 呼吸光晕 · 星芒 · 扫光 · 四角压边 · 绶带 · 骑缝章 |
+| **正式要素** | 等级条 / 证书编号 `NO. FLA-0001` / 签发日期 / 授权范围（站长）或持证人（教师）/ **校验码** |
+| **二维码核验** | 懒加载本地 qrcode.js，编码「编号 + 称号 + 等级 + 签发日 + 校验码 + 站点地址」，扫码即见 |
+| 校验码 | `FNV-1a(id \| 角色 \| 教师标记 \| 称号 \| 签发日)`，同一账号永远一致，可对账 |
+| **查看大图** | 全屏弹层放大展示（Esc / 点空白关闭） |
+| **打印 / 存 PDF** | `@media print` 只印证书本体（隐藏顶栏与页面其余部分），浏览器打印对话框里可直接"另存为 PDF" |
+| 徽章 | 导航栏/论坛/聊天里的行内徽章：金属渐变文字 + 流光扫过 + 悬停微放大；站长为铂金银白渐变 |
+| 后台 | 编辑用户时**证书实时预览**：改称号/图标/颜色/角色/教师开关，证书当场重绘（所见即所得） |
 
 ### 🛠 管理后台（`#/admin`）
-数据概览（含论坛/聊天/公告统计）/ 用户管理（搜索、编辑资料头像、改配额、改角色、认证图标颜色、聊天禁言、重置密码、管理其文件、删除）/ 邀请码（单个自定义 + 批量生成 + 次数/有效期/备注 + 删除）/ **公告管理**（全局/指定用户专属，三级级别，启用停用）/ **论坛管理**（板块增删改名、置顶/锁定/删帖）/ **聊天管理**（开关、建群权限、解散群组）/ 系统设置（默认空间、单文件上限、开放注册、论坛/聊天/建群开关）
+数据概览（含论坛/聊天/公告统计）/ 用户管理（搜索、编辑资料头像、改配额、改角色、**认证称号·图标·颜色 + 证书实时预览**、聊天禁言、重置密码、管理其文件、删除）/ 邀请码（单个自定义 + 批量生成 + 次数/有效期/备注 + 删除）/ **公告管理**（全局/指定用户专属，三级级别，启用停用）/ **论坛管理**（板块增删改名、置顶/锁定/删帖）/ **聊天管理**（开关、建群权限、解散群组）/ 系统设置（默认空间、单文件上限、开放注册、公开访问地址、论坛/聊天/建群开关）
+
+### ✨ 界面与动效（v1.27）
+页面与卡片**交错入场**、卡片悬停高光扫过 + 封面轻放大、按钮按压即时反馈、弹窗弹簧缓动、全站细滚动条、上传进度条条纹流动、顶栏滚动后收紧、空状态呼吸；所有动画只动 `transform / opacity`（GPU 合成，不触发重排），并**全站尊重 `prefers-reduced-motion`**（系统开了"减少动效"就全部关闭）。
 
 ---
 
@@ -122,36 +234,64 @@ sudo bash run.sh doctor    # 一键诊断(收集全部日志到 doctor.log, 出�
 
 ```
 FLA/
-├── install.sh                 ← 一键部署/智能重建(自动进 screen 保活)
-├── run.sh                     ← 日常管理: status/start/stop/restart/logs/update
-├── completely_new_install.sh  ← 全新重装(清除所有容器, 慎用)
-├── uninstall.sh               ← 卸载(默认保留镜像)
+├── install.sh                 ← 一键部署/智能重建(含 nginx 网关 + SSL, 自动进 screen 保活)
+├── edge.sh                    ← v1.27 宿主机 nginx 网关: 占 80+443 catch-all → 反代 FLA 端口
+├── https.sh                   ← v1.27 SSL 证书: 文件验证(HTTP-01 webroot) + 自动续期
+├── run.sh                     ← 日常管理: status/start/stop/restart/logs/update/edge/ssl/doctor
+├── completely_new_install.sh  ← v1.27 删掉所有容器 + Docker 本体, 再从零重装
+├── uninstall.sh               ← 卸载(--images/--edge/--keep-data/--backup)
 ├── server/               FastAPI 后端 (SQLite, 无外部数据库依赖)
+│   ├── msview.py         v1.27 微软在线视图对接(深链/slide id/宽高比/直链可用性)
 │   ├── converter.py      LibreOffice 转换队列 + 字体检测/自动下载
-│   └── routers/          auth / users / files(含OnlyOffice) / admin
-├── web/                  前端 (原生 JS, 无构建步骤)
-│   ├── js/viewer.js      白板引擎(核心)
-│   └── lib/pdfjs/        本地 pdf.js
+│   ├── pptx_anim.py      pptx 动画解析(自研放映)
+│   └── routers/          auth / users / files(含 OnlyOffice + ms-view) / admin
+│                         / announcements / social(论坛) / chat(v1.27 微信级聊天)
+├── web/                  前端 (原生 JS, 无构建步骤, 兼容 Chrome 60+)
+│   ├── js/viewer.js      白板引擎(核心) + 课件查看器
+│   ├── js/msstage.js     v1.27 微软放映舞台(画布随页切换, 放映页与浏览页共用)
+│   ├── js/chat.js        v1.27 微信级聊天
+│   ├── js/present.js     放映页(自研引擎; 微软轨道委托 msstage.js)
+│   └── lib/              本地 pdf.js / qrcode / jsQR / tesseract(全部离线)
 ├── deploy/
-│   ├── Dockerfile        app 镜像 (Python + LibreOffice + 中文字体)
+│   ├── Dockerfile        app 镜像 (Python + LibreOffice + 中文字体, --proxy-headers)
 │   ├── docker-compose.yml        完整版(含 OnlyOffice)
 │   ├── docker-compose.lite.yml   精简版
 │   ├── docker-compose.direct.yml 直连备用版(自愈降级时自动启用)
+│   ├── nginx-app.conf    容器内 nginx(→ app:8000, WebSocket 升级)
 │   ├── nginx/            统一入口(打包进镜像, 规避 SELinux 问题)
 │   └── fonts/            商业字体→开源字体替换规则
-└── tests/smoke.py        49 项 API 自动化测试
+└── tests/smoke.py        147 项 API 自动化冒烟测试(不需要 Docker/LibreOffice/外网)
 ```
+
+### 跑测试
+
+```bash
+python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt httpx
+./.venv/bin/python tests/smoke.py
+```
+
+在临时数据目录里拉起 FastAPI（Starlette TestClient），覆盖：健康检查与登录 → 上传真 pptx → **微软视图对接**（直链域名/443 判定、页数取自 slide id、真实 slide id、16:9 宽高比、深链模板 `{n}`/`{id}`、翻页不重新转换）→ 公开直链（免登录/HEAD/Range）→ 批注往返（含 `ms` 段：板书区域/同步模式/附加板书页）→ 白板 → **聊天全链路**（通讯录、私聊复用会话、未读、已读回执、正在输入、建群、@提醒、引用、回应、编辑、撤回窗口、免打扰、置顶、邀请/移出/转让/退群、历史分页、搜索）→ **附件**（图片/语音/危险扩展名拦截/越权拦截）→ 权限与开关 → **认证证书**（等级算法、校验码、3D/二维码/大图/打印、后台实时预览）→ 前端资源发布检查 → 删除清理。任一步失败即非 0 退出。
+
+---
 
 ## 四、已知边界（诚实说明）
 
-1. **动画**：静态渲染（LibreOffice→PDF）不含动画；OnlyOffice 放映模式支持动画，但对个别复杂动画/SmartArt 的还原度略低于桌面 Office（OnlyOffice 自身能力边界）。
-2. **WPS 专有格式** `.wps/.et/.dps`：LibreOffice 无滤镜，静态转换会提示"请在 WPS 中另存为 docx/xlsx/pptx"。
-3. **商业字体**（微软雅黑、方正、汉仪等）版权原因不能自动下载，系统用度量相近的开源字体替代并内嵌，视觉接近但不完全相同。
-4. **内存**：完整版约需 3.2G+；4G 服务器建议观察，吃紧就 `--lite` 重装。
+1. **微软在线放映的定位参数**：`wdStartOn` / `wdSlideId` 是微软自己的嵌入参数，官方无文档承诺；不同时期/不同文档类型行为可能不同。因此做了三重保障：① 深链失败也能正常放映首页；② **首次对齐自检**引导老师确认；③ 随时可切 **follow 模式**（微软自翻 + 板书手动对齐）或**本地引擎**（完全离线）。
+2. **微软要求公开直链**：必须是域名 + 80/443（`edge.sh` + `https.sh` 装好即满足）。IP 直连或非标端口时，界面会明确提示并给出命令。
+3. **动画**：静态渲染（LibreOffice→PDF）不含动画；OnlyOffice 放映与微软在线放映支持动画，但对个别复杂动画/SmartArt 的还原度略低于桌面 Office（各自引擎的能力边界）。
+4. **WPS 专有格式** `.wps/.et/.dps`：LibreOffice 无滤镜，静态转换会提示"请在 WPS 中另存为 docx/xlsx/pptx"（微软在线视图仍可打开）。
+5. **商业字体**（微软雅黑、方正、汉仪等）版权原因不能自动下载，系统用度量相近的开源字体替代并内嵌，视觉接近但不完全相同；走微软在线放映时用的是微软自己的字体，效果最接近桌面 Office。
+6. **聊天为轮询实现**（消息 2.5s / 会话 5s / 角标 20s，页面隐藏自动暂停）：不依赖 WebSocket，学校内网与各种代理环境下更稳，代价是消息有 1–3 秒延迟。
+7. **语音消息**依赖浏览器 MediaRecorder（Chrome/Edge + HTTPS 可用），Safari 录出的容器格式不同，已按 `audio/mp4` 兼容处理；不支持的浏览器会明确提示。
+8. **内存**：完整版约需 3.2G+；4G 服务器建议观察，吃紧就 `--lite` 重装。
 
 ## 五、运维备忘
 
-- 日志：`docker logs -f fla`；部署日志：`install.log`
-- 更新版本：覆盖文件后重新 `sudo bash install.sh`
-- 备份：备份 Docker 卷 `fla-data`
-- HTTPS：`sudo bash install.sh --https`（默认 t.clrv.top t.fyx.best）或事后单独 `sudo bash https.sh`（交互输入，可多域名；Let's Encrypt 自动续期）
+- 日志：`docker logs -f fla`；部署日志：`install.log`；网关日志：`/var/log/nginx/`；诊断包：`run.sh doctor`
+- 更新版本：覆盖文件后重新 `sudo bash install.sh`（或 `run.sh update`）
+- 备份：备份 Docker 卷 `fla-data`（`uninstall.sh --backup` 可自动打包）
+- 端口：默认 **8306**，`--port N` 修改；改了记得 `sudo bash edge.sh setup 域名` 让网关跟上
+- 域名/证书：`sudo bash https.sh 域名`（文件验证，不停服）· `sudo bash https.sh --status` 看到期时间 · 续期全自动（03:17 / 15:17）
+- 网关：`sudo bash edge.sh status` / `reload` / `remove`
+- 微软放映直链不对：后台「系统设置 → 公开访问地址」或 `deploy/.env` 的 `PUBLIC_BASE_URL` 填 `https://你的域名`，然后 `sudo bash run.sh restart`
+- 彻底救不回来：`sudo bash completely_new_install.sh`（**删掉所有容器和 Docker 本身**；会先自动备份 `fla-data`）

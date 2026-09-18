@@ -118,7 +118,7 @@
       sync: st('fla_ms_sync', 'deep'), thumbs: {}, pdf: null, pdfBusy: false,
       bbOpen: false, bbCur: 0, cfg: null, hideT: 0, align: null, dpr: 1
     };
-    S.cfg = JSON.parse(st('fla_ms_cfg', 'null')) || {
+    var CFG_DEFAULT = {
       pen: { color: '#ef4444', width: 4 },
       marker: { color: '#fde047', width: 18 },
       shape: { type: 'rect', color: '#ef4444', width: 3 },
@@ -126,6 +126,11 @@
       eraser: { width: 28 },
       boardBg: 'w'
     };
+    try {
+      /* localStorage 里存坏了(手改/旧版本)也不能让放映台起不来 */
+      S.cfg = JSON.parse(st('fla_ms_cfg', 'null')) || CFG_DEFAULT;
+    } catch (e) { S.cfg = CFG_DEFAULT; try { localStorage.removeItem('fla_ms_cfg'); } catch (e2) { } }
+    for (var ck in CFG_DEFAULT) if (!S.cfg[ck]) S.cfg[ck] = CFG_DEFAULT[ck];
 
     var AUTH = { Authorization: 'Bearer ' + S.token };
     function jget(u) {
@@ -1218,7 +1223,8 @@
         }
       }
     }
-    setInterval(function () {
+    S._clock = setInterval(function () {
+      if (S.dead) return;
       var t = wrap.querySelector('#msTime');
       if (t) t.textContent = fmtT(Math.floor((Date.now() - S.t0) / 1000));
     }, 1000);
@@ -1403,7 +1409,7 @@
       } catch (e) { }
     }
     window.addEventListener('beforeunload', flushSave);
-    setInterval(function () { if (S.dirty) saveNow(); }, 15000);
+    S._autoSave = setInterval(function () { if (S.dead) return; if (S.dirty) saveNow(); }, 15000);
 
     /* ==================================================================
      *  启动
@@ -1462,10 +1468,10 @@
       });
     }
 
-    window.addEventListener('resize', function () { if (!S.dead) { sizeCanvas(); if (S.align) paintAlign(); } });
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', function () { if (!S.dead) sizeCanvas(); });
-    }
+    S._onResize = function () { if (!S.dead) { sizeCanvas(); if (S.align) paintAlign(); } };
+    S._onVV = function () { if (!S.dead) sizeCanvas(); };
+    window.addEventListener('resize', S._onResize);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', S._onVV);
 
     var stage = {
       S: S, el: wrap, toast: toast, goPage: goPage, setTool: setTool,
@@ -1475,6 +1481,12 @@
         S.dead = true;
         flushSave();
         window.removeEventListener('keydown', onKey, true);
+        /* 摘掉全部窗口级监听与定时器: 反复进出放映不累积泄漏 */
+        window.removeEventListener('beforeunload', flushSave);
+        if (S._onResize) window.removeEventListener('resize', S._onResize);
+        if (S._onVV && window.visualViewport) window.visualViewport.removeEventListener('resize', S._onVV);
+        if (S._autoSave) { clearInterval(S._autoSave); S._autoSave = 0; }
+        if (S._clock) { clearInterval(S._clock); S._clock = 0; }
         clearTimeout(S.saveT); clearTimeout(S.hideT);
         if (textIn) { try { textIn.ta.remove(); } catch (e) { } textIn = null; }
         try { wrap.remove(); } catch (e) { }
