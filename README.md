@@ -2,7 +2,7 @@
 
 面向课堂教学的课件与互动白板系统：上传课件（Office / PDF / 图片 / 音视频），在教室大屏或任意设备上打开、写画、圈选、放映，带完整用户系统、论坛、微信级聊天与管理后台。由学生为老师打造。
 
-> **v1.27**：微软放映**板书画布严格随页切换**（老大难修复）· 聊天升级到**微信级**（私聊/未读角标/已读回执/正在输入/引用/回应/@/图片文件语音/群管理/搜索）· **认证证书大升级**（3D 全息证书 + 二维码核验 + 打印存 PDF + 后台实时预览）· **nginx 接管 80/443 反代 8306**（`edge.sh`）· **SSL 自动签发用文件验证**（`https.sh`，HTTP-01）· **`completely_new_install.sh` 连 Docker 一起铲掉重装** · 全站动效打磨 · 305 项冒烟测试
+> **v1.27**：微软放映**板书画布严格随页切换**（老大难修复）· 聊天升级到**微信级**（私聊/未读角标/已读回执/正在输入/引用/回应/@/图片文件语音/群管理/搜索）· **认证证书大升级**（3D 全息证书 + 二维码核验 + 打印存 PDF + 后台实时预览）· **nginx 接管 80/443 反代 8306**（`edge.sh`）· **SSL 自动签发用文件验证**（`https.sh`，HTTP-01）· **`completely_new_install.sh` 连 Docker 一起铲掉重装** · 全站动效打磨 · 322 项冒烟测试
 >
 > **v1.26**：图片放映修复 · 通用视频格式（mkv/mov/wmv/avi…）自动转 MP4 · 扫码登录 · 论坛 · 聊天 · 公告（全局/专属）· 认证图标颜色自定义 · 站长认证（铂金极光）· 默认端口 8306
 
@@ -23,17 +23,26 @@ sudo bash install.sh
 FLA 自己跑在 **8306**，但**所有指向本机的域名**都由宿主机 nginx 收下并反代过去——这样微软 Office 在线放映要求的"域名 + 80/443 公开直链"天然满足，不用把 FLA 塞进 80。
 
 ```bash
-sudo bash edge.sh setup 你的域名 [更多域名...]    # 装网关: 80+443 catch-all → 127.0.0.1:8306
-sudo bash edge.sh --port 8310 setup 域名          # FLA 不在 8306 时指定反代端口
-sudo bash edge.sh status                          # 看当前网关配置/证书/端口/80占用情况
-sudo bash edge.sh reload                          # 改完重载(先 nginx -t 自检, 不通过就不重载)
-sudo bash edge.sh remove                          # 卸掉网关(FLA 仍可用 8306 直连)
+sudo bash edge.sh setup 域名A 域名B              # 为这两个域名装反代: 80/443 → 127.0.0.1:8306
+sudo bash edge.sh --port 8310 setup 域名A 域名B   # FLA 不在 8306 时指定反代端口
+sudo bash edge.sh status                          # 网关配置/证书/端口/监听/是否还是欢迎页
+sudo bash edge.sh doctor                          # ★ 打开不是 FLA? 一次查清原因并给出命令
+sudo bash edge.sh fix                             # ★ 自动修复(中和发行版默认站点 → 重载 → 复验)
+sudo bash edge.sh reload                          # 重新生成配置并重载(先 nginx -t 自检)
+sudo bash edge.sh remove                          # 卸掉网关并还原被停用的默认站点(FLA 仍可 8306 直连)
 ```
 
-- 生成 `/etc/nginx/conf.d/fla-edge.conf`：80 + 443 双 `default_server`（**任意域名**都接）、WebSocket 升级头、`/.well-known/acme-challenge/` 走本地 webroot、大文件上传不拦（`client_max_body_size 2048m`）、`proxy_buffering off`（音视频 Range 流畅）、gzip、HSTS
+- 生成 `/etc/nginx/conf.d/fla-edge.conf`，**两层结构**：
+  1. **域名专用 server**（`server_name 域名A www.域名A 域名B www.域名B;`，80 与 443 各一个）→ 按 Host 精确匹配反代到 `127.0.0.1:8306`。**即使别处存在 `default_server` 冲突，这两个域名也照样生效**
+  2. **catch-all server**（`server_name _;` + `listen 80 default_server;`）→ 其余任意域名/IP 也落到 FLA，不留发行版欢迎页。**只有在确认没有别处声明 `default_server` 时才生成**，否则 `nginx -t` 会因 *duplicate default server* 失败导致整站起不来
+- 公共反代段：WebSocket 升级头、`X-Forwarded-For/Proto/Host/Port`、`/.well-known/acme-challenge/` 走本地 webroot、`client_max_body_size 2048m`、`proxy_buffering off`（音视频 Range 流畅）、`proxy_request_buffering off`（大文件不先落盘）、gzip、HSTS
 - **跳 https 时豁免 ACME 路径**：server 级 `if` 在 nginx 的 SERVER_REWRITE 阶段执行（早于 location 匹配），若直接 `if ($fla_force_https) { return 301 … }`，续期请求会被 301 到 https 而拿不到验证文件。这里用 `set $fla_redir` 三段式显式排除 `/.well-known/acme-challenge/`
 - **只有拿到证书才写 443**：没有证书时不会生成 `listen 443`（否则 `nginx -t` 直接失败、整站起不来）；先用自签证书兜底，正式证书签发后自动替换
 - http2 写法按 nginx 版本自适应：≥1.25.1 用 `http2 on;`，更老的用 `listen 443 ssl http2;`
+- **自动让开发行版默认站点**（这一步决定"打开是不是 Welcome to nginx!"）：
+  - `conf.d/default.conf`、`sites-enabled/default`、`default.d/*.conf` → **移出**到 `/etc/nginx/fla-disabled/`（Debian 的 `include sites-enabled/*` 是通配符，就地改名等于没停用），并记 `manifest`，`remove` 时精确还原
+  - **RHEL/CentOS/Alma/Rocky/Fedora 把欢迎页站点直接写在 `/etc/nginx/nginx.conf` 里**（`listen 80 default_server; root /usr/share/nginx/html;`）→ 用 awk 按花括号配对把整个 `server{}` 块（含嵌套 `location`）注释掉，先备份 `nginx.conf.fla-bak`，幂等可重跑，Debian 型 `nginx.conf` 不会被误伤
+- **装完自动落地复验**：本机带 `Host:` 头请求 80/443，识别返回的到底是 FLA、`Welcome to nginx!`、502（容器没起）还是端口没监听，并直接给出对应补救命令
 - 没有证书时先用**自签引导证书**把 443 撑起来（`/etc/fla/ssl/`），签好真证书自动替换
 - 状态记录在 `/etc/fla/edge.state`；反代目标端口跟着 FLA 实际端口走
 - **换端口**：`sudo bash install.sh --port 8310`，或改 `deploy/.env` 里的 `PORT` 后 `sudo bash run.sh restart && sudo bash edge.sh setup 域名`
@@ -119,6 +128,15 @@ sudo bash run.sh doctor    # 一键诊断(收集全部日志到 doctor.log, 出�
 **开机自启**：容器 `restart: unless-stopped` + docker 服务 enabled（复用外部 OnlyOffice 时同样自动设置），服务器重启后整套服务自动拉起。
 
 **排错**：任何一步失败都会打印排错建议。仍解决不了就把 `install.log` 发给开发者（自愈过程已把容器诊断日志都写进去了）。
+
+**打开是 "Welcome to nginx!"？** 说明宿主机 nginx 还在用发行版默认站点，FLA 网关没生效（通常是 `nginx.conf` 内置的 `default_server` 与我们冲突，`nginx -t` 失败）。一条命令定位并修复：
+
+```bash
+sudo bash edge.sh doctor    # 8 段诊断: nginx 本体 / nginx -t 报错原文 / 谁在监听 80,443 /
+                            # 网关配置摘要 / 谁在抢 default_server / FLA 容器与端口 / 证书 / 实际访问结果
+sudo bash edge.sh fix       # 自动: 停用并中和默认站点 → 重新生成配置 → 重载 → 复验
+sudo bash edge.sh setup 域名A 域名B   # 或重新指定要反代的两个域名
+```
 
 **卸载**：`sudo bash uninstall.sh`（需输入 yes）
 - 默认：删 FLA 容器 + 数据卷，**镜像保留**（防止误删你自己改过的镜像）
@@ -263,7 +281,7 @@ FLA/
 │   ├── nginx-app.conf    容器内 nginx(→ app:8000, WebSocket 升级)
 │   ├── nginx/            统一入口(打包进镜像, 规避 SELinux 问题)
 │   └── fonts/            商业字体→开源字体替换规则
-└── tests/smoke.py        305 项 API 自动化冒烟测试(不需要 Docker/LibreOffice/外网)
+└── tests/smoke.py        322 项 API 自动化冒烟测试(不需要 Docker/LibreOffice/外网)
 ```
 
 ### 跑测试
@@ -290,7 +308,7 @@ python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt httpx
 | 6c | **安全**：存储型 XSS 防护（弹窗标题默认转义、板块名/帖子正文/聊天正文/系统灰条/群名昵称签名均先转义再渲染） |
 | 6d | 样式完整性：后台「编辑用户」弹窗（认证图标/颜色选择器的**选中态**此前完全无样式）、聊天引用条图标与置顶/免打扰标签；并检查新 CSS 特性有老浏览器兜底 |
 | 7 | 删除课件与级联清理 |
-| **8** | **部署脚本静态校验**：所有 `.sh` 过 `bash -n`；**真渲染** `edge.sh` 生成的 nginx 配置并逐条断言（占位符无残留、大括号平衡、80+443 双 `default_server`、`server_name _` catch-all、反代 `127.0.0.1:PORT`、WebSocket 升级头、`X-Forwarded-Proto`、上传体积、ACME 目录、**跳 https 时豁免 ACME 路径**、force-https map、新/老 nginx 的 http2 写法、**无证书时绝不写 `listen 443`**、换端口跟随、纯 IP 可用）；`https.sh` 必须用 `--webroot` 文件验证且**真实命令里不出现 `--standalone`**、webroot 与 edge.sh 一致、certbot→acme.sh 降级、预检、cron+timer 续期、写 `PUBLIC_BASE_URL`；`install.sh` 自动串起 edge/https、默认 8306 顺延；`completely_new_install.sh` 删所有容器+镜像+卷、卸 docker 本体、清 `/var/lib/docker`、默认先备份、确认词、转交 install.sh；容器内 nginx 的 WS 升级与 `app:8000` |
+| **8** | **部署脚本静态校验**：所有 `.sh` 过 `bash -n`；**真渲染** `edge.sh` 生成的 nginx 配置并逐条断言 5 种组合（占位符无残留、大括号平衡、**域名专用块精确列出两个域名+www**、**同一端口只有一个 `default_server`**、catch-all `server_name _`、反代 `127.0.0.1:PORT`、WebSocket 升级头、`X-Forwarded-Proto`、上传体积、ACME 目录、**跳 https 时豁免 ACME 路径**、force-https map、新/老 nginx 的 http2 写法、**无证书时绝不写 `listen 443`**、**检测到冲突时不生成 catch-all**、换端口跟随、纯 IP 可用）；**把中和 `nginx.conf` 内置欢迎页站点的 awk 抽出来跑真 RHEL 配置样本**（整段注释、嵌套 location 计入、活动配置再无 `default_server`、`include conf.d` 与 `http/events` 完好、Debian 型样本不误伤）；停用默认站点必须移出 include 范围 + `remove` 按 manifest 还原 + 还原 `nginx.conf` 备份 + 有 `doctor`/`fix` + 复验能识别 `Welcome to nginx`；`https.sh` 必须用 `--webroot` 文件验证且**真实命令里不出现 `--standalone`**、webroot 与 edge.sh 一致、certbot→acme.sh 降级、预检、cron+timer 续期、写 `PUBLIC_BASE_URL`；`install.sh` 自动串起 edge/https、默认 8306 顺延；`completely_new_install.sh` 删所有容器+镜像+卷、卸 docker 本体、清 `/var/lib/docker`、默认先备份、确认词、转交 install.sh；容器内 nginx 的 WS 升级与 `app:8000` |
 
 **89 个后端路由全部被覆盖**，任一步失败即非 0 退出。
 

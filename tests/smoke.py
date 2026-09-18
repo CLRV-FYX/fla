@@ -825,7 +825,7 @@ def run(c):
     i2 = next(i for i in range(i1, len(lines)) if lines[i] == "}")
     func = "\n".join(lines[i0:i2 + 1])
 
-    def render(port, doms, nginx_version, cert_exists):
+    def render(port, doms, nginx_version, cert_exists, default_ok=1):
         cert = _TMP + "/cert.pem" if cert_exists else _TMP + "/no-such-cert.pem"
         if cert_exists:
             Path(cert).write_text("stub")
@@ -834,7 +834,7 @@ PORT={port}; WEBROOT=/var/www/fla-acme; DOMS="{doms}"; CONF={_TMP}/edge.conf; LO
 log(){{ :; }}; try(){{ "$@" 2>/dev/null || true; }}
 nginx_ver(){{ echo "{nginx_version}"; }}
 ver_ge(){{ [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]; }}
-CERT={cert}; KEY={cert}
+CERT={cert}; KEY={cert}; DEFAULT_OK={default_ok}
 {func}
 gen_conf
 """
@@ -847,10 +847,16 @@ gen_conf
     conf = render(8306, "class.fyx.best t.clrv.top", "1.20.1", True)
     check("渲染出的 nginx 配置没有残留占位符", "__PROXY__" not in conf, conf.count("__PROXY__"))
     check("大括号平衡", conf.count("{") == conf.count("}"), f'{conf.count("{")}/{conf.count("}")}')
-    check("80 + 443 两个 server 块", len(re.findall(r"^server \{", conf, re.M)) == 2, "")
-    check("80 是 default_server(接管所有域名)", "listen 80 default_server;" in conf, "")
-    check("443 也是 default_server", "listen 443 ssl http2;" in conf or "listen 443 ssl;" in conf, "")
-    check("catch-all server_name _", conf.count("server_name _;") == 2, conf.count("server_name _;"))
+    check("生成 4 个 server 块(两域名 80/443 + catch-all 80/443)",
+          len(re.findall(r"^server \{", conf, re.M)) == 4, len(re.findall(r"^server \{", conf, re.M)))
+    check("★ 域名专用块: server_name 精确列出两个域名(含 www)",
+          conf.count("server_name class.fyx.best www.class.fyx.best t.clrv.top www.t.clrv.top;") == 2,
+          conf.count("server_name class.fyx.best"))
+    check("★ 同一端口只声明一个 default_server(否则 nginx -t 失败 → 打开是欢迎页)",
+          conf.count("listen 80 default_server;") == 1, conf.count("listen 80 default_server;"))
+    check("catch-all 块用 server_name _", conf.count("server_name _;") == 2, conf.count("server_name _;"))
+    check("443 有 ssl 监听(写法随 nginx 版本)",
+          "listen 443 ssl http2;" in conf or "listen 443 ssl;" in conf, "")
     check("反代到 127.0.0.1:8306", "server 127.0.0.1:8306" in conf and "proxy_pass http://fla_backend;" in conf, "")
     check("WebSocket 升级头", "$connection_upgrade" in conf and "$http_upgrade" in conf, "")
     check("X-Forwarded-Proto 传给后端", "X-Forwarded-Proto" in conf, "")
@@ -869,11 +875,85 @@ gen_conf
     conf3 = render(8310, "b.com", "1.20.1", False)
     # 没有证书时绝不能写出 listen 443(否则 nginx -t 直接失败, 整站起不来)
     check("没有证书时只生成 80 的 server(不写 listen 443)",
-          len(re.findall(r"^server \{", conf3, re.M)) == 1
+          len(re.findall(r"^server \{", conf3, re.M)) == 2
           and not re.search(r"^\s*listen[^;]*443", conf3, re.M), "")
     check("换端口后反代目标跟着变", "server 127.0.0.1:8310" in conf3, "")
     conf4 = render(8306, "", "1.20.1", True)
     check("纯 IP(无域名)也能生成且大括号平衡", conf4.count("{") == conf4.count("}"), "")
+
+    # ★ 关键回归: 别处已有 default_server 时, 绝不再声明一个(否则 duplicate default server)
+    conf5 = render(8306, "a.com b.com", "1.20.1", True, default_ok=0)
+    check("检测到 default_server 冲突时不生成 catch-all",
+          "default_server" not in conf5
+          and conf5.count("server_name a.com www.a.com b.com www.b.com;") == 2,
+          conf5.count("default_server"))
+    check("冲突时域名反代依然可用(按 Host 精确匹配)",
+          "proxy_pass http://fla_backend;" in conf5 and conf5.count("{") == conf5.count("}"), "")
+
+    # 8.2b 中和 nginx.conf 内置欢迎页站点(RHEL 系把默认站点直接写在 nginx.conf 里,
+    #      这才是"打开是 Welcome to nginx!"的真正原因)
+    mawk = re.search(r"  awk '\n(.*?)\n  ' \"\$NGINX_MAIN\"", edge, re.S)
+    check("edge.sh 里有中和 nginx.conf 内置默认站点的 awk", bool(mawk), "")
+    check("会先备份 nginx.conf", 'cp -a "$NGINX_MAIN" "$NGINX_MAIN.fla-bak"' in edge, "")
+    check("中和是幂等的(已处理过就跳过)", "grep -q '^# \\[fla-disabled\\]'" in edge, "")
+    if mawk:
+        RHEL = (
+            "user nginx;\n"
+            "events { worker_connections 1024; }\n"
+            "http {\n"
+            "    include /etc/nginx/conf.d/*.conf;\n"
+            "\n"
+            "    server {\n"
+            "        listen       80 default_server;\n"
+            "        listen       [::]:80 default_server;\n"
+            "        server_name  _;\n"
+            "        root         /usr/share/nginx/html;\n"
+            "\n"
+            "        include /etc/nginx/default.d/*.conf;\n"
+            "\n"
+            "        location / {\n"
+            "        }\n"
+            "\n"
+            "        error_page 404 /404.html;\n"
+            "            location = /40x.html {\n"
+            "        }\n"
+            "    }\n"
+            "\n"
+            "}\n"
+        )
+        Path(_TMP, "rhel-nginx.conf").write_text(RHEL)
+        Path(_TMP, "neu.awk").write_text(mawk.group(1))
+        rr = subprocess.run(["awk", "-f", str(Path(_TMP, "neu.awk")), str(Path(_TMP, "rhel-nginx.conf"))],
+                            capture_output=True, text=True)
+        out = rr.stdout
+        live = [ln for ln in out.split("\n") if not ln.strip().startswith("#")]
+        check("RHEL 内置欢迎页站点被整段注释", rr.returncode == 0 and "# [fla-disabled]" in out,
+              f"rc={rr.returncode}")
+        check("注释后活动配置里再无 default_server", not any("default_server" in ln for ln in live), "")
+        check("注释后不再指向 /usr/share/nginx/html", not any("/usr/share/nginx/html" in ln for ln in live), "")
+        check("嵌套 location 也被正确算进块里(大括号平衡)", out.count("{") == out.count("}"),
+              f'{out.count("{")}/{out.count("}")}')
+        check("include conf.d 与 http/events 块保持完好",
+              any("include /etc/nginx/conf.d/*.conf;" in ln for ln in live)
+              and any("http {" in ln for ln in live) and any("events {" in ln for ln in live), "")
+        DEB = "http {\n\tinclude /etc/nginx/conf.d/*.conf;\n\tinclude /etc/nginx/sites-enabled/*;\n}\n"
+        Path(_TMP, "deb-nginx.conf").write_text(DEB)
+        rr2 = subprocess.run(["awk", "-f", str(Path(_TMP, "neu.awk")), str(Path(_TMP, "deb-nginx.conf"))],
+                             capture_output=True, text=True)
+        check("Debian 型 nginx.conf 不误伤(退出码 3 且内容不变)",
+              rr2.returncode == 3 and rr2.stdout == DEB, f"rc={rr2.returncode}")
+
+    # 8.2c 停用默认站点必须"移出 include 范围"(Debian 的 include sites-enabled/* 会把
+    #      就地改名成 default.fla-disabled 的文件照样包含进去, 等于没停用)
+    check("停用默认站点是移出目录而不是就地改名",
+          'DISABLED_DIR="/etc/nginx/fla-disabled"' in edge and 'mv -f "$f" "$DISABLED_DIR/$base"' in edge, "")
+    check("remove 时按 manifest 精确还原", "MANIFEST" in edge and "已恢复默认站点" in edge, "")
+    check("remove 时还原 nginx.conf 备份", 'cp -f "$NGINX_MAIN.fla-bak" "$NGINX_MAIN"' in edge, "")
+    check("提供 doctor / fix 两个动作",
+          "do_doctor(){" in edge and "do_fix(){" in edge
+          and "doctor) do_doctor ;;" in edge and "fix)    do_fix ;;" in edge, "")
+    check("落地验证会识别 Welcome to nginx 并给补救命令",
+          "Welcome to nginx" in edge and "PROBE_KIND=welcome" in edge and "edge.sh fix" in edge, "")
 
     # 8.3 SSL: 必须是文件验证(HTTP-01), 不能抢占 80
     hs = (root / "https.sh").read_text()
