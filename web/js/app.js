@@ -83,49 +83,215 @@ function hexA(hex, a) {
   return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
 }
 
-/* v1.26: 认证证书卡(个人中心) — 站长(铂金极光) + 教师(管理员自定义颜色/图标) */
+/* ================================================================
+ * v1.27 认证证书 — 站长(铂金极光) / 教师(黄金·白银·青铜·定制)
+ * 比 v1.26 更"nb"的地方:
+ *   1. 鼠标跟随 3D 倾斜 + 分层视差(奖章浮得比证书高)
+ *   2. 全息箔层: 随倾斜角度流动变色(真证书上的那种彩虹膜)
+ *   3. 雕刻底纹(guilloché) + 旋转光束 + 极光 + 星芒 + 扫光
+ *   4. 正式证书要素: 等级条 / 编号 / 签发日期 / 授权范围 / 校验码 /
+ *      二维码(扫码即校验串) / 骑缝章 / 绶带
+ *   5. 「查看大图」全屏展示, 「打印证书」用打印样式只印证书(可存 PDF)
+ * 校验码由 id + 角色 + 称号 + 签发日 FNV-1a 哈希得出, 同一账号永远一致。
+ * ================================================================ */
+function certCode(u) {
+  const raw = 'FLA|' + (u.id || 0) + '|' + (u.role || '') + '|' + (u.is_teacher ? 1 : 0) + '|' +
+    (u.cert_title || '') + '|' + String(u.created_at || '').slice(0, 10);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < raw.length; i++) { h ^= raw.charCodeAt(i); h = (h * 0x01000193) >>> 0; }
+  const s36 = (h.toString(36).toUpperCase() + '000000').slice(0, 6);
+  return s36.slice(0, 3) + '-' + s36.slice(3);
+}
+
+/* 颜色 → 等级名(铂金/黄金/白银/青铜/定制) */
+function certTier(u) {
+  if (u.role === 'admin') return { k: 'platinum', zh: '铂金', en: 'PLATINUM AURORA' };
+  const c = (u.cert_color || '#f0d488').toLowerCase();
+  const m = /^#([0-9a-f]{6})$/.exec(c);
+  if (!m) return { k: 'custom', zh: '定制', en: 'CUSTOM EDITION' };
+  const n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 510, sat = mx ? (mx - mn) / mx : 0;
+  if (sat < .16) return l > .62 ? { k: 'silver', zh: '白银', en: 'SILVER EDITION' } : { k: 'graphite', zh: '墨金', en: 'GRAPHITE EDITION' };
+  if (r > g && g > b) return l > .58 ? { k: 'gold', zh: '黄金', en: 'GOLD EDITION' } : { k: 'bronze', zh: '青铜', en: 'BRONZE EDITION' };
+  if (b > r) return { k: 'sapphire', zh: '蓝宝', en: 'SAPPHIRE EDITION' };
+  if (g > r) return { k: 'emerald', zh: '翡翠', en: 'EMERALD EDITION' };
+  return { k: 'custom', zh: '定制', en: 'CUSTOM EDITION' };
+}
+
 function certCardHTML(u) {
-  const no = 'FLA-' + ('000' + (u.id || 0)).slice(-4);
-  const spark = (l, t, d, s) => '<i class="cc-spark" style="left:' + l + '%;top:' + t + '%;animation-delay:' + d + 's;font-size:' + s + 'px">✦</i>';
+  const no = 'FLA-' + ('0000' + (u.id || 0)).slice(-4);
+  const code = certCode(u);
+  const tier = certTier(u);
+  const since = String(u.created_at || '').slice(0, 10) || '—';
+  const spark = (l, t, d, sz) => '<i class="cc-spark" style="left:' + l + '%;top:' + t + '%;animation-delay:' + d + 's;font-size:' + sz + 'px">✦</i>';
   const sparks = spark(9, 18, 0, 13) + spark(88, 13, 1.1, 10) + spark(80, 62, 2.2, 14) + spark(13, 68, .6, 10) +
-    spark(51, 6, 1.7, 9) + spark(30, 88, 2.8, 12) + spark(92, 84, .3, 11);
+    spark(51, 6, 1.7, 9) + spark(30, 88, 2.8, 12) + spark(92, 84, .3, 11) + spark(66, 33, 1.4, 8);
   let h = '';
-  /* 站长认证 — 最高级: 皇冠 + 铂金极光 + 三重光环 */
+
+  /* ---------- 站长: 铂金极光(最高级) ---------- */
   if (u.role === 'admin') {
-    h += '<div class="cert-card owner-card">' +
+    h += '<div class="cert-card tier-platinum" data-cert="owner" data-no="' + no + '" data-code="' + code + '"' +
+      ' data-title="站长" data-en="FLA · SITE OWNER" data-since="' + since + '" data-tier="' + tier.en + '">' +
+      '<i class="cc-guilloche"></i><i class="cc-aurora"></i><i class="cc-beam"></i><i class="cc-holo"></i>' +
+      '<i class="cc-sheen"></i>' + sparks +
       '<i class="cc-corner tl"></i><i class="cc-corner tr"></i><i class="cc-corner bl"></i><i class="cc-corner br"></i>' +
-      '<i class="cc-sheen"></i><i class="cc-aurora"></i>' + sparks +
-      '<div class="cc-medal">' + UI.icon('crown', 44) + '<i class="cc-ring r1"></i><i class="cc-ring r2"></i><i class="cc-ring r3"></i></div>' +
+      '<i class="cc-ribbon"></i>' +
+      '<div class="cc-inner">' +
+      '<div class="cc-tier">' + UI.icon('gem', 12) + '<span>' + tier.en + ' · ' + tier.zh + '级</span></div>' +
+      '<div class="cc-medal">' + UI.icon('crown', 46) +
+      '<i class="cc-ring r1"></i><i class="cc-ring r2"></i><i class="cc-ring r3"></i><i class="cc-halo"></i></div>' +
       '<div class="cc-title">站长</div>' +
       '<div class="cc-sub">FLA · SITE OWNER</div>' +
-      '<div class="cc-meta"><span>NO. ' + no + '</span><i class="cc-dot"></i><span>站点创始人 · 最高权限</span></div>' +
-      '<div class="cc-seal"><b>FLA</b><span>站长</span></div>' +
+      '<div class="cc-rows">' +
+      '<div><span>证书编号</span><b>NO. ' + no + '</b></div>' +
+      '<div><span>签发日期</span><b>' + since + '</b></div>' +
+      '<div><span>授权范围</span><b>站点创始人 · 最高权限</b></div>' +
+      '<div><span>校验码</span><b>' + code + '</b></div>' +
+      '</div>' +
+      '<div class="cc-foot"><div class="cc-qr"></div>' +
+      '<div class="cc-sign"><b>FLA 官方签发</b><em>扫码核验 · ' + code + '</em></div>' +
+      '<div class="cc-seal"><b>FLA</b><span>站长</span></div></div>' +
+      '</div>' +
+      '<div class="cc-acts"><button type="button" data-ca="zoom">' + UI.icon('maximize', 13) + ' 查看大图</button>' +
+      '<button type="button" data-ca="print">' + UI.icon('download', 13) + ' 打印 / 存 PDF</button></div>' +
       '</div>';
   }
-  /* 教师认证 — 管理员可自定义图标与颜色(默认金) */
+
+  /* ---------- 教师: 图标与颜色由管理员自定义 ---------- */
   if (u.is_teacher) {
     const icon = CERT_ICON_LIST.includes(u.cert_icon) ? u.cert_icon : 'medal';
     const color = /^#[0-9a-fA-F]{6}$/.test(u.cert_color || '') ? u.cert_color : '#f0d488';
-    h += '<div class="cert-card" style="--cc:' + color + ';--cc-soft:' + hexA(color, .55) + ';--cc-faint:' + hexA(color, .16) + ';--cc-line:' + hexA(color, .34) + '">' +
+    const title = u.cert_title || '认证教师';
+    h += '<div class="cert-card tier-' + tier.k + '" data-cert="teacher" data-no="' + no + '" data-code="' + code + '"' +
+      ' data-title="' + UI.esc(title) + '" data-en="FLA · CERTIFIED EDUCATOR" data-since="' + since + '"' +
+      ' data-tier="' + tier.en + '"' +
+      ' style="--cc:' + color + ';--cc-soft:' + hexA(color, .55) + ';--cc-faint:' + hexA(color, .16) +
+      ';--cc-line:' + hexA(color, .34) + '">' +
+      '<i class="cc-guilloche"></i><i class="cc-holo"></i><i class="cc-sheen"></i>' + sparks +
       '<i class="cc-corner tl"></i><i class="cc-corner tr"></i><i class="cc-corner bl"></i><i class="cc-corner br"></i>' +
-      '<i class="cc-sheen"></i>' + sparks +
-      '<div class="cc-medal">' + UI.icon(icon, 46) + '<i class="cc-ring r1"></i><i class="cc-ring r2"></i></div>' +
-      '<div class="cc-title">' + UI.esc(u.cert_title || '认证教师') + '</div>' +
+      '<div class="cc-inner">' +
+      '<div class="cc-tier">' + UI.icon('medal', 12) + '<span>' + tier.en + ' · ' + tier.zh + '级</span></div>' +
+      '<div class="cc-medal">' + UI.icon(icon, 48) +
+      '<i class="cc-ring r1"></i><i class="cc-ring r2"></i><i class="cc-halo"></i></div>' +
+      '<div class="cc-title">' + UI.esc(title) + '</div>' +
       '<div class="cc-sub">FLA · CERTIFIED EDUCATOR</div>' +
-      '<div class="cc-meta"><span>NO. ' + no + '</span><i class="cc-dot"></i><span>官方认证教师</span></div>' +
-      '<div class="cc-seal"><b>FLA</b><span>已认证</span></div>' +
+      '<div class="cc-rows">' +
+      '<div><span>证书编号</span><b>NO. ' + no + '</b></div>' +
+      '<div><span>签发日期</span><b>' + since + '</b></div>' +
+      '<div><span>持证人</span><b>' + UI.esc(u.nickname || u.username || '') + '</b></div>' +
+      '<div><span>校验码</span><b>' + code + '</b></div>' +
+      '</div>' +
+      '<div class="cc-foot"><div class="cc-qr"></div>' +
+      '<div class="cc-sign"><b>FLA 官方认证</b><em>扫码核验 · ' + code + '</em></div>' +
+      '<div class="cc-seal"><b>FLA</b><span>已认证</span></div></div>' +
+      '</div>' +
+      '<div class="cc-acts"><button type="button" data-ca="zoom">' + UI.icon('maximize', 13) + ' 查看大图</button>' +
+      '<button type="button" data-ca="print">' + UI.icon('download', 13) + ' 打印 / 存 PDF</button></div>' +
       '</div>';
   }
+
+  /* ---------- 未认证占位 ---------- */
   if (!u.is_teacher && u.role !== 'admin') {
     h += '<div class="cert-card pending">' +
       '<div class="cc-medal">' + UI.icon('lock', 28) + '</div>' +
       '<div class="cc-title">教师认证</div>' +
       '<div class="cc-sub">FLA · CERTIFIED EDUCATOR</div>' +
-      '<p class="cc-note">未完成教师认证（不影响任何功能使用，认证后展示专属称号）</p>' +
+      '<p class="cc-note">未完成教师认证（不影响任何功能使用，认证后展示专属称号与证书）</p>' +
       '</div>';
   }
   return h;
 }
+
+/* 证书交互: 3D 倾斜 + 视差 + 全息 + 二维码 + 大图 + 打印 */
+function bindCertCards(root) {
+  const cards = $$('.cert-card:not(.pending)', root || document);
+  cards.forEach(card => {
+    /* --- 鼠标跟随倾斜(只用 transform, 不触发重排) --- */
+    let raf = 0;
+    const move = e => {
+      const r = card.getBoundingClientRect();
+      const px = (e.clientX - r.left) / (r.width || 1), py = (e.clientY - r.top) / (r.height || 1);
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        card.style.setProperty('--rx', ((0.5 - py) * 11).toFixed(2) + 'deg');
+        card.style.setProperty('--ry', ((px - 0.5) * 14).toFixed(2) + 'deg');
+        card.style.setProperty('--mx', (px * 100).toFixed(1) + '%');
+        card.style.setProperty('--my', (py * 100).toFixed(1) + '%');
+      });
+    };
+    card.addEventListener('pointermove', move);
+    card.addEventListener('pointerleave', () => {
+      card.style.setProperty('--rx', '0deg'); card.style.setProperty('--ry', '0deg');
+      card.style.setProperty('--mx', '50%'); card.style.setProperty('--my', '50%');
+    });
+    /* --- 二维码(懒加载组件, 失败也不影响证书展示) --- */
+    const qr = $('.cc-qr', card);
+    if (qr && !qr.dataset.done) {
+      qr.dataset.done = '1';
+      const txt = 'FLA CERTIFICATE\n' +
+        'NO. ' + card.dataset.no + '\n' +
+        card.dataset.title + ' / ' + card.dataset.en + '\n' +
+        'TIER ' + card.dataset.tier + '\n' +
+        'SINCE ' + card.dataset.since + '\n' +
+        'VERIFY ' + card.dataset.code + '\n' +
+        location.origin;
+      loadScript('/lib/qrcode/qrcode.min.js').then(() => {
+        if (!window.QRCode) throw new Error('no lib');
+        qr.innerHTML = '';
+        new window.QRCode(qr, {
+          text: txt, width: 62, height: 62,
+          colorDark: '#0b0c0f', colorLight: '#ffffff',
+          correctLevel: window.QRCode.CorrectLevel.M
+        });
+        const img = qr.querySelector('canvas, img');
+        if (img) { img.style.width = '62px'; img.style.height = '62px'; img.style.borderRadius = '6px'; }
+      }).catch(() => { qr.innerHTML = '<em class="cc-qr-fail">' + card.dataset.code + '</em>'; });
+    }
+    /* --- 大图 / 打印 --- */
+    $$('.cc-acts button', card).forEach(b => b.onclick = ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      const act = b.dataset.ca;
+      if (act === 'zoom') certZoom(card);
+      else if (act === 'print') certPrint(card);
+    });
+  });
+}
+
+function certZoom(card) {
+  const ov = document.createElement('div');
+  ov.className = 'cc-zoom';
+  const clone = card.cloneNode(true);
+  clone.classList.add('cc-big');
+  clone.querySelectorAll('.cc-acts').forEach(x => x.remove());
+  ov.innerHTML = '<button class="cc-zoom-x" type="button">' + UI.icon('close', 20) + '</button>';
+  ov.appendChild(clone);
+  document.body.appendChild(ov);
+  requestAnimationFrame(() => ov.classList.add('on'));
+  bindCertCards(ov);
+  const close = () => { ov.classList.remove('on'); setTimeout(() => ov.remove(), 280); };
+  ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('.cc-zoom-x')) close(); });
+  const onKey = e => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } };
+  document.addEventListener('keydown', onKey);
+}
+
+function certPrint(card) {
+  const ov = document.createElement('div');
+  ov.className = 'cc-print';
+  const clone = card.cloneNode(true);
+  clone.querySelectorAll('.cc-acts').forEach(x => x.remove());
+  ov.appendChild(clone);
+  document.body.appendChild(ov);
+  bindCertCards(ov);
+  const done = () => { setTimeout(() => ov.remove(), 400); };
+  window.addEventListener('afterprint', done, { once: true });
+  setTimeout(() => {
+    window.print();
+    setTimeout(done, 1500);      /* 某些浏览器不触发 afterprint */
+  }, 260);
+}
+window.certCardHTML = certCardHTML;
+window.bindCertCards = bindCertCards;
 
 function bindLogout() {
   const b = $('#logout');
@@ -447,6 +613,7 @@ async function viewProfile() {
     '<button class="btn" id="savepw">修改密码</button></div>' +
     '</div>', 'profile');
   bindLogout();
+  bindCertCards();   /* v1.27: 证书 3D 倾斜 / 二维码 / 大图 / 打印 */
 
   $('#avbtn').onclick = () => $('#avin').click();
   $('#avin').onchange = async e => {

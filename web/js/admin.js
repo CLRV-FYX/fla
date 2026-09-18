@@ -133,7 +133,10 @@ function editUserModal(u) {
     '<label>认证颜色</label><div class="cert-color-pick" id="eucolors">' +
     CERT_COLOR_LIST.map(c => '<button type="button" class="ccp' + ((u.cert_color || '#f0d488') === c ? ' on' : '') + '" data-c="' + c + '" style="background:' + c + '"></button>').join('') +
     '<input type="color" id="eucolor-custom" value="' + (u.cert_color || '#f0d488') + '" title="自定义颜色">' +
-    '</div></div>' +
+    '</div>' +
+    /* v1.27: 改称号/图标/颜色时, 证书实时预览(所见即所得) */
+    '<label>证书预览</label><div class="eu-cert-preview" id="euprev"></div>' +
+    '</div>' +
     '<label class="switch-row"><span>聊天禁言（不能在聊天区发言）</span><input type="checkbox" id="euban"' + (u.chat_banned ? ' checked' : '') + '></label>' +
     '<label>空间配额 (MB)<input id="euquota" type="number" min="1" max="1000000" value="' + Math.round(u.quota_bytes / 1048576) + '">' +
     '<span class="muted">当前已用 ' + UI.fmtSize(u.used_bytes) + '</span></label></div>';
@@ -152,10 +155,26 @@ function editUserModal(u) {
   m.foot.querySelector('#eucancel').onclick = m.close;
   /* v1.26: 认证图标/颜色 选择器 */
   let certIcon = u.cert_icon || 'medal', certColor = u.cert_color || '#f0d488';
+  /* v1.27: 证书实时预览 — 用当前编辑中的值渲染真实证书卡 */
+  const paintPrev = () => {
+    const box = m.body.querySelector('#euprev');
+    if (!box || !window.certCardHTML) return;
+    box.innerHTML = certCardHTML({
+      id: u.id, username: u.username,
+      nickname: m.body.querySelector('#eunk').value || u.nickname,
+      role: m.body.querySelector('#eurole').value,
+      is_teacher: m.body.querySelector('#eucert').checked,
+      cert_title: m.body.querySelector('#eutitle').value,
+      cert_icon: certIcon, cert_color: certColor,
+      created_at: u.created_at,
+    });
+    if (window.bindCertCards) bindCertCards(box);
+  };
   $$('.cip', m.body).forEach(b => b.onclick = () => {
     certIcon = b.dataset.ic;
     $$('.cip', m.body).forEach(x => x.classList.remove('on'));
     b.classList.add('on');
+    paintPrev();
   });
   $$('.ccp', m.body).forEach(b => b.onclick = () => {
     certColor = b.dataset.c;
@@ -163,12 +182,18 @@ function editUserModal(u) {
     b.classList.add('on');
     $$('.cip', m.body).forEach(x => x.style.setProperty('--cc', certColor));
     m.body.querySelector('#eucolor-custom').value = certColor;
+    paintPrev();
   });
   m.body.querySelector('#eucolor-custom').oninput = e => {
     certColor = e.target.value;
     $$('.ccp', m.body).forEach(x => x.classList.remove('on'));
     $$('.cip', m.body).forEach(x => x.style.setProperty('--cc', certColor));
+    paintPrev();
   };
+  ['#eunk', '#eutitle'].forEach(sel => m.body.querySelector(sel).oninput = paintPrev);
+  m.body.querySelector('#eurole').onchange = paintPrev;
+  m.body.querySelector('#eucert').onchange = paintPrev;
+  paintPrev();
   m.foot.querySelector('#eusave').onclick = async () => {
     try {
       await API.put('/api/admin/users/' + u.id, {

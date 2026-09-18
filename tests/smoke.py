@@ -509,6 +509,24 @@ def run(c):
     r = c.get("/style.css")
     check("聊天样式已发布", r.status_code == 200 and ".wx-item" in r.text and ".wx-bubble" in r.text, r.status_code)
 
+    section("6b. 认证证书(v1.27 升级)")
+    r = c.get("/js/app.js")
+    a = r.text if r.status_code == 200 else ""
+    check("证书等级算法 certTier", "function certTier(" in a, "")
+    check("证书校验码 certCode(FNV-1a)", "function certCode(" in a and "0x811c9dc5" in a, "")
+    check("证书交互 bindCertCards(3D/二维码/大图/打印)", "function bindCertCards(" in a and "certZoom" in a
+          and "certPrint" in a, "")
+    check("证书要素(编号/签发日期/授权范围/校验码)", all(k in a for k in ("证书编号", "签发日期", "校验码")), "")
+    r = c.get("/js/admin.js")
+    check("后台改认证时实时预览证书", r.status_code == 200 and "euprev" in r.text and "paintPrev" in r.text,
+          r.status_code)
+    r = c.get("/style.css")
+    css = r.text if r.status_code == 200 else ""
+    check("全息箔 / 雕刻底纹 / 光束样式", all(k in css for k in (".cc-holo", ".cc-guilloche", ".cc-beam")), "")
+    check("证书打印样式(@media print 只印证书)", "@media print" in css and ".cc-print" in css, "")
+    check("证书大图弹层样式", ".cc-zoom" in css and ".cc-big" in css, "")
+    check("尊重 prefers-reduced-motion", css.count("prefers-reduced-motion") >= 3, css.count("prefers-reduced-motion"))
+
     section("7. 删除与清理")
     r = c.delete(f"/api/files/{fid}", headers=H)
     check("删除课件", r.status_code == 200, r.text[:160])

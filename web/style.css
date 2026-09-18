@@ -219,10 +219,182 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 @keyframes ccGold { to { background-position: -230% 0; } }
 @keyframes ccSheen { 0% { left: -45%; } 55%, 100% { left: 135%; } }
 @keyframes ccTwinkle { 0%, 100% { opacity: 0; transform: scale(.4); } 50% { opacity: .95; transform: scale(1.12); } }
+
+/* ---------- v1.27 证书升级: 3D 倾斜 / 全息箔 / 雕刻底纹 / 光束 / 正式要素 ---------- */
+.cert-card:not(.pending) {
+  --rx: 0deg; --ry: 0deg; --mx: 50%; --my: 50%;
+  transform-style: preserve-3d; perspective: 900px;
+  transform: rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform .5s var(--ease), box-shadow .5s var(--ease);
+  padding: 26px 18px 16px;
+}
+.cert-card:not(.pending):hover {
+  box-shadow:
+    inset 0 0 0 1px var(--cc-line, rgba(240, 212, 136, .42)),
+    inset 0 0 0 5px var(--cc-faint, rgba(240, 212, 136, .09)),
+    inset 0 0 70px rgba(0, 0, 0, .4),
+    0 26px 60px rgba(11, 12, 15, .42), 0 0 42px var(--cc-faint, rgba(240, 212, 136, .16));
+}
+.cc-inner { position: relative; z-index: 3; transform: translateZ(26px); }
+/* 雕刻底纹(guilloché): 细密同心波纹, 印钞/证书常用 */
+.cc-guilloche {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: .5;
+  background:
+    repeating-radial-gradient(circle at 18% 22%, var(--cc-faint, rgba(240, 212, 136, .12)) 0 1px, transparent 1px 7px),
+    repeating-radial-gradient(circle at 82% 78%, var(--cc-faint, rgba(240, 212, 136, .1)) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, .022) 0 1px, transparent 1px 6px);
+  -webkit-mask: radial-gradient(120% 90% at 50% 40%, #000 30%, transparent 78%);
+  mask: radial-gradient(120% 90% at 50% 40%, #000 30%, transparent 78%);
+}
+/* 全息箔: 随倾斜角度(--mx/--my)流动的彩虹膜 */
+.cc-holo {
+  position: absolute; inset: -20%; z-index: 1; pointer-events: none; mix-blend-mode: screen; opacity: .38;
+  background:
+    radial-gradient(38% 46% at var(--mx) var(--my), rgba(255, 255, 255, .34), transparent 62%),
+    conic-gradient(from calc(var(--mx, 50%) * 3.6) at var(--mx) var(--my),
+      rgba(255, 90, 140, .3), rgba(255, 205, 90, .3), rgba(120, 255, 190, .3),
+      rgba(110, 190, 255, .3), rgba(200, 130, 255, .3), rgba(255, 90, 140, .3));
+  transition: opacity .4s var(--ease);
+}
+.cert-card:not(.pending):hover .cc-holo { opacity: .62; }
+/* 旋转光束(站长专属) */
+.cc-beam {
+  position: absolute; left: 50%; top: -60%; width: 190%; height: 190%; z-index: 0; pointer-events: none;
+  transform: translateX(-50%); opacity: .3;
+  background: conic-gradient(from 0deg at 50% 63%, transparent 0 12deg, rgba(214, 226, 255, .22) 20deg,
+    transparent 34deg 96deg, rgba(214, 226, 255, .16) 108deg, transparent 126deg 190deg,
+    rgba(214, 226, 255, .2) 202deg, transparent 220deg 290deg, rgba(214, 226, 255, .14) 300deg, transparent 320deg);
+  animation: ccSpin 24s linear infinite;
+}
+.cc-ring.r3 {
+  inset: -9px;
+  background: conic-gradient(from 90deg, transparent 0 40deg, rgba(226, 232, 245, .5) 90deg, transparent 140deg 220deg,
+    rgba(226, 232, 245, .32) 270deg, transparent 320deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - .5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - .5px));
+  animation: ccSpin 16s linear infinite;
+}
+.cc-halo {
+  position: absolute; inset: -14px; border-radius: 50%; pointer-events: none; z-index: 0;
+  background: radial-gradient(closest-side, var(--cc-faint, rgba(240, 212, 136, .22)), transparent 72%);
+  animation: ccBreathe 4.6s ease-in-out infinite;
+}
+@keyframes ccBreathe { 0%, 100% { opacity: .55; transform: scale(.94); } 50% { opacity: 1; transform: scale(1.06); } }
+/* 绶带(站长) */
+.cc-ribbon {
+  position: absolute; left: 50%; top: -14px; width: 74px; height: 30px; z-index: 2; pointer-events: none;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(226, 232, 245, .9), rgba(150, 165, 200, .55));
+  clip-path: polygon(0 0, 100% 0, 88% 100%, 50% 74%, 12% 100%);
+  opacity: .5;
+}
+/* 等级条 */
+.cc-tier {
+  display: inline-flex; align-items: center; gap: 6px; margin-bottom: 9px; padding: 4px 12px;
+  border-radius: 999px; font: 700 9.5px/1 inherit; letter-spacing: 2.2px;
+  color: var(--cc, #f0d488); background: rgba(255, 255, 255, .05);
+  box-shadow: inset 0 0 0 1px var(--cc-line, rgba(240, 212, 136, .38));
+}
+.cc-tier svg { opacity: .9; }
+/* 证书要素表 */
+.cc-rows {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; margin: 15px auto 0; max-width: 330px;
+  padding: 11px 13px; border-radius: 11px; background: rgba(255, 255, 255, .045);
+  box-shadow: inset 0 0 0 1px var(--cc-faint, rgba(240, 212, 136, .16));
+}
+.cc-rows > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.cc-rows span { font-size: 9.5px; letter-spacing: 1.4px; color: rgba(245, 238, 220, .45); white-space: nowrap; }
+.cc-rows b {
+  font: 600 11px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .4px;
+  color: rgba(250, 246, 235, .92); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 底部: 二维码 + 签发 + 骑缝章 */
+.cc-foot { display: flex; align-items: center; gap: 12px; margin-top: 13px; padding-left: 4px; text-align: left; }
+.cc-qr {
+  flex: none; width: 62px; height: 62px; padding: 3px; border-radius: 8px; background: #fff;
+  display: grid; place-items: center; box-shadow: 0 4px 14px rgba(0, 0, 0, .4);
+}
+.cc-qr img, .cc-qr canvas { display: block; border-radius: 5px; }
+.cc-qr-fail { font: 700 10px/1.3 ui-monospace, Menlo, monospace; color: var(--ink); letter-spacing: .5px; font-style: normal; }
+.cc-sign { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.cc-sign b {
+  font: 700 12px/1.3 inherit; letter-spacing: 1.6px; color: var(--cc, #e8cf94);
+  border-bottom: 1px solid var(--cc-line, rgba(240, 212, 136, .35)); padding-bottom: 3px; width: fit-content;
+}
+.cc-sign em { font: 500 9.5px/1.4 ui-monospace, Menlo, monospace; font-style: normal; letter-spacing: .8px; color: rgba(245, 238, 220, .42); }
+.cert-card .cc-seal { position: relative; right: auto; bottom: auto; flex: none; width: 50px; height: 50px; }
+.cert-card .cc-seal::after {
+  content: ""; position: absolute; inset: -5px; border-radius: 50%;
+  border: 1px solid var(--cc-faint, rgba(240, 212, 136, .22));
+}
+/* 操作按钮 */
+.cc-acts { position: relative; z-index: 4; display: flex; gap: 7px; justify-content: center; margin-top: 13px; }
+.cc-acts button {
+  display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 9px; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, .16); background: rgba(255, 255, 255, .06); color: rgba(250, 246, 235, .82);
+  font: 600 11px inherit; letter-spacing: .6px; transition: all .18s var(--ease);
+}
+.cc-acts button:hover { background: #fff; color: #0b0c0f; border-color: #fff; transform: translateY(-1px); }
+/* 铂金 / 白银 / 青铜等级色微调 */
+.tier-platinum { --cc: #e6ecfa; --cc-soft: rgba(214, 226, 255, .6); --cc-faint: rgba(214, 226, 255, .16); --cc-line: rgba(226, 232, 245, .4); }
+.tier-silver .cc-title, .tier-graphite .cc-title { letter-spacing: 4px; }
+/* 管理后台: 证书实时预览 */
+.eu-cert-preview { margin: 2px 0 4px; }
+.eu-cert-preview .cert-card { margin-top: 0; transform: none !important; }
+.eu-cert-preview .cc-acts { display: none; }
+.eu-cert-preview .cc-holo, .eu-cert-preview .cc-beam { opacity: .2; }
+/* 全屏大图 */
+.cc-zoom {
+  position: fixed; inset: 0; z-index: 600; display: grid; place-items: center; padding: 26px;
+  background: radial-gradient(120% 100% at 50% 0%, rgba(20, 22, 28, .96), rgba(5, 6, 8, .98));
+  backdrop-filter: blur(9px); opacity: 0; transition: opacity .28s var(--ease);
+}
+.cc-zoom.on { opacity: 1; }
+.cc-zoom .cert-card.cc-big {
+  width: min(430px, 94vw); margin: 0; padding: 40px 26px 24px;
+  animation: ccBigIn .5s var(--ease) both;
+}
+@keyframes ccBigIn { from { opacity: 0; transform: translateY(22px) scale(.93); } }
+.cc-big .cc-medal { width: 128px; height: 128px; }
+.cc-big .cc-title { font-size: 30px; letter-spacing: 8px; }
+.cc-big .cc-sub { font-size: 12px; letter-spacing: 5px; }
+.cc-big .cc-rows { max-width: 400px; gap: 7px 14px; }
+.cc-big .cc-qr { width: 78px; height: 78px; }
+.cc-big .cc-qr img, .cc-big .cc-qr canvas { width: 72px !important; height: 72px !important; }
+.cc-zoom-x {
+  position: absolute; top: 18px; right: 20px; width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, .26); background: rgba(255, 255, 255, .08); color: #fff;
+  display: grid; place-items: center; transition: all .18s var(--ease);
+}
+.cc-zoom-x:hover { background: #fff; color: #0b0c0f; transform: rotate(90deg); }
+/* 打印: 只印证书 */
+.cc-print { display: none; }
+@media print {
+  /* 打印时只留证书: 其余(顶栏/页面内容/弹层)全部隐藏 */
+  body > *:not(.cc-print) { display: none !important; }
+  .cc-print {
+    display: grid !important; position: static; z-index: 9999; background: #fff;
+    place-items: center; padding: 0; width: 100%;
+  }
+  .cc-print .cert-card {
+    width: 168mm; margin: 0 auto; transform: none !important; box-shadow: none;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .cc-print .cc-holo, .cc-print .cc-beam, .cc-print .cc-sheen, .cc-print .cc-spark { display: none !important; }
+  .cc-print .cc-acts { display: none !important; }
+}
+@media (max-width: 520px) {
+  .cc-rows { grid-template-columns: 1fr; max-width: 240px; }
+  .cert-card:not(.pending) { padding: 22px 14px 14px; }
+  .cc-foot { flex-wrap: wrap; }
+}
 @media (prefers-reduced-motion: reduce) {
   .cert::after, .cert-card .cc-sheen, .cert-card .cc-ring, .cert-card .cc-spark, .cert em { animation: none; }
   .cert-card:not(.pending) .cc-title { animation: none; }
   .cc-spark { opacity: .45; }
+  .cc-beam, .cc-halo, .cc-ring.r3 { animation: none; }
+  .cert-card:not(.pending) { transition: none; transform: none; }
+  .cc-zoom .cert-card.cc-big { animation: none; }
 }
 .page { max-width: 1120px; margin: 0 auto; padding: 28px 24px 70px; }
 .muted { color: var(--mut); font-size: 13px; }
