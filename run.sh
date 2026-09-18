@@ -55,8 +55,11 @@ case "${1:-help}" in
     docker ps -a --filter name=fla --filter name=nginx --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
     echo ""
     echo "── 健康检查 ──"
-    if curl -sf -m 4 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
-      echo "✔ 应用正常  http://127.0.0.1:$PORT/"
+    PHOST=$(echo "${PUBLIC_URL:-}" | sed -E 's~https?://([^/:]+).*~\1~')
+    CHOST="${PHOST:-run.sh.local}"
+    if curl -sfL -m 4 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 || \
+       curl -sfkL -m 4 -H "Host: $CHOST" "https://127.0.0.1/api/health" >/dev/null 2>&1; then
+      echo "✔ 应用正常  http://127.0.0.1:$PORT/ (外网: ${PUBLIC_URL:-http://127.0.0.1:$PORT})"
     else
       echo "✘ 应用未响应 (http://127.0.0.1:$PORT/api/health)"
       echo "  排查: sudo bash run.sh logs app"
@@ -67,9 +70,9 @@ case "${1:-help}" in
       echo "✔ 配置存在: /etc/nginx/conf.d/fla-edge.conf"
       systemctl is-active nginx >/dev/null 2>&1 && echo "✔ 宿主机 nginx 运行中" || echo "✘ 宿主机 nginx 未运行: systemctl restart nginx"
       command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -E ':(80|443)\s' | awk '{print "  监听: "$4}'
-      curl -sf -m 4 -H 'Host: run.sh.local' http://127.0.0.1/api/health >/dev/null 2>&1 \
+      curl -sfkL -m 4 -H "Host: $CHOST" http://127.0.0.1/api/health >/dev/null 2>&1 \
         && echo "✔ 80  → FLA 连通" || echo "✘ 80  → FLA 不通 (sudo bash edge.sh status 排查)"
-      curl -sfk -m 4 -H 'Host: run.sh.local' https://127.0.0.1/api/health >/dev/null 2>&1 \
+      curl -sfkL -m 4 -H "Host: $CHOST" https://127.0.0.1/api/health >/dev/null 2>&1 \
         && echo "✔ 443 → FLA 连通" || echo "⚠ 443 → FLA 不通 (证书缺失? sudo bash https.sh 域名)"
     else
       echo "⚠ 未部署边缘网关 — 只能用 http://IP:$PORT 访问"
