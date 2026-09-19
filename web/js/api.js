@@ -28,6 +28,9 @@
         headers['Content-Type'] = 'application/json';
         opts.body = JSON.stringify(opts.json);
         opts.method = opts.method || 'POST';
+      } else if (opts.method && opts.method !== 'GET' && opts.method !== 'HEAD' && !opts.form && opts.body === undefined) {
+        headers['Content-Type'] = 'application/json';
+        opts.body = '{}';
       }
       if (opts.form) { opts.body = opts.form; opts.method = opts.method || 'POST'; }
       let r;

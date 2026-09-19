@@ -14,6 +14,7 @@
 #    ssl      证书相关: run.sh ssl [status|renew|签发新域名...]
 #    doctor   一键诊断: 收集全部容器日志/网络/健康检查到 doctor.log
 #    ds-remove 删除 OnlyOffice 容器并重启 (Office 默认走微软在线渲染)
+#    reset-admin 重置管理员密码: run.sh reset-admin [新密码]
 # ================================================================
 set -u
 cd "$(dirname "$0")"
@@ -166,6 +167,16 @@ case "${1:-help}" in
       $DC $DCP -f "$CF" up -d --force-recreate app 2>/dev/null || $DC $DCP -f "$CF" up -d
     fi
     echo "完成: Office 预览/放映现在走微软在线渲染 (需域名+80/443)"
+    ;;
+  reset-admin)
+    NEW_PW="${2:-admin123}"
+    echo ">> 重置管理员密码为: $NEW_PW"
+    TARGET_CONTAINER=$(docker ps -q --filter name=fla 2>/dev/null | head -1)
+    if [ -n "$TARGET_CONTAINER" ]; then
+      docker exec -i "$TARGET_CONTAINER" python3 -c "import sqlite3, bcrypt; conn=sqlite3.connect('/data/fla.db'); h=bcrypt.hashpw(b'$NEW_PW', bcrypt.gensalt()).decode(); conn.execute('UPDATE users SET password_hash=? WHERE username=\"admin\"', (h,)); conn.commit(); print('✔ 管理员(admin) 密码已重置为: $NEW_PW')"
+    else
+      echo "✘ fla 容器未运行，请先启动: sudo bash run.sh start"
+    fi
     ;;
   doctor)
     OUT="$PWD/doctor.log"

@@ -419,8 +419,62 @@
     function focusIframe() {
       var f = curFrame();
       if (f && f.contentWindow) {
-        try { f.contentWindow.focus(); } catch (e) { }
+        try {
+          f.contentWindow.focus();
+          f.contentWindow.postMessage(JSON.stringify({ MessageId: 'Grab_Focus', SendTime: Date.now(), Values: {} }), '*');
+        } catch (e) { }
       }
+    }
+    function postNavToIframe(f, dir) {
+      f = f || curFrame();
+      if (!f || !f.contentWindow) return;
+      try {
+        var isNext = dir === 'next';
+        var msgs = [
+          { MessageId: isNext ? 'Action_NextSlide' : 'Action_PreviousSlide', SendTime: Date.now(), Values: {} },
+          { MessageId: isNext ? 'UI_Next' : 'UI_Prev', SendTime: Date.now(), Values: {} },
+          { MessageId: 'Action_NavigateTo', SendTime: Date.now(), Values: { direction: isNext ? 'next' : 'previous' } },
+          { MessageId: 'Grab_Focus', SendTime: Date.now(), Values: {} }
+        ];
+        msgs.forEach(function (m) {
+          f.contentWindow.postMessage(JSON.stringify(m), '*');
+        });
+      } catch (err) {}
+    }
+    function triggerNext() {
+      var isOcr = window.FLA_OCR && window.FLA_OCR.isCapturing();
+      var f = curFrame();
+      postNavToIframe(f, 'next');
+      focusIframe();
+
+      if (S.sync === 'follow' && !isOcr) {
+        var stepCount = getSlideStepCount(S.page);
+        if (stepCount > 0 && S.stepInSlide < stepCount) {
+          S.stepInSlide++;
+          updatePill();
+          return;
+        }
+      }
+      S.stepInSlide = 0;
+      nextPage();
+      updatePill();
+    }
+    function triggerPrev() {
+      var isOcr = window.FLA_OCR && window.FLA_OCR.isCapturing();
+      var f = curFrame();
+      postNavToIframe(f, 'prev');
+      focusIframe();
+
+      if (S.sync === 'follow' && !isOcr) {
+        if (S.stepInSlide > 0) {
+          S.stepInSlide--;
+          updatePill();
+          return;
+        }
+      }
+      S.stepInSlide = 0;
+      prevPage();
+      updatePill();
     }
     function urlFor(n) {
       if (!S.mv) return '';
@@ -511,8 +565,10 @@
       loadInto(f, n, null);
     }
     function showSlide(n) {
-      if (S.sync !== 'deep') return;               /* follow 模式: 微软自己翻页 */
       if (n > S.slides) { hideFrames(); return; }  /* 附加板书页: 收起微软画面 */
+      var cf = curFrame();
+      if (cf && cf.style.opacity === '0') { cf.style.opacity = '1'; cf.style.zIndex = '2'; }
+      if (S.sync !== 'deep') return;               /* follow / OCR 模式由 postNavToIframe / 识屏驱动 */
       var f = frameWith(n);
       if (f) {
         if (f.state === 'ready') swapTo(f);
@@ -711,10 +767,20 @@
       opPush(pid(), { op: 'add', s: s });
       redraw();
     }
+    var ptDownTime = 0;
+    var ptDownPos = [0, 0];
+    var ptMovedDist = 0;
+    var ptTapAddedStroke = null;
+
     ink.addEventListener('pointerdown', function (e) {
       if (S.tool === 'cursor') return;
       e.preventDefault();
       try { ink.setPointerCapture(e.pointerId); } catch (err) { }
+      ptDownTime = Date.now();
+      ptDownPos = [e.clientX, e.clientY];
+      ptMovedDist = 0;
+      ptTapAddedStroke = null;
+
       var v = toVirt(e.clientX, e.clientY);
       wakeUI();
       if (S.tool === 'laser') { S.laserDots.push({ x: v[0], y: v[1], t: Date.now() }); laserLoop(); return; }
@@ -759,12 +825,14 @@
       S.drawing = { id: uid(), tool: S.tool,
         color: S.tool === 'pen' ? S.cfg.pen.color : S.cfg.marker.color,
         width: S.tool === 'pen' ? S.cfg.pen.width : S.cfg.marker.width, pts: [v] };
+      ptTapAddedStroke = S.drawing;
       (S.strokes[pid()] = S.strokes[pid()] || []).push(S.drawing);
       opPush(pid(), { op: 'add', s: S.drawing });
       redraw();
     });
     ink.addEventListener('pointermove', function (e) {
       if (S.tool === 'cursor') return;
+      ptMovedDist += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
       var v = toVirt(e.clientX, e.clientY);
       if (S.tool === 'laser') { S.laserDots.push({ x: v[0], y: v[1], t: Date.now() }); laserLoop(); return; }
       if (S.tool === 'eraser') {
@@ -788,8 +856,34 @@
       S.drawing.pts.push(v);
       redraw();
     });
-    function endStroke() {
+    function endStroke(e) {
       S.lastEraserPt = null;
+      var wasTap = (Date.now() - ptDownTime < 320) && (ptMovedDist < 10);
+      if (wasTap && e && typeof e.clientX === 'number') {
+        var cx = e.clientX, cy = e.clientY;
+        var isTopBar = cy < 70;
+        var isBotBar = cy > window.innerHeight - 80;
+        var isSideBar = cx < 70 || cx > window.innerWidth - 70;
+        if (!isTopBar && !isBotBar && !isSideBar) {
+          if (ptTapAddedStroke) {
+            var arr = S.strokes[pid()] || [];
+            var idx = arr.indexOf(ptTapAddedStroke);
+            if (idx >= 0) arr.splice(idx, 1);
+            var ops = S.ops[pid()] || [];
+            if (ops.length && ops[ops.length - 1].s === ptTapAddedStroke) ops.pop();
+            ptTapAddedStroke = null;
+            S.drawing = null;
+            redraw();
+          }
+          if (cx > window.innerWidth * 0.38) {
+            triggerNext();
+          } else {
+            triggerPrev();
+          }
+        }
+      }
+      ptTapAddedStroke = null;
+
       if (S.drawing) {
         if (S.drawing.tool === 'shape') {
           var d = Math.abs(S.drawing.pts[1][0] - S.drawing.pts[0][0]) + Math.abs(S.drawing.pts[1][1] - S.drawing.pts[0][1]);
@@ -807,6 +901,8 @@
         }
         S.selOff = null; saveSoon();
       }
+      focusIframe();
+    }
     }
     ink.addEventListener('pointerup', endStroke);
     ink.addEventListener('pointercancel', endStroke);
@@ -1382,8 +1478,8 @@
       var a = b.getAttribute('data-a');
       switch (a) {
         case 'exit': doExit(); break;
-        case 'prev': case 'pgprev': prevPage(); break;
-        case 'next': case 'pgnext': nextPage(); break;
+        case 'prev': case 'pgprev': triggerPrev(); break;
+        case 'next': case 'pgnext': triggerNext(); break;
         case 'addpage': addPage(); break;
         case 'undo': undo(); break;
         case 'redo': redo(); break;
@@ -1565,11 +1661,9 @@
       if (!b) return;
       var sp = b.getAttribute('data-sp');
       if (sp === 'prev') {
-        prevPage();
-        focusIframe();
+        triggerPrev();
       } else if (sp === 'next') {
-        nextPage();
-        focusIframe();
+        triggerNext();
       } else if (sp === 'ocr') {
         toggleOcrSync();
       } else if (sp === 'sync') {
@@ -1637,8 +1731,8 @@
       var k = (e.key || '').toLowerCase();
       if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); return; }
-      if ((e.ctrlKey || e.metaKey) && (k === 'arrowleft' || k === 'pageup' || k === 'arrowup')) { e.preventDefault(); prevPage(); return; }
-      if ((e.ctrlKey || e.metaKey) && (k === 'arrowright' || k === 'pagedown' || k === 'arrowdown')) { e.preventDefault(); nextPage(); return; }
+      if ((e.ctrlKey || e.metaKey) && (k === 'arrowleft' || k === 'pageup' || k === 'arrowup')) { e.preventDefault(); triggerPrev(); return; }
+      if ((e.ctrlKey || e.metaKey) && (k === 'arrowright' || k === 'pagedown' || k === 'arrowdown')) { e.preventDefault(); triggerNext(); return; }
       if (e.key === 'Tab') { e.preventDefault(); syncCurrentPage(); return; }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
@@ -1650,39 +1744,14 @@
                     e.keyCode === 33 || e.keyCode === 38 || e.keyCode === 37);
 
       if (isNext) {
-        if (S.sync === 'follow') {
-          var stepCount = getSlideStepCount(S.page);
-          if (stepCount > 0 && S.stepInSlide < stepCount) {
-            S.stepInSlide++;
-            focusIframe();
-            updatePill();
-            return;
-          } else {
-            S.stepInSlide = 0;
-            focusIframe();
-            nextPage();
-            updatePill();
-            return;
-          }
-        }
-        e.preventDefault(); nextPage();
+        e.preventDefault();
+        triggerNext();
+        return;
       }
-      else if (isPrev) {
-        if (S.sync === 'follow') {
-          if (S.stepInSlide > 0) {
-            S.stepInSlide--;
-            focusIframe();
-            updatePill();
-            return;
-          } else {
-            S.stepInSlide = 0;
-            focusIframe();
-            prevPage();
-            updatePill();
-            return;
-          }
-        }
-        e.preventDefault(); prevPage();
+      if (isPrev) {
+        e.preventDefault();
+        triggerPrev();
+        return;
       }
       else if (e.key === 'Home') { e.preventDefault(); goPage(1); }
       else if (e.key === 'End') { e.preventDefault(); goPage(total()); }

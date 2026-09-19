@@ -140,5 +140,50 @@
     });
   }
 
-  window.UI = { icon, esc, fmtSize, fmtDate, h, toast, modal, confirm: confirmDlg };
+  /* ==================================================================
+   *  内置二维码生成适配器 (UI.renderQR / window.renderQrSvgFallback)
+   * ================================================================== */
+  function renderQR(container, text, size, colorDark, colorLight) {
+    if (!container) return;
+    size = size || 190;
+    colorDark = colorDark || '#0b0c0f';
+    colorLight = colorLight || '#ffffff';
+    container.innerHTML = '';
+    if (typeof window.QRCode === 'function') {
+      try {
+        new window.QRCode(container, {
+          text: text,
+          width: size,
+          height: size,
+          colorDark: colorDark,
+          colorLight: colorLight
+        });
+        return;
+      } catch (e) {
+        console.warn('[UI.renderQR] QRCode instance error:', e);
+      }
+    }
+    if (typeof window.qrcode === 'function') {
+      try {
+        var qr = window.qrcode(0, 'M');
+        qr.addData(text);
+        qr.make();
+        var cellSize = Math.max(2, Math.floor(size / qr.getModuleCount()));
+        container.innerHTML = qr.createSvgTag({ cellSize: cellSize, margin: 2, scalable: true });
+        var svg = container.querySelector('svg');
+        if (svg) {
+          svg.style.width = size + 'px';
+          svg.style.height = size + 'px';
+          svg.style.display = 'block';
+          svg.style.margin = '0 auto';
+        }
+        return;
+      } catch (e2) {
+        console.warn('[UI.renderQR] qrcode fallback error:', e2);
+      }
+    }
+  }
+  window.renderQrSvgFallback = renderQR;
+
+  window.UI = { icon, esc, fmtSize, fmtDate, h, toast, modal, confirm: confirmDlg, renderQR };
 })();

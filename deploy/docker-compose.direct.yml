@@ -19,6 +19,8 @@ services:
       - APP_INTERNAL_URL=${APP_INTERNAL_URL:-http://127.0.0.1:8000}
     volumes:
       - fla-data:/data
+      - ../web:/app/web
+      - ../server:/app/server
     mem_limit: 1500m
     logging:
       driver: json-file

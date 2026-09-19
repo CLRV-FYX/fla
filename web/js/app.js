@@ -13,7 +13,12 @@ const ACCEPT = '.ppt,.pptx,.pps,.ppsx,.pot,.potx,.doc,.docx,.dot,.dotx,.rtf,.xls
 document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('hashchange', route);
   if (API.token) {
-    try { App.user = await API.get('/api/auth/me'); } catch (e) { /* token 失效 */ }
+    try {
+      App.user = await API.get('/api/auth/me');
+    } catch (e) {
+      API.setToken('');
+      App.user = null;
+    }
   }
   if (window.Chat && App.user) Chat.startBadge();   /* v1.27: 全局聊天未读角标 */
   /* v1.27: 顶栏滚动后收紧(加阴影), 用 passive 监听 + rAF 合并, 不卡滚动 */
@@ -384,19 +389,25 @@ function viewLogin() {
     if (!holder) return;
     holder.innerHTML = '<div class="qr-spin"></div>';
     if (!window.QRCode) {
-      try { await loadScript('lib/qrcode/qrcode.min.js'); }
+      try { await loadScript('lib/qrcode/qrcode.min.js?v=128'); }
       catch (e) {
-        try { await loadScript('/lib/qrcode/qrcode.min.js'); } catch (e2) { }
+        try { await loadScript('/lib/qrcode/qrcode.min.js?v=128'); } catch (e2) { }
       }
+    }
+    for (let i = 0; i < 20; i++) {
+      if (window.QRCode) break;
+      await new Promise(r => setTimeout(r, 50));
     }
     let ticket = '';
     const refresh = async () => {
       try {
-        const r = await API.post('/api/auth/qr/ticket');
+        const r = await API.post('/api/auth/qr/ticket', {});
         ticket = r.ticket;
         const url = location.origin + '/#/qr-approve?ticket=' + encodeURIComponent(ticket);
         holder.innerHTML = '';
-        if (window.QRCode) {
+        if (UI && UI.renderQR) {
+          UI.renderQR(holder, url, 190);
+        } else if (window.QRCode) {
           new window.QRCode(holder, {
             text: url,
             width: 190,
@@ -410,7 +421,10 @@ function viewLogin() {
         } else {
           holder.innerHTML = '<p class="qr-tip" style="color:var(--mut)">正在加载二维码，请稍候...</p>';
         }
-      } catch (e) { toast(e.message, 'err'); }
+      } catch (e) {
+        toast('获取扫码凭证失败: ' + e.message, 'err');
+        holder.innerHTML = '<p class="qr-tip" style="color:var(--err)">获取二维码失败，请刷新重试</p>';
+      }
     };
     refresh();
     qrTimers.push(setInterval(refresh, 110 * 1000));                       // 票据 150s, 110s 换新
@@ -436,7 +450,12 @@ function viewLogin() {
 function afterLoginGo() {
   let back = '';
   try { back = sessionStorage.getItem('fla_after_login') || ''; sessionStorage.removeItem('fla_after_login'); } catch (e) { }
-  location.hash = back || '#/library';
+  const target = back || '#/library';
+  if (location.hash === target) {
+    route();
+  } else {
+    location.hash = target;
+  }
 }
 
 async function viewRegister() {
@@ -709,10 +728,20 @@ function loadScript(src) {
   return new Promise((res, rej) => {
     if (src.includes('qrcode') && window.QRCode) return res();
     if (src.includes('jsqr') && window.jsQR) return res();
-    if (document.querySelector('script[src*="' + src + '"]') || document.querySelector('script[data-fla="' + src + '"]')) return res();
+    const cleanSrc = src.split('?')[0];
+    const existing = document.querySelector('script[src*="' + cleanSrc + '"]') || document.querySelector('script[data-fla="' + cleanSrc + '"]');
+    if (existing) {
+      if (existing.getAttribute('data-loaded') === '1' || (src.includes('qrcode') && window.QRCode) || (src.includes('jsqr') && window.jsQR)) {
+        return res();
+      }
+      existing.addEventListener('load', () => { existing.setAttribute('data-loaded', '1'); res(); });
+      existing.addEventListener('error', () => rej(new Error('组件加载失败')));
+      return;
+    }
     const s = document.createElement('script');
-    s.src = src; s.setAttribute('data-fla', src);
-    s.onload = () => res(); s.onerror = () => rej(new Error('组件加载失败'));
+    s.src = src; s.setAttribute('data-fla', cleanSrc);
+    s.onload = () => { s.setAttribute('data-loaded', '1'); res(); };
+    s.onerror = () => rej(new Error('组件加载失败'));
     document.head.appendChild(s);
   });
 }
