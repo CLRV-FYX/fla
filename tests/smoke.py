@@ -522,8 +522,10 @@ def run(c):
 
     # --- 扫码登录全链路(票据 → 已登录设备批准 → 取 token → 一次作废) ---
     r = c.post("/api/auth/qr/ticket")
-    tk = (r.json() or {}).get("ticket", "")
+    qr_data = r.json() or {}
+    tk = qr_data.get("ticket", "")
     check("POST /api/auth/qr/ticket", r.status_code == 200 and tk.startswith("qr"), r.text[:200])
+    check("POST /api/auth/qr/ticket 服务端原生生成矢量 SVG 二维码", "<svg" in qr_data.get("qr_svg", ""), "")
     r = c.get("/api/auth/qr/status", params={"ticket": tk})
     check("未批准时 status=pending", (r.json() or {}).get("status") == "pending", r.text[:160])
     r = c.post("/api/auth/qr/approve", headers=sh, json={"ticket": tk})
@@ -1058,6 +1060,10 @@ gen_conf
 
     check("登录后路由保障已在目标页时强制刷新路由(解决 t.clrv.top 登录卡滞)",
           "location.hash === target" in app_js and "route()" in app_js, "")
+
+    check("present.html 正确引用相对路径 msstage.js 与 ocr.js",
+          'src="js/msstage.js' in (root / "web" / "present.html").read_text() and
+          'src="js/ocr.js' in (root / "web" / "present.html").read_text(), "")
 
     return finish()
 

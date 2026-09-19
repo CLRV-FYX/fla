@@ -903,7 +903,6 @@
       }
       focusIframe();
     }
-    }
     ink.addEventListener('pointerup', endStroke);
     ink.addEventListener('pointercancel', endStroke);
     ink.addEventListener('pointerleave', function () { if (S.drawing) endStroke(); });

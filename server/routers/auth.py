@@ -107,10 +107,38 @@ def change_password(body: PwIn, request: Request):
 # 流程: 登录页 POST /qr/ticket 生成一次性票据并展示二维码(内容=授权URL)
 #       → 已登录设备打开该 URL(或App内扫码) POST /qr/approve 授权
 #       → 登录页轮询 GET /qr/status 取回 token
+import os
 import secrets as _secrets
+import sys
 import time as _time
 
 QR_TTL = 150  # 票据有效期(秒)
+
+# 导入专业 Python qrcode 库（支持系统环境与内置 vendor）
+try:
+    import qrcode
+    import qrcode.image.svg
+except ImportError:
+    _vendor = os.path.join(os.path.dirname(os.path.dirname(__file__)), "vendor")
+    if _vendor not in sys.path:
+        sys.path.insert(0, _vendor)
+    try:
+        import qrcode
+        import qrcode.image.svg
+    except ImportError:
+        qrcode = None
+
+
+def generate_qr_svg(url: str) -> str:
+    """使用专业 Python qrcode 库在服务端生成原生矢量 SVG 二维码"""
+    if qrcode is not None:
+        try:
+            factory = qrcode.image.svg.SvgPathImage
+            img = qrcode.make(url, image_factory=factory, box_size=10, border=2)
+            return img.to_string(encoding="unicode")
+        except Exception as e:
+            print("[QR] generate_qr_svg error:", e)
+    return ""
 
 
 def _qr_gc():
@@ -122,12 +150,19 @@ def _qr_gc():
 
 
 @router.post("/qr/ticket")
-def qr_ticket():
+def qr_ticket(request: Request):
     _qr_gc()
     ticket = "qr" + _secrets.token_hex(16)
     db.ex("INSERT INTO qr_tickets(ticket,expires,status) VALUES(?,?,?)",
           (ticket, _time.time() + QR_TTL, "pending"))
-    return {"ticket": ticket, "expires_in": QR_TTL}
+    # 构建授权 URL，优先使用配置的 PUBLIC_BASE_URL
+    base_url = str(request.base_url).rstrip("/")
+    pub_base = os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if pub_base:
+        base_url = pub_base
+    qr_url = f"{base_url}/#/qr-approve?ticket={ticket}"
+    svg = generate_qr_svg(qr_url)
+    return {"ticket": ticket, "expires_in": QR_TTL, "url": qr_url, "qr_svg": svg}
 
 
 @router.post("/qr/approve")

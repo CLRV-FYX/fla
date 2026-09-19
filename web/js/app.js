@@ -403,9 +403,19 @@ function viewLogin() {
       try {
         const r = await API.post('/api/auth/qr/ticket', {});
         ticket = r.ticket;
-        const url = location.origin + '/#/qr-approve?ticket=' + encodeURIComponent(ticket);
+        const url = r.url || (location.origin + '/#/qr-approve?ticket=' + encodeURIComponent(ticket));
         holder.innerHTML = '';
-        if (UI && UI.renderQR) {
+        if (r.qr_svg) {
+          // 服务端 Python qrcode 库原生矢量 SVG (零依赖 · 瞬间呈现)
+          holder.innerHTML = r.qr_svg;
+          const svg = holder.querySelector('svg');
+          if (svg) {
+            svg.style.width = '190px';
+            svg.style.height = '190px';
+            svg.style.display = 'block';
+            svg.style.margin = '0 auto';
+          }
+        } else if (UI && UI.renderQR) {
           UI.renderQR(holder, url, 190);
         } else if (window.QRCode) {
           new window.QRCode(holder, {
