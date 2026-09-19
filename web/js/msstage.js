@@ -194,9 +194,7 @@
     vbtn('', 'undo', '撤销 (Ctrl+Z)', icon('undo', 20));
     vbtn('', 'redo', '重做 (Ctrl+Y)', icon('redo', 20));
     barL.appendChild(el('i', 'ms-vsep'));
-    vbtn('', 'pgprev', '板书上一页', icon('chevL', 19));
     vbtn('', 'addpage', '加一页板书(在末页之后)', icon('plusPage', 19));
-    vbtn('', 'pgnext', '板书下一页', icon('chevR', 19));
     wrap.appendChild(barL);
 
     /* ---------------- 右侧工具条 ---------------- */
@@ -420,38 +418,7 @@
       if (f && f.contentWindow) {
         try {
           f.contentWindow.focus();
-          f.contentWindow.postMessage(JSON.stringify({ MessageId: 'Grab_Focus', SendTime: Date.now(), Values: {} }), '*');
         } catch (e) { }
-      }
-    }
-    function postNavToIframe(f, dir) {
-      f = f || curFrame();
-      if (!f || !f.contentWindow) return;
-      try {
-        var isNext = dir === 'next';
-        var msgs = [
-          { MessageId: isNext ? 'Action_NextSlide' : 'Action_PreviousSlide', SendTime: Date.now(), Values: {} },
-          { MessageId: isNext ? 'UI_Next' : 'UI_Prev', SendTime: Date.now(), Values: {} },
-          { MessageId: 'Action_NavigateTo', SendTime: Date.now(), Values: { direction: isNext ? 'next' : 'previous' } },
-          { MessageId: 'Grab_Focus', SendTime: Date.now(), Values: {} }
-        ];
-        msgs.forEach(function (m) {
-          f.contentWindow.postMessage(JSON.stringify(m), '*');
-        });
-      } catch (err) {}
-    }
-    function triggerNext() {
-      var f = curFrame();
-      if (f) {
-        postNavToIframe(f, 'next');
-        focusIframe();
-      }
-    }
-    function triggerPrev() {
-      var f = curFrame();
-      if (f) {
-        postNavToIframe(f, 'prev');
-        focusIframe();
       }
     }
     function urlFor(n) {
@@ -901,6 +868,7 @@
       pop.classList.add('hidden');
       wakeUI();
       stSet('fla_ms_tool', t);
+      focusIframe();
     }
     function swatchRow(colors, cur, onpick) {
       var row = el('div', 'ms-pop-row');
@@ -1334,15 +1302,13 @@
       var a = b.getAttribute('data-a');
       switch (a) {
         case 'exit': doExit(); break;
-        case 'prev': case 'pgprev':
+        case 'prev':
           prevPage();
-          var fp = curFrame();
-          if (fp) { postNavToIframe(fp, 'prev'); focusIframe(); }
+          focusIframe();
           break;
-        case 'next': case 'pgnext':
+        case 'next':
           nextPage();
-          var fn = curFrame();
-          if (fn) { postNavToIframe(fn, 'next'); focusIframe(); }
+          focusIframe();
           break;
         case 'addpage': addPage(); break;
         case 'undo': undo(); break;
@@ -1473,41 +1439,22 @@
       if (textIn) return;
       var tg = e.target;
       if (tg && /INPUT|TEXTAREA|SELECT/.test(tg.tagName)) return;
-      var k = (e.key || '').toLowerCase();
+      var rawKey = e.key || '';
+      var k = rawKey.toLowerCase();
+
+      /* ★ 核心规范: 我们的程序完全不监听、不拦截上下左右以及所有的翻页按键 (翻页笔、方向键、PageDown/PageUp、空格等)
+       * 无论当前选择的是光标、画笔、荧光笔还是任何工具，全部放行交由微软 Office 原生响应，我们不做任何干预！ */
+      if (/^(arrow(up|down|left|right)|page(up|down)|next|prior| )$/i.test(rawKey) ||
+          e.keyCode === 32 || e.keyCode === 33 || e.keyCode === 34 || e.keyCode === 37 || e.keyCode === 38 || e.keyCode === 39 || e.keyCode === 40) {
+        focusIframe();
+        return;
+      }
+
       if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); return; }
-      if ((e.ctrlKey || e.metaKey) && (k === 'arrowleft' || k === 'pageup' || k === 'arrowup')) {
-        e.preventDefault(); prevPage();
-        var fkp = curFrame(); if (fkp) { postNavToIframe(fkp, 'prev'); focusIframe(); }
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && (k === 'arrowright' || k === 'pagedown' || k === 'arrowdown')) {
-        e.preventDefault(); nextPage();
-        var fkn = curFrame(); if (fkn) { postNavToIframe(fkn, 'next'); focusIframe(); }
-        return;
-      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-      var isNext = (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowDown' ||
-                    e.key === 'Right' || e.key === 'Down' || e.key === 'Next' || e.code === 'PageDown' || e.code === 'ArrowDown' ||
-                    e.keyCode === 34 || e.keyCode === 40 || e.keyCode === 39 || e.keyCode === 32 || e.keyCode === 13);
-      var isPrev = (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'ArrowUp' ||
-                    e.key === 'Left' || e.key === 'Up' || e.key === 'Prior' || e.code === 'PageUp' || e.code === 'ArrowUp' ||
-                    e.keyCode === 33 || e.keyCode === 38 || e.keyCode === 37);
-
-      if (isNext) {
-        e.preventDefault();
-        triggerNext();
-        return;
-      }
-      if (isPrev) {
-        e.preventDefault();
-        triggerPrev();
-        return;
-      }
-      else if (e.key === 'Home') { e.preventDefault(); goPage(1); }
-      else if (e.key === 'End') { e.preventDefault(); goPage(total()); }
-      else if (e.key === 'Escape') {
+      if (e.key === 'Escape') {
         if (!blk.classList.contains('hidden')) blk.classList.add('hidden');
         else if (S.align) exitAlign();
         else if (!pop.classList.contains('hidden')) pop.classList.add('hidden');
@@ -1520,10 +1467,6 @@
       else if (k === 'f') toggleFull();
       else if (k === 'g') toggleFilm();
       else if (k === '+' || k === '=') addPage();
-      else if (/^[0-9]$/.test(k)) {
-        var n = +k; if (n === 0) n = 10;
-        if (n <= total()) goPage(n);
-      }
       else if (k === 'delete' || k === 'backspace') {
         if (S.selId) {
           var arr = S.strokes[pid()] || [];

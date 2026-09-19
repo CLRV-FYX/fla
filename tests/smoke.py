@@ -1041,12 +1041,15 @@ gen_conf
     check("放映舞台彻底移除画布翻页自动跳转与触屏误触(回归纯手动翻页)",
           "wasTap" not in ms_js and "goPage(p)" not in ms_js and "prevPage()" in ms_js and "nextPage()" in ms_js, "")
 
+    check("放映舞台左侧工具栏彻底移除左右翻页按键(杜绝误触回跳)",
+          "pgprev" not in ms_js and "pgnext" not in ms_js, "")
+
+    check("放映舞台对上下左右及翻页笔按键完全放行并聚焦iframe原生响应",
+          "focusIframe()" in ms_js and "arrow(up|down|left|right)" in ms_js and "isNext" not in ms_js, "")
+
     sync_doc = (root / "docs" / "SLIDE_SYNC_BACKUP.md").read_text()
     check("备用技术文档详细记录课件与画布自动同步实现方案",
           (root / "docs" / "SLIDE_SYNC_BACKUP.md").exists() and "sftc=1" in sync_doc and "App_IsFrameTrusted" in sync_doc, "")
-
-    check("放映舞台笔画结束立刻归还焦点并穿透翻页指令至微软 iframe",
-          "focusIframe()" in ms_js and "postNavToIframe" in ms_js and "Action_NextSlide" in ms_js, "")
 
     app_js = (root / "web" / "js" / "app.js").read_text()
     ui_js = (root / "web" / "js" / "ui.js").read_text()
