@@ -1038,8 +1038,12 @@ gen_conf
           "../web:/app/web" in dc_main and "../server:/app/server" in dc_main and
           "../web:/app/web" in dc_lite and "../server:/app/server" in dc_lite, "")
 
-    check("放映舞台在任意工具状态下均支持屏幕点击翻页",
-          "wasTap" in ms_js and "triggerNext" in ms_js and "triggerPrev" in ms_js, "")
+    check("放映舞台彻底移除画布翻页自动跳转与触屏误触(回归纯手动翻页)",
+          "wasTap" not in ms_js and "goPage(p)" not in ms_js and "prevPage()" in ms_js and "nextPage()" in ms_js, "")
+
+    sync_doc = (root / "docs" / "SLIDE_SYNC_BACKUP.md").read_text()
+    check("备用技术文档详细记录课件与画布自动同步实现方案",
+          (root / "docs" / "SLIDE_SYNC_BACKUP.md").exists() and "sftc=1" in sync_doc and "App_IsFrameTrusted" in sync_doc, "")
 
     check("放映舞台笔画结束立刻归还焦点并穿透翻页指令至微软 iframe",
           "focusIframe()" in ms_js and "postNavToIframe" in ms_js and "Action_NextSlide" in ms_js, "")

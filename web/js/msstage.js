@@ -446,7 +446,6 @@
         postNavToIframe(f, 'next');
         focusIframe();
       }
-      nextPage();
     }
     function triggerPrev() {
       var f = curFrame();
@@ -454,7 +453,6 @@
         postNavToIframe(f, 'prev');
         focusIframe();
       }
-      prevPage();
     }
     function urlFor(n) {
       if (!S.mv) return '';
@@ -832,30 +830,6 @@
     });
     function endStroke(e) {
       S.lastEraserPt = null;
-      var wasTap = (Date.now() - ptDownTime < 320) && (ptMovedDist < 10);
-      if (wasTap && e && typeof e.clientX === 'number') {
-        var cx = e.clientX, cy = e.clientY;
-        var isTopBar = cy < 70;
-        var isBotBar = cy > window.innerHeight - 80;
-        var isSideBar = cx < 70 || cx > window.innerWidth - 70;
-        if (!isTopBar && !isBotBar && !isSideBar) {
-          if (ptTapAddedStroke) {
-            var arr = S.strokes[pid()] || [];
-            var idx = arr.indexOf(ptTapAddedStroke);
-            if (idx >= 0) arr.splice(idx, 1);
-            var ops = S.ops[pid()] || [];
-            if (ops.length && ops[ops.length - 1].s === ptTapAddedStroke) ops.pop();
-            ptTapAddedStroke = null;
-            S.drawing = null;
-            redraw();
-          }
-          if (cx > window.innerWidth * 0.38) {
-            triggerNext();
-          } else {
-            triggerPrev();
-          }
-        }
-      }
       ptTapAddedStroke = null;
 
       if (S.drawing) {
@@ -1360,8 +1334,16 @@
       var a = b.getAttribute('data-a');
       switch (a) {
         case 'exit': doExit(); break;
-        case 'prev': case 'pgprev': triggerPrev(); break;
-        case 'next': case 'pgnext': triggerNext(); break;
+        case 'prev': case 'pgprev':
+          prevPage();
+          var fp = curFrame();
+          if (fp) { postNavToIframe(fp, 'prev'); focusIframe(); }
+          break;
+        case 'next': case 'pgnext':
+          nextPage();
+          var fn = curFrame();
+          if (fn) { postNavToIframe(fn, 'next'); focusIframe(); }
+          break;
         case 'addpage': addPage(); break;
         case 'undo': undo(); break;
         case 'redo': redo(); break;
@@ -1478,20 +1460,8 @@
         return;
       }
 
-      // 检测页码更新广播
-      var p = null;
-      if (typeof msg.page === 'number') p = msg.page;
-      else if (typeof msg.slide === 'number') p = msg.slide;
-      else if (typeof msg.slideIndex === 'number') p = msg.slideIndex + 1;
-      else if (msg.Values) {
-        if (typeof msg.Values.page === 'number') p = msg.Values.page;
-        else if (typeof msg.Values.slide === 'number') p = msg.Values.slide;
-        else if (typeof msg.Values.slideIndex === 'number') p = msg.Values.slideIndex + 1;
-      }
-      if (p && p >= 1 && p <= total() && p !== S.page) {
-        console.log('[MSStage] 收到微软页面变更通知:', p);
-        goPage(p);
-      }
+      /* 注意: 课件翻页的画布自动跳转功能已移除 (纯手动稳健控制).
+       * 完整实现方法与协议代码已归档至 docs/SLIDE_SYNC_BACKUP.md, 便于后续版本平滑恢复. */
     }
     window.addEventListener('message', onMsMessage, false);
 
@@ -1506,8 +1476,16 @@
       var k = (e.key || '').toLowerCase();
       if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo(); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); return; }
-      if ((e.ctrlKey || e.metaKey) && (k === 'arrowleft' || k === 'pageup' || k === 'arrowup')) { e.preventDefault(); triggerPrev(); return; }
-      if ((e.ctrlKey || e.metaKey) && (k === 'arrowright' || k === 'pagedown' || k === 'arrowdown')) { e.preventDefault(); triggerNext(); return; }
+      if ((e.ctrlKey || e.metaKey) && (k === 'arrowleft' || k === 'pageup' || k === 'arrowup')) {
+        e.preventDefault(); prevPage();
+        var fkp = curFrame(); if (fkp) { postNavToIframe(fkp, 'prev'); focusIframe(); }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (k === 'arrowright' || k === 'pagedown' || k === 'arrowdown')) {
+        e.preventDefault(); nextPage();
+        var fkn = curFrame(); if (fkn) { postNavToIframe(fkn, 'next'); focusIframe(); }
+        return;
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       var isNext = (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowDown' ||
