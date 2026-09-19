@@ -1061,6 +1061,22 @@ gen_conf
     check("present.html 正确引用相对路径 msstage.js",
           'src="js/msstage.js' in (root / "web" / "present.html").read_text(), "")
 
+    # 8.10 前端脚本零语法错误与初始化执行验证 (杜绝 "加载中…" 卡死)
+    node_chk = subprocess.run(["node", "-c", "web/js/api.js", "web/js/ui.js", "web/js/app.js", "web/js/admin.js", "web/js/chat.js", "web/js/msstage.js", "web/js/viewer.js"],
+                              capture_output=True, text=True, cwd=str(root))
+    check("前端 JavaScript 脚本编译零语法错误", node_chk.returncode == 0, node_chk.stderr)
+
+    sim_node = subprocess.run([
+        "node", "-e",
+        'const fs = require("fs"); const vm = require("vm");\n'
+        'const els = {}; function el(id) { return els[id] || (els[id] = { id, innerHTML: "", style: {}, classList: { add(){}, remove(){}, contains(){return false}, toggle(){} }, appendChild(){}, querySelector(s){ return el(s.replace(/^#/,"")); }, querySelectorAll(){ return []; } }); }\n'
+        'const ctx = { window: {}, document: { title: "", readyState: "complete", documentElement: { scrollTop: 0, tagName: "html", style: {} }, head: { appendChild(){} }, body: { style: {}, appendChild(){} }, createElement(t){ return el("e_"+Math.random()); }, getElementById: el, querySelector(s){ return el(s.replace(/^#/,"")); }, querySelectorAll(){ return []; }, addEventListener(){} }, location: { hash: "", origin: "https://t.clrv.top" }, localStorage: { getItem(){return null}, setItem(){}, removeItem(){} }, sessionStorage: { getItem(){return null}, setItem(){}, removeItem(){} }, navigator: { userAgent: "Node" }, fetch(){ return Promise.resolve({ ok: true, json(){ return Promise.resolve({}); } }); }, console, setTimeout, clearTimeout, setInterval, clearInterval };\n'
+        'ctx.window = ctx; ctx.globalThis = ctx; ctx.window.addEventListener = ()=>{};\n'
+        '["lib/qrcode/qrcode.min.js", "js/api.js", "js/ui.js", "js/app.js", "js/admin.js", "js/chat.js", "js/msstage.js", "js/viewer.js"].forEach(p => vm.runInNewContext(fs.readFileSync("web/" + p, "utf8"), ctx));\n'
+        'if (!els["app"] || !els["app"].innerHTML || els["app"].innerHTML.includes("加载中…")) process.exit(1);\n'
+    ], capture_output=True, text=True, cwd=str(root))
+    check("前端全脚本顺序加载并初始化渲染正常 (脱离加载中卡死)", sim_node.returncode == 0, sim_node.stderr)
+
     return finish()
 
 

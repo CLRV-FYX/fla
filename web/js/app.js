@@ -10,7 +10,7 @@ let pollT = null;
 
 const ACCEPT = '.ppt,.pptx,.pps,.ppsx,.pot,.potx,.doc,.docx,.dot,.dotx,.rtf,.xls,.xlsx,.csv,.txt,.odt,.ods,.odp,.wps,.et,.dps,.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.svg,.mp3,.wav,.ogg,.m4a,.aac,.flac,.mp4,.webm,.mkv,.mov,.m4v';
 
-document.addEventListener('DOMContentLoaded', async () => {
+async function initApp() {
   window.addEventListener('hashchange', route);
   if (API.token) {
     try {
@@ -36,7 +36,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
   window.addEventListener('scroll', onScroll, { passive: true });
   route();
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
 
 function runCleanup() {
   if (_cleanup) { try { _cleanup(); } catch (e) { } _cleanup = null; }
@@ -370,20 +376,6 @@ function viewLogin() {
       afterLoginGo();
     } catch (err) { toast(err.message, 'err'); }
   };
-  /* v1.26: 扫码登录 — 显示二维码 + 轮询授权状态 (v1.27 修: 显式切换 display, 彻底防止双框重叠) */
-  const switchTab = qr => {
-    $('#lt-pw').classList.toggle('on', !qr);
-    $('#lt-qr').classList.toggle('on', qr);
-    $('#f').classList.toggle('hidden', qr);
-    $('#qrbox').classList.toggle('hidden', !qr);
-    if ($('#f')) $('#f').style.display = qr ? 'none' : 'block';
-    if ($('#qrbox')) $('#qrbox').style.display = qr ? 'grid' : 'none';
-    if (qr) startQrLogin(); else stopQrLogin();
-  };
-  $('#lt-pw').onclick = () => switchTab(false);
-  $('#lt-qr').onclick = () => switchTab(true);
-  switchTab(false);   /* 初始默认密码登录, 强制隐藏二维码框 */
-
   let qrTimers = [];
   function stopQrLogin() { qrTimers.forEach(t => clearInterval(t) || clearTimeout(t)); qrTimers = []; }
   async function startQrLogin() {
@@ -449,10 +441,28 @@ function viewLogin() {
     }, 1500));
     App.setCleanup(stopQrLogin);
   }
-      } catch (e) { /* 网络抖动忽略 */ }
-    }, 1500));
-    App.setCleanup(stopQrLogin);
-  }
+
+  /* v1.26: 扫码登录 — 显示二维码 + 轮询授权状态 (v1.27 修: 显式切换 display, 彻底防止双框重叠) */
+  const switchTab = qr => {
+    const pwTab = $('#lt-pw');
+    const qrTab = $('#lt-qr');
+    const f = $('#f');
+    const qb = $('#qrbox');
+    if (pwTab) pwTab.classList.toggle('on', !qr);
+    if (qrTab) qrTab.classList.toggle('on', qr);
+    if (f) {
+      f.classList.toggle('hidden', qr);
+      f.style.display = qr ? 'none' : 'block';
+    }
+    if (qb) {
+      qb.classList.toggle('hidden', !qr);
+      qb.style.display = qr ? 'grid' : 'none';
+    }
+    if (qr) startQrLogin(); else stopQrLogin();
+  };
+  if ($('#lt-pw')) $('#lt-pw').onclick = () => switchTab(false);
+  if ($('#lt-qr')) $('#lt-qr').onclick = () => switchTab(true);
+  switchTab(false);   /* 初始默认密码登录, 强制隐藏二维码框 */
 }
 
 /* 登录后跳转: 优先回到扫码授权前的页面 */

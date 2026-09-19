@@ -34,11 +34,21 @@
       }
       if (opts.form) { opts.body = opts.form; opts.method = opts.method || 'POST'; }
       let r;
+      const timeoutMs = opts.timeout || (opts.form ? 0 : 8000);
+      let ctrl = null, timer = null;
+      if (timeoutMs > 0 && typeof AbortController !== 'undefined') {
+        ctrl = new AbortController();
+        opts.signal = ctrl.signal;
+        timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      }
       try {
         r = await fetch(path, Object.assign({}, opts, { headers }));
       } catch (e) {
+        if (timer) clearTimeout(timer);
+        if (e && e.name === 'AbortError') throw new Error('请求超时，请检查网络');
         throw new Error('网络错误，请检查连接');
       }
+      if (timer) clearTimeout(timer);
       if (r.status === 401 && path.indexOf('/api/auth/login') < 0 && path.indexOf('/api/auth/register') < 0 && path.indexOf('/api/auth/qr/') < 0) {
         API.setToken('');
         location.hash = '#/login';
