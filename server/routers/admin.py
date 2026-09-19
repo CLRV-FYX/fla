@@ -292,6 +292,7 @@ def get_settings(request: Request):
         "forum_enabled": db.get_setting("forum_enabled", "1") == "1",
         "chat_enabled": db.get_setting("chat_enabled", "1") == "1",
         "allow_group_create": db.get_setting("allow_group_create", "0") == "1",
+        "toolbar_keep": db.get_setting("toolbar_keep", "1") == "1",
     }
 
 
@@ -304,11 +305,14 @@ class SettingsIn(BaseModel):
     forum_enabled: bool | None = None      # v1.26: 论坛开关
     chat_enabled: bool | None = None       # v1.26: 聊天开关
     allow_group_create: bool | None = None  # v1.26: 允许用户创建群组
+    toolbar_keep: bool | None = None        # v1.27: 放映时工具栏常驻(不自动收回)
 
 
 @router.put("/settings")
 def put_settings(body: SettingsIn, request: Request):
     require_admin(request)
+    if body.toolbar_keep is not None:
+        db.set_setting("toolbar_keep", "1" if body.toolbar_keep else "0")
     if body.default_quota_mb is not None:
         if not (1 <= body.default_quota_mb <= 1000000):
             raise HTTPException(400, "默认空间需在 1MB - 1TB 之间")
