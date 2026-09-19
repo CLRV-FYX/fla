@@ -1047,6 +1047,9 @@ gen_conf
     check("放映舞台画布切换与微软课件独立(只能靠点击触发，不重载微软iframe)",
           "canvasNextPage" in ms_js and "canvasPrevPage" in ms_js and "showSlide" not in ms_js.split("function goCanvasPage")[1].split("function canvasNextPage")[0], "")
 
+    check("放映舞台缩略图专用于控制课件PPT页数且不影响画布",
+          "showSlide(n)" in ms_js.split("function buildFilm")[1].split("function markFilm")[0] and "goCanvasPage" not in ms_js.split("function buildFilm")[1].split("function markFilm")[0], "")
+
     check("放映舞台对上下左右及翻页笔按键完全放行并聚焦iframe原生响应",
           "focusIframe()" in ms_js and "arrow(up|down|left|right)" in ms_js and "isNext" not in ms_js, "")
 

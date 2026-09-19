@@ -110,7 +110,7 @@
     var S = {
       fid: opts.fid, token: opts.token || '', mode: opts.mode || 'present',
       meta: opts.meta || {}, mv: null, ann: null,
-      slides: 1, extra: 0, page: 1, bbN: 1,
+      slides: 1, extra: 0, page: 1, slidePage: 1, bbN: 1,
       strokes: {}, ops: {}, redos: {}, bbOps: {}, bbRedos: {},
       tool: 'cursor', drawing: null, selId: null, selOff: null, laserDots: [],
       dirty: false, saveT: 0, dead: false, t0: Date.now(),
@@ -513,25 +513,35 @@
     }
     function showSlide(n) {
       if (n > S.slides) { hideFrames(); return; }  /* 附加板书页: 收起微软画面 */
+      S.slidePage = n;
+      markFilm();
       var cf = curFrame();
-      if (cf && cf.style.opacity === '0') { cf.style.opacity = '1'; cf.style.zIndex = '2'; }
+      if (cf && (cf.style.opacity === '0' || cf.style.visibility === 'hidden')) {
+        cf.style.visibility = 'visible';
+        cf.style.opacity = '1';
+        cf.style.zIndex = '2';
+      }
       var f = frameWith(n);
       if (f) {
-        if (f.state === 'ready') swapTo(f);
-        else {
+        if (f.state === 'ready') {
+          swapTo(f);
+          focusIframe();
+        } else {
           showLoad(true, '正在切到第 ' + n + ' 页…');
           var tk = f.token;
           var wait = setInterval(function () {
-            if (S.dead) { clearInterval(wait); return; }
-            if (f.token !== tk) { clearInterval(wait); return; }
-            if (f.state === 'ready') { clearInterval(wait); if (f.page === S.page) swapTo(f); }
-          }, 200);
+            if (S.dead || f.token !== tk) { clearInterval(wait); return; }
+            if (f.state === 'ready') { clearInterval(wait); swapTo(f); focusIframe(); }
+          }, 150);
         }
         return;
       }
       f = spareFrame();
       showLoad(true, '正在切到第 ' + n + ' 页…');
-      loadInto(f, n, function (ff) { if (ff.page === S.page) swapTo(ff); });
+      loadInto(f, n, function (ff) {
+        swapTo(ff);
+        focusIframe();
+      });
     }
     function isBoardPageAt(n) { return n > S.slides; }
 
@@ -1068,22 +1078,24 @@
       if (on) { buildFilm(); wakeUI(); }
     }
     function buildFilm() {
-      if (film.getAttribute('data-n') === String(total()) && film.childNodes.length > 1) { markFilm(); return; }
-      film.innerHTML = '<div class="ms-film-head"><b>页面导航</b>' +
-        '<span>点缩略图直接跳页 — 板书会跟着切到该页</span>' +
+      if (film.getAttribute('data-n') === String(S.slides) && film.childNodes.length > 1) { markFilm(); return; }
+      film.innerHTML = '<div class="ms-film-head"><b>课件幻灯片缩略图</b>' +
+        '<span>点缩略图切换课件幻灯片 (只控制课件, 不影响画布板书)</span>' +
         '<button class="ms-tb" data-f="close">✕</button></div><div class="ms-film-list" id="msFilmList"></div>';
-      film.setAttribute('data-n', String(total()));
+      film.setAttribute('data-n', String(S.slides));
       film.querySelector('[data-f=close]').onclick = function () { toggleFilm(false); };
       var list = film.querySelector('#msFilmList');
-      for (var i = 1; i <= total(); i++) {
+      for (var i = 1; i <= S.slides; i++) {
         (function (n) {
           var c = el('button', 'ms-thumb');
           c.setAttribute('data-p', n);
           c.innerHTML = '<span class="ms-thumb-img" id="th' + n + '">' +
-            (n > S.slides ? '<i class="ms-thumb-board">板</i>' : '<i class="ms-thumb-no">' + n + '</i>') + '</span>' +
-            '<span class="ms-thumb-cap">' + (n > S.slides ? '板书页' : '第 ' + n + ' 页') +
-            '<em class="ms-thumb-ink hidden">✎</em></span>';
-          c.onclick = function () { goCanvasPage(n); };
+            '<i class="ms-thumb-no">' + n + '</i></span>' +
+            '<span class="ms-thumb-cap">第 ' + n + ' 页</span>';
+          c.onclick = function () {
+            showSlide(n);
+            toast('课件已切换到第 ' + n + ' 页 (画布板书保持独立)');
+          };
           list.appendChild(c);
         })(i);
       }
@@ -1092,13 +1104,10 @@
     }
     function markFilm() {
       if (film.classList.contains('hidden')) return;
+      var curSlide = S.slidePage || 1;
       Array.prototype.forEach.call(film.querySelectorAll('.ms-thumb'), function (c) {
         var n = +c.getAttribute('data-p');
-        c.classList.toggle('on', n === S.page);
-        var key = n <= S.slides ? 'm' + (n - 1) : 'x' + (n - S.slides - 1);
-        var hasInk = (S.strokes[key] || []).length > 0;
-        var e = c.querySelector('.ms-thumb-ink');
-        if (e) e.classList.toggle('hidden', !hasInk);
+        c.classList.toggle('on', n === curSlide);
       });
       var cur = film.querySelector('.ms-thumb.on');
       if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
