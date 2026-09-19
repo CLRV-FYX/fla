@@ -1702,6 +1702,17 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 }
 .msp-sync:hover { background: #2563eb; transform: scale(1.04); }
 .msp-sync.synced { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+.msp-ocr {
+  padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,.2);
+  background: rgba(255,255,255,.08); color: #fff; font-size: 11px; font-weight: 700;
+  cursor: pointer; transition: all .16s ease; display: inline-flex; align-items: center; gap: 4px;
+}
+.msp-ocr:hover { background: rgba(255,255,255,.2); transform: scale(1.04); }
+.msp-ocr.active {
+  background: rgba(16, 185, 129, 0.25); color: #34d399; border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.4); animation: msPulse 2s infinite;
+}
+@keyframes msPulse { 0%, 100% { opacity: 1; } 50% { opacity: .75; } }
 
 /* ---------- 弹窗 / 同步模式 / 跳页 ---------- */
 .ms-modal-ovl {

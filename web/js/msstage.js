@@ -207,6 +207,7 @@
       b.setAttribute('data-a', act); b.title = title; b.innerHTML = ic;
       barR.appendChild(b); return b;
     }
+    rbtn('film', '缩略图导航 (G)', icon('film', 20));
     rbtn('clear', '清空本页板书', icon('trash', 20));
     rbtn('bnb', '板中板: 独立小黑板(可加页)', icon('board', 20));
     rbtn('bg', '板书页底色: 白 / 黑板 / 绿黑板', '<span class="ms-dotbg"></span>');
@@ -560,7 +561,10 @@
       var t = wrap.querySelector('#msTitle');
       if (t) t.textContent = (S.meta.name || '课件') + (isBoardPage() ? ' · 板书页' : '');
       var sy = wrap.querySelector('#msSyncT');
-      if (sy) sy.textContent = S.sync === 'deep' ? '我方驱动' : '微软自翻';
+      if (sy) {
+        var isOcr = window.FLA_OCR && window.FLA_OCR.isCapturing();
+        sy.textContent = isOcr ? 'AI 识屏同步' : '智能同步';
+      }
     }
 
     /* ==================================================================
@@ -1018,6 +1022,10 @@
     function toggleFilm(force) {
       var on = force === undefined ? film.classList.contains('hidden') : force;
       film.classList.toggle('hidden', !on);
+      var topF = top.querySelector('[data-a=film]');
+      if (topF) topF.classList.toggle('on', on);
+      var sideF = barR.querySelector('[data-a=film]');
+      if (sideF) sideF.classList.toggle('on', on);
       if (on) { buildFilm(); wakeUI(); }
     }
     function buildFilm() {
@@ -1201,28 +1209,37 @@
       }
     }
     function syncMenu() {
+      var isOcr = window.FLA_OCR && window.FLA_OCR.isCapturing();
       var m = dlg({
-        title: '板书与画面的同步方式',
+        title: '放映同步与 AI 识屏设定',
         html: '<div class="ms-sync-list">' +
-          '<button data-s="deep" class="' + (S.sync === 'deep' ? 'on' : '') + '">' +
-          '<b>我方驱动（推荐）</b><span>‹ › / 缩略图 / 数字键翻页 — 微软画面跳到该页, 板书同时切到该页。<br>翻页走缓存, 前进已预载, 基本瞬时。</span></button>' +
-          '<button data-s="follow" class="' + (S.sync === 'follow' ? 'on' : '') + '">' +
-          '<b>微软自翻 + 板书对齐</b><span>老师直接点微软画面翻页(动画/切换最原生), 板书页用 ‹ › 或 Ctrl+← → 对齐。<br>适合微软不接受定位参数的老文档。</span></button>' +
+          '<button data-s="ocr" class="' + (isOcr ? 'on' : '') + '">' +
+          '<b>📷 AI 识屏实时同步（推荐 · 免选自翻/微软）</b>' +
+          '<span>智能提取微软下方「第N张幻灯片，共M张」文字，板书毫秒随动翻页。<br>' +
+          (isOcr ? '<span style="color:#10b981;font-weight:bold">● 当前正在运行中（点击可关闭）</span>' : '点击开启后，在浏览器弹窗中选择当前标签页即可。') +
+          '</span></button>' +
+          '<button data-s="smart" class="' + (!isOcr ? 'on' : '') + '">' +
+          '<b>⚡ 双向智能同步 + 翻页笔穿透</b>' +
+          '<span>手持激光笔 (PageDown/Up) 与键盘直接翻页，支持右下角胶囊快速对齐与 Tab 快捷键。</span></button>' +
           '<button data-s="local"><b>本地引擎（离线）</b><span>不用微软: 服务器转出的高保真页面 + 元素级动画, 断网也能上, 板书天然随页。</span></button>' +
           '</div>' +
-          '<p class="ms-pop-hint">不确定微软画面有没有跟着跳? 用下面的「对齐自检」。</p>',
+          '<p class="ms-pop-hint">提示：在右下角常驻胶囊中，也可随时点击【📷 识屏】开启或按【Tab】一键同步。</p>',
         onMount: function (body, close) {
           body.querySelectorAll('[data-s]').forEach(function (b) {
             b.onclick = function () {
               var v = b.getAttribute('data-s');
               if (v === 'local') { close(); goLocal(); return; }
-              setSync(v); close();
+              if (v === 'ocr') { close(); toggleOcrSync(); return; }
+              if (v === 'smart') {
+                if (window.FLA_OCR && window.FLA_OCR.isCapturing()) window.FLA_OCR.stopCapture();
+                close();
+                toast('已设为双向智能同步模式', 2000);
+                updatePill();
+                return;
+              }
+              close();
             };
           });
-          var f = el('button', 'btn primary'); f.textContent = '对齐自检(翻到第 2 页看看)';
-          f.style.marginTop = '10px';
-          f.onclick = function () { close(); selfTest(); };
-          body.appendChild(f);
         }
       });
       return m;
@@ -1454,25 +1471,79 @@
     }
 
     /* ==================================================================
-     *  浮动常驻同步胶囊 (微软放映跟随/对齐)
+     *  浮动常驻同步胶囊 (微软放映跟随/对齐/AI 识屏)
      * ================================================================== */
     var syncPill = el('div', 'ms-sync-pill');
     syncPill.innerHTML =
       '<button class="msp-b" data-sp="prev" title="上一页 (PageUp)">‹</button>' +
       '<span class="msp-txt" id="mspText">第 1 / ' + (S.slides || 1) + ' 页</span>' +
       '<button class="msp-b" data-sp="next" title="下一页 (PageDown)">›</button>' +
+      '<button class="msp-ocr" data-sp="ocr" title="AI 文字识别: 自动识别微软底部「第N张幻灯片，共M张」">📷 识屏</button>' +
       '<button class="msp-sync" data-sp="sync" title="点击或按 Tab 一键同步板书">同步</button>';
     wrap.appendChild(syncPill);
 
     function updatePill() {
       var txt = syncPill.querySelector('#mspText');
       if (txt) {
+        var isOcr = window.FLA_OCR && window.FLA_OCR.isCapturing();
         var stepCount = getSlideStepCount(S.page);
-        if (S.sync === 'follow' && stepCount > 0) {
+        if (isOcr) {
+          txt.textContent = '🟢 识屏 第 ' + S.page + ' / ' + total() + ' 页';
+        } else if (S.sync === 'follow' && stepCount > 0) {
           txt.textContent = '第 ' + S.page + ' / ' + total() + ' 页 · 动 ' + S.stepInSlide + '/' + stepCount;
         } else {
           txt.textContent = '第 ' + S.page + ' / ' + total() + ' 页';
         }
+      }
+      var ocrBtn = syncPill.querySelector('[data-sp=ocr]');
+      if (ocrBtn) {
+        var capturing = window.FLA_OCR && window.FLA_OCR.isCapturing();
+        ocrBtn.classList.toggle('active', !!capturing);
+        ocrBtn.innerHTML = capturing ? '🟢 识屏中' : '📷 识屏';
+      }
+    }
+
+    async function toggleOcrSync() {
+      if (!window.FLA_OCR) {
+        toast('文字识别模块正在加载中，请稍候...', 2000);
+        return;
+      }
+      var ocrBtn = syncPill.querySelector('[data-sp=ocr]');
+      if (window.FLA_OCR.isCapturing()) {
+        window.FLA_OCR.stopCapture();
+        if (ocrBtn) {
+          ocrBtn.classList.remove('active');
+          ocrBtn.innerHTML = '📷 识屏';
+        }
+        toast('已停止 AI 识屏同步');
+        updatePill();
+        return;
+      }
+
+      toast('正在开启 AI 识屏… 请在浏览器弹窗中选择当前标签页', 4000);
+      try {
+        await window.FLA_OCR.startCapture({
+          onPage: function (res) {
+            if (S.dead) return;
+            var target = res.cur;
+            if (target >= 1 && target <= total() && target !== S.page) {
+              goPage(target, true);
+              toast('AI 识屏同步: 第 ' + target + ' 页 ✓', 1600);
+              updatePill();
+            }
+          },
+          onStatus: function () {
+            updatePill();
+          },
+          onError: function (err) {
+            toast('AI 识屏未开启: ' + (err.message || '用户取消授权'), 3500);
+            updatePill();
+          }
+        });
+        toast('AI 识屏已开启! 自动提取微软下方「第N张幻灯片」，毫秒随动 ✓', 3800);
+        updatePill();
+      } catch (e) {
+        updatePill();
       }
     }
 
@@ -1499,6 +1570,8 @@
       } else if (sp === 'next') {
         nextPage();
         focusIframe();
+      } else if (sp === 'ocr') {
+        toggleOcrSync();
       } else if (sp === 'sync') {
         syncCurrentPage();
       }
@@ -1752,6 +1825,9 @@
         if (S.dead) return;
         S.dead = true;
         flushSave();
+        if (window.FLA_OCR) {
+          try { window.FLA_OCR.stopCapture(); } catch (e) { }
+        }
         window.removeEventListener('keydown', onKey, true);
         window.removeEventListener('message', onMsMessage, false);
         /* 摘掉全部窗口级监听与定时器: 反复进出放映不累积泄漏 */

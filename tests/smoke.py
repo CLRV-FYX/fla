@@ -1021,6 +1021,17 @@ gen_conf
     check("内部放映页支持激光笔多键位步进动画",
           "isNext" in pres_js and "advance()" in pres_js, "")
 
+    # 8.8 AI 视觉文字识别与侧边栏缩略图增强
+    ocr_js = (root / "web" / "js" / "ocr.js").read_text()
+    check("AI 视觉文字识别库 (FLA_OCR) 包含幻灯片页码多格式提取器",
+          "FLA_OCR" in ocr_js and "parseSlideNumber" in ocr_js and "recognizeCanvas" in ocr_js, "")
+    check("index.html 与 present.html 正确加载 ocr.js",
+          "js/ocr.js" in idx_html and "js/ocr.js" in (root / "web" / "present.html").read_text(), "")
+    check("放映舞台右侧栏增加缩略图按钮并保留顶栏原按钮",
+          "rbtn('film'" in ms_js and 'data-a="film"' in ms_js, "")
+    check("放映舞台常驻胶囊支持 AI 识屏实时随动",
+          "msp-ocr" in ms_js and "toggleOcrSync" in ms_js and "FLA_OCR.startCapture" in ms_js, "")
+
     return finish()
 
 
