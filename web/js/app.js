@@ -50,6 +50,10 @@ function route() {
   const parts = path.split('/').filter(Boolean);
   if (!App.user) {
     if (parts[0] === 'register') return viewRegister();
+    if (parts[0] === 'qr-approve') {
+      try { sessionStorage.setItem('fla_after_login', location.hash); } catch (e) { }
+      return viewLogin();
+    }
     return viewLogin();
   }
   if (parts[0] === 'login' || parts[0] === 'register') { location.hash = '#/library'; return; }
@@ -244,7 +248,7 @@ function bindCertCards(root) {
       card.style.setProperty('--rx', '0deg'); card.style.setProperty('--ry', '0deg');
       card.style.setProperty('--mx', '50%'); card.style.setProperty('--my', '50%');
     });
-    /* --- 二维码(懒加载组件, 失败也不影响证书展示) --- */
+    /* --- 二维码(内置矢量 SVG 组件, 瞬间呈现) --- */
     const qr = $('.cc-qr', card);
     if (qr && !qr.dataset.done) {
       qr.dataset.done = '1';
@@ -255,17 +259,16 @@ function bindCertCards(root) {
         'SINCE ' + card.dataset.since + '\n' +
         'VERIFY ' + card.dataset.code + '\n' +
         location.origin;
-      loadScript('/lib/qrcode/qrcode.min.js').then(() => {
-        if (!window.QRCode) throw new Error('no lib');
-        qr.innerHTML = '';
-        new window.QRCode(qr, {
-          text: txt, width: 62, height: 62,
-          colorDark: '#0b0c0f', colorLight: '#ffffff',
-          correctLevel: window.QRCode.CorrectLevel.M
-        });
-        const img = qr.querySelector('canvas, img');
+      try {
+        if (UI && UI.renderQR) {
+          UI.renderQR(qr, txt, 62);
+        } else if (window.QRCode) {
+          qr.innerHTML = '';
+          new window.QRCode(qr, { text: txt, width: 62, height: 62, correctLevel: 'M' });
+        }
+        const img = qr.querySelector('canvas, img, svg');
         if (img) { img.style.width = '62px'; img.style.height = '62px'; img.style.borderRadius = '6px'; }
-      }).catch(() => { qr.innerHTML = '<em class="cc-qr-fail">' + card.dataset.code + '</em>'; });
+      } catch (e) { qr.innerHTML = '<em class="cc-qr-fail">' + card.dataset.code + '</em>'; }
     }
     /* --- 大图 / 打印 --- */
     $$('.cc-acts button', card).forEach(b => b.onclick = ev => {
@@ -388,16 +391,7 @@ function viewLogin() {
     const holder = $('#qr-holder');
     if (!holder) return;
     holder.innerHTML = '<div class="qr-spin"></div>';
-    if (!window.QRCode) {
-      try { await loadScript('lib/qrcode/qrcode.min.js?v=128'); }
-      catch (e) {
-        try { await loadScript('/lib/qrcode/qrcode.min.js?v=128'); } catch (e2) { }
-      }
-    }
-    for (let i = 0; i < 20; i++) {
-      if (window.QRCode) break;
-      await new Promise(r => setTimeout(r, 50));
-    }
+
     let ticket = '';
     const refresh = async () => {
       try {
@@ -405,35 +399,36 @@ function viewLogin() {
         ticket = r.ticket;
         const url = r.url || (location.origin + '/#/qr-approve?ticket=' + encodeURIComponent(ticket));
         holder.innerHTML = '';
-        if (r.qr_svg) {
-          // 服务端 Python qrcode 库原生矢量 SVG (零依赖 · 瞬间呈现)
+        if (r.qr_svg && r.qr_svg.trim().startsWith('<svg')) {
+          // 服务端 Python 原生矢量 SVG (零依赖 · 瞬间呈现)
           holder.innerHTML = r.qr_svg;
           const svg = holder.querySelector('svg');
           if (svg) {
+            svg.setAttribute('width', '190');
+            svg.setAttribute('height', '190');
             svg.style.width = '190px';
             svg.style.height = '190px';
             svg.style.display = 'block';
             svg.style.margin = '0 auto';
           }
-        } else if (UI && UI.renderQR) {
+        } else if (UI && typeof UI.renderQR === 'function') {
           UI.renderQR(holder, url, 190);
-        } else if (window.QRCode) {
+        } else if (typeof window.QRCode === 'function') {
           new window.QRCode(holder, {
             text: url,
             width: 190,
             height: 190,
             colorDark: '#0b0c0f',
             colorLight: '#ffffff',
-            correctLevel: (window.QRCode.CorrectLevel && window.QRCode.CorrectLevel.M) || 'M'
+            correctLevel: 'M'
           });
-        } else if (typeof renderQrSvgFallback === 'function') {
-          renderQrSvgFallback(holder, url, 190);
-        } else {
-          holder.innerHTML = '<p class="qr-tip" style="color:var(--mut)">正在加载二维码，请稍候...</p>';
         }
       } catch (e) {
+        console.error('[startQrLogin] refresh error:', e);
         toast('获取扫码凭证失败: ' + e.message, 'err');
-        holder.innerHTML = '<p class="qr-tip" style="color:var(--err)">获取二维码失败，请刷新重试</p>';
+        holder.innerHTML = '<div style="padding:18px 10px;text-align:center"><p class="qr-tip" style="color:var(--err)">获取二维码失败</p><button class="btn sm" style="margin-top:8px" id="qr-retry-btn">点击重试</button></div>';
+        const retry = holder.querySelector('#qr-retry-btn');
+        if (retry) retry.onclick = () => { holder.innerHTML = '<div class="qr-spin"></div>'; refresh(); };
       }
     };
     refresh();
@@ -450,6 +445,10 @@ function viewLogin() {
         } else if (s.status === 'expired' || s.status === 'invalid') {
           refresh();
         }
+      } catch (e) { /* 网络抖动忽略 */ }
+    }, 1500));
+    App.setCleanup(stopQrLogin);
+  }
       } catch (e) { /* 网络抖动忽略 */ }
     }, 1500));
     App.setCleanup(stopQrLogin);

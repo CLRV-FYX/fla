@@ -1023,29 +1023,20 @@ gen_conf
     check("内部放映页支持激光笔多键位步进动画",
           "isNext" in pres_js and "advance()" in pres_js, "")
 
-    # 8.8 AI 视觉文字识别与侧边栏缩略图增强
-    ocr_js = (root / "web" / "js" / "ocr.js").read_text()
-    check("AI 视觉文字识别库 (FLA_OCR) 包含幻灯片页码多格式提取器",
-          "FLA_OCR" in ocr_js and "parseSlideNumber" in ocr_js and "recognizeCanvas" in ocr_js, "")
-    check("index.html 与 present.html 正确加载 ocr.js",
-          "js/ocr.js" in idx_html and "js/ocr.js" in (root / "web" / "present.html").read_text(), "")
+    # 8.8 简化发版: 彻底剥离 AI 识屏与复杂同步，回归教师纯净手动对齐与翻页
+    check("放映舞台彻底移除复杂同步与AI识屏(纯净手动翻页)",
+          "FLA_OCR" not in ms_js and "ms-sync-pill" not in ms_js and "toggleOcrSync" not in ms_js, "")
+    check("index.html 与 present.html 彻底移除 ocr.js 依赖",
+          "ocr.js" not in idx_html and "ocr.js" not in (root / "web" / "present.html").read_text(), "")
     check("放映舞台右侧栏增加缩略图按钮并保留顶栏原按钮",
           "rbtn('film'" in ms_js and 'data-a="film"' in ms_js, "")
-    check("放映舞台常驻胶囊支持 AI 识屏实时随动",
-          "msp-ocr" in ms_js and "toggleOcrSync" in ms_js and "FLA_OCR.startCapture" in ms_js, "")
 
-    # 8.9 AI 识屏 1s 采样 / 屏幕点击翻页 / 全工具翻页笔穿透 / 二维码与登录保障
+    # 8.9 屏幕点击翻页 / 二维码100%渲染保障 / 扫码授权跳回
     dc_main = (root / "deploy" / "docker-compose.yml").read_text()
     dc_lite = (root / "deploy" / "docker-compose.lite.yml").read_text()
     check("docker-compose 具备 web/ 和 server/ 实时文件映射挂载",
           "../web:/app/web" in dc_main and "../server:/app/server" in dc_main and
           "../web:/app/web" in dc_lite and "../server:/app/server" in dc_lite, "")
-
-    check("AI 识屏采样周期精准设定为 1s (1000ms)",
-          "setInterval(" in ocr_js and "1000" in ocr_js and "video.play()" in ocr_js, "")
-
-    check("AI 识屏具备 Windows 任务栏偏移与多区域智能梯次采样",
-          ("vh - 128" in ocr_js or "vh - 125" in ocr_js), "")
 
     check("放映舞台在任意工具状态下均支持屏幕点击翻页",
           "wasTap" in ms_js and "triggerNext" in ms_js and "triggerPrev" in ms_js, "")
@@ -1056,14 +1047,19 @@ gen_conf
     app_js = (root / "web" / "js" / "app.js").read_text()
     ui_js = (root / "web" / "js" / "ui.js").read_text()
     check("UI 模块内置零依赖 SVG 二维码生成引擎与全局适配",
-          "renderQR" in ui_js and "renderQrSvgFallback" in ui_js, "")
+          "renderQR" in ui_js and "renderQrSvgFallback" in ui_js and "QRCode" in ui_js, "")
+
+    check("app.js 扫码登录零异步脚本阻塞，保障秒级渲染",
+          "loadScript" not in app_js.split("startQrLogin")[1].split("refresh")[0], "")
+
+    check("扫码授权页面未登录时自动暂存目标并在登录后返回授权",
+          "parts[0] === 'qr-approve'" in app_js and "fla_after_login" in app_js, "")
 
     check("登录后路由保障已在目标页时强制刷新路由(解决 t.clrv.top 登录卡滞)",
           "location.hash === target" in app_js and "route()" in app_js, "")
 
-    check("present.html 正确引用相对路径 msstage.js 与 ocr.js",
-          'src="js/msstage.js' in (root / "web" / "present.html").read_text() and
-          'src="js/ocr.js' in (root / "web" / "present.html").read_text(), "")
+    check("present.html 正确引用相对路径 msstage.js",
+          'src="js/msstage.js' in (root / "web" / "present.html").read_text(), "")
 
     return finish()
 

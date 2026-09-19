@@ -39,7 +39,7 @@
       } catch (e) {
         throw new Error('网络错误，请检查连接');
       }
-      if (r.status === 401 && path.indexOf('/api/auth/login') < 0 && path.indexOf('/api/auth/register') < 0) {
+      if (r.status === 401 && path.indexOf('/api/auth/login') < 0 && path.indexOf('/api/auth/register') < 0 && path.indexOf('/api/auth/qr/') < 0) {
         API.setToken('');
         location.hash = '#/login';
         throw new Error('登录已过期，请重新登录');

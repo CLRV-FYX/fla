@@ -1679,42 +1679,7 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 .ms-alignbar button:hover { background: #fff; color: #111; }
 .ms-alignbar span { font-size: 11px; color: rgba(255,255,255,.5); }
 
-/* ---------- 浮动常驻同步条 (微软放映跟随/对齐) ---------- */
-.ms-sync-pill {
-  position: absolute; right: 20px; bottom: 20px; z-index: 45; display: flex; align-items: center; gap: 6px;
-  background: rgba(15, 18, 24, 0.88); backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 30px;
-  padding: 5px 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-  user-select: none; transition: opacity .25s ease, transform .25s ease;
-}
-.ms-stage.idle .ms-sync-pill { opacity: 0.35; }
-.ms-sync-pill:hover { opacity: 1 !important; transform: scale(1.02); }
-.msp-b {
-  width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1);
-  color: #fff; font-size: 14px; font-weight: bold; cursor: pointer; display: grid; place-items: center;
-  transition: background .15s ease;
-}
-.msp-b:hover { background: rgba(255,255,255,0.25); }
-.msp-txt { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.9); padding: 0 4px; min-width: 72px; text-align: center; }
-.msp-sync {
-  padding: 4px 10px; border-radius: 20px; border: none; background: #3b82f6; color: #fff;
-  font-size: 11px; font-weight: 700; cursor: pointer; transition: all .16s ease;
-}
-.msp-sync:hover { background: #2563eb; transform: scale(1.04); }
-.msp-sync.synced { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
-.msp-ocr {
-  padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,.2);
-  background: rgba(255,255,255,.08); color: #fff; font-size: 11px; font-weight: 700;
-  cursor: pointer; transition: all .16s ease; display: inline-flex; align-items: center; gap: 4px;
-}
-.msp-ocr:hover { background: rgba(255,255,255,.2); transform: scale(1.04); }
-.msp-ocr.active {
-  background: rgba(16, 185, 129, 0.25); color: #34d399; border-color: rgba(16, 185, 129, 0.5);
-  box-shadow: 0 0 14px rgba(16, 185, 129, 0.4); animation: msPulse 2s infinite;
-}
-@keyframes msPulse { 0%, 100% { opacity: 1; } 50% { opacity: .75; } }
-
-/* ---------- 弹窗 / 同步模式 / 跳页 ---------- */
+/* ---------- 弹窗 / 跳页 ---------- */
 .ms-modal-ovl {
   position: absolute; inset: 0; z-index: 60; display: grid; place-items: center; padding: 18px;
   background: rgba(5,6,8,.6); backdrop-filter: blur(7px); animation: msFade .2s both;
@@ -1728,16 +1693,6 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 .ms-modal-h { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid rgba(255,255,255,.09); }
 .ms-modal-h b { font-size: 14px; letter-spacing: .4px; }
 .ms-modal-b { padding: 15px 16px; overflow: auto; font-size: 13px; color: rgba(255,255,255,.82); line-height: 1.6; }
-.ms-sync-list { display: flex; flex-direction: column; gap: 9px; }
-.ms-sync-list button {
-  text-align: left; padding: 12px 14px; border-radius: 13px; cursor: pointer; font: inherit;
-  border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05); color: inherit;
-  transition: all .18s var(--ms-ease);
-}
-.ms-sync-list button:hover { background: rgba(255,255,255,.11); transform: translateY(-2px); }
-.ms-sync-list button.on { border-color: #fff; background: rgba(255,255,255,.14); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
-.ms-sync-list b { display: block; font-size: 13.5px; margin-bottom: 4px; color: #fff; }
-.ms-sync-list span { font-size: 11.5px; color: rgba(255,255,255,.55); line-height: 1.6; }
 .ms-goto { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .ms-goto input {
   width: 92px; padding: 9px 11px; border-radius: 10px; border: 1px solid rgba(255,255,255,.2);

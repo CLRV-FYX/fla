@@ -144,8 +144,27 @@ case "${1:-help}" in
       $DC $DCP -f "$CF" logs -f --tail=200
     fi
     ;;
+  pull)
+    echo ">> 同步最新代码 (分支 arena/01a0add0-fla) ..."
+    if [ -d .git ]; then
+      git fetch origin arena/01a0add0-fla && git reset --hard origin/arena/01a0add0-fla
+    elif command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
+      echo "  (非 git 仓库，通过官方归档包更新代码)"
+      curl -sL https://github.com/CLRV-FYX/fla/archive/refs/heads/arena/01a0add0-fla.tar.gz | tar -xz --strip-components=1
+    fi
+    echo ">> 重启 app 容器以加载新代码 ..."
+    $DC $DCP -f "$CF" restart app
+    echo "✔ 更新完成！"
+    ;;
   update)
     shift
+    echo ">> 拉取最新代码 (分支 arena/01a0add0-fla) ..."
+    if [ -d .git ]; then
+      git fetch origin arena/01a0add0-fla && git reset --hard origin/arena/01a0add0-fla
+    elif command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
+      echo "  (非 git 仓库，通过官方归档包更新代码)"
+      curl -sL https://github.com/CLRV-FYX/fla/archive/refs/heads/arena/01a0add0-fla.tar.gz | tar -xz --strip-components=1
+    fi
     echo ">> 重新运行 install.sh (智能重建, 数据保留) ..."
     exec bash "$PWD/install.sh" "$@"
     ;;

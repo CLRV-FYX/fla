@@ -166,12 +166,11 @@
       '<button class="ms-tb" data-a="exit" title="退出 (Esc)">' + icon('back', 17) + '</button>' +
       '<span class="ms-title" id="msTitle"></span>' +
       '<span class="ms-sep"></span>' +
-      '<button class="ms-tb" data-a="prev" title="上一页 (←)">' + icon('chevL', 18) + '</button>' +
+      '<button class="ms-tb" data-a="prev" title="上一页 (← / PageUp)">' + icon('chevL', 18) + '</button>' +
       '<button class="ms-page" id="msPage" title="点击输入页码 / 打开缩略图">1 / 1</button>' +
-      '<button class="ms-tb" data-a="next" title="下一页 (→)">' + icon('chevR', 18) + '</button>' +
+      '<button class="ms-tb" data-a="next" title="下一页 (→ / PageDown)">' + icon('chevR', 18) + '</button>' +
       '<span class="ms-sep"></span>' +
       '<button class="ms-tb" data-a="film" title="缩略图导航 (G)">' + icon('film', 17) + '</button>' +
-      '<button class="ms-tb" data-a="sync" id="msSync" title="板书与微软画面的同步方式">' + icon('sync', 17) + '<em id="msSyncT">我方驱动</em></button>' +
       '<button class="ms-tb' + (S.keepToolbar ? ' on' : '') + '" data-a="pin" id="msPin" title="工具栏常驻显示 / 自动收起">' + icon('lock', 16) + '<em id="msPinTxt">' + (S.keepToolbar ? '工具栏常驻' : '自动收起') + '</em></button>' +
       '<button class="ms-tb" data-a="align" title="微调板书区域(对准幻灯片)">' + icon('move', 17) + '</button>' +
       '<span class="ms-sep"></span>' +
@@ -442,39 +441,20 @@
       } catch (err) {}
     }
     function triggerNext() {
-      var isOcr = window.FLA_OCR && window.FLA_OCR.isCapturing();
       var f = curFrame();
-      postNavToIframe(f, 'next');
-      focusIframe();
-
-      if (S.sync === 'follow' && !isOcr) {
-        var stepCount = getSlideStepCount(S.page);
-        if (stepCount > 0 && S.stepInSlide < stepCount) {
-          S.stepInSlide++;
-          updatePill();
-          return;
-        }
+      if (f) {
+        postNavToIframe(f, 'next');
+        focusIframe();
       }
-      S.stepInSlide = 0;
       nextPage();
-      updatePill();
     }
     function triggerPrev() {
-      var isOcr = window.FLA_OCR && window.FLA_OCR.isCapturing();
       var f = curFrame();
-      postNavToIframe(f, 'prev');
-      focusIframe();
-
-      if (S.sync === 'follow' && !isOcr) {
-        if (S.stepInSlide > 0) {
-          S.stepInSlide--;
-          updatePill();
-          return;
-        }
+      if (f) {
+        postNavToIframe(f, 'prev');
+        focusIframe();
       }
-      S.stepInSlide = 0;
       prevPage();
-      updatePill();
     }
     function urlFor(n) {
       if (!S.mv) return '';
@@ -568,7 +548,6 @@
       if (n > S.slides) { hideFrames(); return; }  /* 附加板书页: 收起微软画面 */
       var cf = curFrame();
       if (cf && cf.style.opacity === '0') { cf.style.opacity = '1'; cf.style.zIndex = '2'; }
-      if (S.sync !== 'deep') return;               /* follow / OCR 模式由 postNavToIframe / 识屏驱动 */
       var f = frameWith(n);
       if (f) {
         if (f.state === 'ready') swapTo(f);
@@ -616,11 +595,6 @@
       if (p) p.textContent = S.page + ' / ' + total();
       var t = wrap.querySelector('#msTitle');
       if (t) t.textContent = (S.meta.name || '课件') + (isBoardPage() ? ' · 板书页' : '');
-      var sy = wrap.querySelector('#msSyncT');
-      if (sy) {
-        var isOcr = window.FLA_OCR && window.FLA_OCR.isCapturing();
-        sy.textContent = isOcr ? 'AI 识屏同步' : '智能同步';
-      }
     }
 
     /* ==================================================================
@@ -1289,104 +1263,13 @@
     }
 
     /* ==================================================================
-     *  同步模式 / 首次对齐自检
+     *  放映驱动模式
      * ================================================================== */
     function setSync(m, quiet) {
-      S.sync = m; stSet('fla_ms_sync', m);
+      S.sync = 'deep';
       updatePageUI();
-      if (m === 'deep') {
-        /* 切回我方驱动: 立刻把微软画面拉到当前页 */
-        S.frames.forEach(function (f) { f.page = 0; f.state = 'idle'; });
-        showSlide(S.page);
-        if (!quiet) toast('我方驱动: ‹ › / 缩略图 / 数字键 直接翻页, 板书同步切换', 4200);
-      } else {
-        if (!quiet) toast('微软自翻: 点微软画面翻页(原生动画最顺), 板书用 ‹ › 或 Ctrl+← → 对齐', 6500);
-      }
     }
-    function syncMenu() {
-      var isOcr = window.FLA_OCR && window.FLA_OCR.isCapturing();
-      var m = dlg({
-        title: '放映同步与 AI 识屏设定',
-        html: '<div class="ms-sync-list">' +
-          '<button data-s="ocr" class="' + (isOcr ? 'on' : '') + '">' +
-          '<b>📷 AI 识屏实时同步（推荐 · 免选自翻/微软）</b>' +
-          '<span>智能提取微软下方「第N张幻灯片，共M张」文字，板书毫秒随动翻页。<br>' +
-          (isOcr ? '<span style="color:#10b981;font-weight:bold">● 当前正在运行中（点击可关闭）</span>' : '点击开启后，在浏览器弹窗中选择当前标签页即可。') +
-          '</span></button>' +
-          '<button data-s="smart" class="' + (!isOcr ? 'on' : '') + '">' +
-          '<b>⚡ 双向智能同步 + 翻页笔穿透</b>' +
-          '<span>手持激光笔 (PageDown/Up) 与键盘直接翻页，支持右下角胶囊快速对齐与 Tab 快捷键。</span></button>' +
-          '<button data-s="local"><b>本地引擎（离线）</b><span>不用微软: 服务器转出的高保真页面 + 元素级动画, 断网也能上, 板书天然随页。</span></button>' +
-          '</div>' +
-          '<p class="ms-pop-hint">提示：在右下角常驻胶囊中，也可随时点击【📷 识屏】开启或按【Tab】一键同步。</p>',
-        onMount: function (body, close) {
-          body.querySelectorAll('[data-s]').forEach(function (b) {
-            b.onclick = function () {
-              var v = b.getAttribute('data-s');
-              if (v === 'local') { close(); goLocal(); return; }
-              if (v === 'ocr') { close(); toggleOcrSync(); return; }
-              if (v === 'smart') {
-                if (window.FLA_OCR && window.FLA_OCR.isCapturing()) window.FLA_OCR.stopCapture();
-                close();
-                toast('已设为双向智能同步模式', 2000);
-                updatePill();
-                return;
-              }
-              close();
-            };
-          });
-        }
-      });
-      return m;
-    }
-    function selfTest() {
-      if (S.slides < 2) { toast('这份文档只有 1 页, 无需自检'); return; }
-      setSync('deep', true);
-      goPage(2);
-      var d = el('div', 'ms-selftest');
-      d.innerHTML = '<div class="ms-st-card"><b>请看投影画面</b>' +
-        '<p>微软画面现在显示的是<strong>第 2 页</strong>吗?</p>' +
-        '<div class="ms-st-row"><button data-r="yes">是, 画面跟着跳了 ✔</button>' +
-        '<button data-r="no">不是, 画面还在第 1 页</button></div></div>';
-      wrap.appendChild(d);
-      d.onclick = function (e) {
-        var b = e.target.closest('[data-r]'); if (!b) return;
-        var ok = b.getAttribute('data-r') === 'yes';
-        d.remove();
-        if (ok) {
-          stSet('fla_ms_sync_ok', '1'); setSync('deep', true);
-          toast('很好 — 已锁定「我方驱动」, 板书会严格随页切换', 4000);
-        } else {
-          setSync('follow', true);
-          toast('已切到「微软自翻 + 板书对齐」: 点微软画面翻页, 板书用 ‹ › 对齐', 8000);
-        }
-        goPage(1);
-      };
-    }
-    /* 首次使用提示: 让老师确认微软画面确实跟着翻页(不确认就自动切 follow) */
-    function hintCheck() {
-      var d = el('div', 'ms-hint-check');
-      d.innerHTML = '<b>板书随页自检</b>' +
-        '<p>翻一页看看: 微软画面是否跟着跳到同一页?</p>' +
-        '<div class="ms-hc-row"><button data-r="test">现在翻到第 2 页试试</button>' +
-        '<button data-r="ok">一直是同步的, 不再提示</button>' +
-        '<button data-r="no">画面没跟着跳 → 换跟随模式</button></div>';
-      wrap.appendChild(d);
-      requestAnimationFrame(function () { d.classList.add('on'); });
-      d.onclick = function (e) {
-        var b = e.target.closest('[data-r]'); if (!b) return;
-        var r = b.getAttribute('data-r');
-        d.classList.remove('on');
-        setTimeout(function () { d.remove(); }, 300);
-        stSet('fla_ms_done_check', '1');
-        if (r === 'test') selfTest();
-        else if (r === 'ok') { stSet('fla_ms_sync_ok', '1'); toast('已确认: 板书严格随页切换'); }
-        else { setSync('follow'); }
-      };
-      setTimeout(function () {
-        if (d.parentNode) { d.classList.remove('on'); setTimeout(function () { d.remove(); }, 300); }
-      }, 45000);
-    }
+    function selfTest() {}
 
     function goLocal() {
       var u = '/present.html?fid=' + S.fid + '&token=' + encodeURIComponent(S.token);
@@ -1508,7 +1391,6 @@
           window.open('/api/files/' + S.fid + '/download?token=' + encodeURIComponent(S.token), '_blank');
           break;
         case 'film': toggleFilm(); break;
-        case 'sync': syncMenu(); break;
         case 'pin':
           S.keepToolbar = !S.keepToolbar;
           stSet('fla_keep_toolbar', S.keepToolbar ? '1' : '0');
@@ -1566,113 +1448,7 @@
     }
 
     /* ==================================================================
-     *  浮动常驻同步胶囊 (微软放映跟随/对齐/AI 识屏)
-     * ================================================================== */
-    var syncPill = el('div', 'ms-sync-pill');
-    syncPill.innerHTML =
-      '<button class="msp-b" data-sp="prev" title="上一页 (PageUp)">‹</button>' +
-      '<span class="msp-txt" id="mspText">第 1 / ' + (S.slides || 1) + ' 页</span>' +
-      '<button class="msp-b" data-sp="next" title="下一页 (PageDown)">›</button>' +
-      '<button class="msp-ocr" data-sp="ocr" title="AI 文字识别: 自动识别微软底部「第N张幻灯片，共M张」">📷 识屏</button>' +
-      '<button class="msp-sync" data-sp="sync" title="点击或按 Tab 一键同步板书">同步</button>';
-    wrap.appendChild(syncPill);
-
-    function updatePill() {
-      var txt = syncPill.querySelector('#mspText');
-      if (txt) {
-        var isOcr = window.FLA_OCR && window.FLA_OCR.isCapturing();
-        var stepCount = getSlideStepCount(S.page);
-        if (isOcr) {
-          txt.textContent = '🟢 识屏 第 ' + S.page + ' / ' + total() + ' 页';
-        } else if (S.sync === 'follow' && stepCount > 0) {
-          txt.textContent = '第 ' + S.page + ' / ' + total() + ' 页 · 动 ' + S.stepInSlide + '/' + stepCount;
-        } else {
-          txt.textContent = '第 ' + S.page + ' / ' + total() + ' 页';
-        }
-      }
-      var ocrBtn = syncPill.querySelector('[data-sp=ocr]');
-      if (ocrBtn) {
-        var capturing = window.FLA_OCR && window.FLA_OCR.isCapturing();
-        ocrBtn.classList.toggle('active', !!capturing);
-        ocrBtn.innerHTML = capturing ? '🟢 识屏中' : '📷 识屏';
-      }
-    }
-
-    async function toggleOcrSync() {
-      if (!window.FLA_OCR) {
-        toast('文字识别模块正在加载中，请稍候...', 2000);
-        return;
-      }
-      var ocrBtn = syncPill.querySelector('[data-sp=ocr]');
-      if (window.FLA_OCR.isCapturing()) {
-        window.FLA_OCR.stopCapture();
-        if (ocrBtn) {
-          ocrBtn.classList.remove('active');
-          ocrBtn.innerHTML = '📷 识屏';
-        }
-        toast('已停止 AI 识屏同步');
-        updatePill();
-        return;
-      }
-
-      toast('正在开启 AI 识屏… 请在浏览器弹窗中选择当前标签页', 4000);
-      try {
-        await window.FLA_OCR.startCapture({
-          onPage: function (res) {
-            if (S.dead) return;
-            var target = res.cur;
-            if (target >= 1 && target <= total() && target !== S.page) {
-              goPage(target, true);
-              toast('AI 识屏同步: 第 ' + target + ' 页 ✓', 1600);
-              updatePill();
-            }
-          },
-          onStatus: function () {
-            updatePill();
-          },
-          onError: function (err) {
-            toast('AI 识屏未开启: ' + (err.message || '用户取消授权'), 3500);
-            updatePill();
-          }
-        });
-        toast('AI 识屏已开启! 自动提取微软下方「第N张幻灯片」，毫秒随动 ✓', 3800);
-        updatePill();
-      } catch (e) {
-        updatePill();
-      }
-    }
-
-    function syncCurrentPage() {
-      toast('当前板书页: 第 ' + S.page + ' 页 · 笔迹已保存对齐 ✓', 2000);
-      var syncBtn = syncPill.querySelector('[data-sp=sync]');
-      if (syncBtn) {
-        syncBtn.classList.add('synced');
-        syncBtn.textContent = '已同步 ✓';
-        setTimeout(function () {
-          syncBtn.classList.remove('synced');
-          syncBtn.textContent = '同步';
-        }, 2000);
-      }
-    }
-
-    syncPill.onclick = function (e) {
-      var b = e.target.closest('[data-sp]');
-      if (!b) return;
-      var sp = b.getAttribute('data-sp');
-      if (sp === 'prev') {
-        triggerPrev();
-      } else if (sp === 'next') {
-        triggerNext();
-      } else if (sp === 'ocr') {
-        toggleOcrSync();
-      } else if (sp === 'sync') {
-        syncCurrentPage();
-      }
-      updatePill();
-    };
-
-    /* ==================================================================
-     *  微软 PostMessage 通信与自动跟随
+     *  微软 PostMessage 通信握手
      * ================================================================== */
     function onMsMessage(e) {
       if (S.dead || !e || !e.data) return;
@@ -1732,7 +1508,6 @@
       if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); return; }
       if ((e.ctrlKey || e.metaKey) && (k === 'arrowleft' || k === 'pageup' || k === 'arrowup')) { e.preventDefault(); triggerPrev(); return; }
       if ((e.ctrlKey || e.metaKey) && (k === 'arrowright' || k === 'pagedown' || k === 'arrowdown')) { e.preventDefault(); triggerNext(); return; }
-      if (e.key === 'Tab') { e.preventDefault(); syncCurrentPage(); return; }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       var isNext = (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowDown' ||
@@ -1874,9 +1649,6 @@
             toast('翻页: ← → / 缩略图(G) — 板书会跟着切页 · 拿笔: 左侧工具条或按 2', 7000);
           }, 1200);
         }
-        if (S.slides > 1 && S.sync === 'deep' && st('fla_ms_done_check', '') !== '1') {
-          setTimeout(function () { if (!S.dead) hintCheck(); }, 9000);
-        }
         return stage;
       });
     }
@@ -1888,14 +1660,11 @@
 
     var stage = {
       S: S, el: wrap, toast: toast, goPage: goPage, setTool: setTool,
-      setSync: setSync, selfTest: selfTest, save: saveNow, toggleFilm: toggleFilm,
+      setSync: setSync, save: saveNow, toggleFilm: toggleFilm,
       destroy: function () {
         if (S.dead) return;
         S.dead = true;
         flushSave();
-        if (window.FLA_OCR) {
-          try { window.FLA_OCR.stopCapture(); } catch (e) { }
-        }
         window.removeEventListener('keydown', onKey, true);
         window.removeEventListener('message', onMsMessage, false);
         /* 摘掉全部窗口级监听与定时器: 反复进出放映不累积泄漏 */
