@@ -1041,8 +1041,11 @@ gen_conf
     check("放映舞台彻底移除画布翻页自动跳转与触屏误触(回归纯手动翻页)",
           "wasTap" not in ms_js and "goPage(p)" not in ms_js and "prevPage()" in ms_js and "nextPage()" in ms_js, "")
 
-    check("放映舞台左侧工具栏彻底移除左右翻页按键(杜绝误触回跳)",
-          "pgprev" not in ms_js and "pgnext" not in ms_js, "")
+    check("放映舞台左侧工具栏保留左右翻页按键用于独立切换画布页数(与微软独立)",
+          "pgprev" in ms_js and "pgnext" in ms_js and "goCanvasPage" in ms_js, "")
+
+    check("放映舞台画布切换与微软课件独立(只能靠点击触发，不重载微软iframe)",
+          "canvasNextPage" in ms_js and "canvasPrevPage" in ms_js and "showSlide" not in ms_js.split("function goCanvasPage")[1].split("function canvasNextPage")[0], "")
 
     check("放映舞台对上下左右及翻页笔按键完全放行并聚焦iframe原生响应",
           "focusIframe()" in ms_js and "arrow(up|down|left|right)" in ms_js and "isNext" not in ms_js, "")

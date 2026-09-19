@@ -194,7 +194,9 @@
     vbtn('', 'undo', '撤销 (Ctrl+Z)', icon('undo', 20));
     vbtn('', 'redo', '重做 (Ctrl+Y)', icon('redo', 20));
     barL.appendChild(el('i', 'ms-vsep'));
+    vbtn('', 'pgprev', '画布上一页 (独立板书)', icon('chevL', 19));
     vbtn('', 'addpage', '加一页板书(在末页之后)', icon('plusPage', 19));
+    vbtn('', 'pgnext', '画布下一页 (独立板书)', icon('chevR', 19));
     wrap.appendChild(barL);
 
     /* ---------------- 右侧工具条 ---------------- */
@@ -534,9 +536,35 @@
     function isBoardPageAt(n) { return n > S.slides; }
 
     /* ==================================================================
-     *  翻页 (画布与画面一起走)
+     *  翻页 (画布与画面独立 / 关联)
      * ================================================================== */
     function total() { return S.slides + S.extra; }
+
+    /* 纯画布翻页 (与微软完全独立, 绝不重载或回退微软 iframe, 只能靠点击触发) */
+    function goCanvasPage(n, quiet) {
+      n = clamp(n | 0, 1, total());
+      if (n === S.page && !quiet) { updatePageUI(); return; }
+      S.page = n;
+      S.selId = null;
+      redraw();
+      if (n > S.slides) {
+        hideFrames();
+      } else {
+        var cur = curFrame();
+        if (cur && cur.style.visibility === 'hidden') {
+          cur.style.visibility = 'visible';
+          cur.style.opacity = '1';
+        }
+      }
+      updatePageUI();
+      markFilm();
+      saveSoon();
+      focusIframe();
+    }
+    function canvasNextPage() { goCanvasPage(S.page + 1); }
+    function canvasPrevPage() { goCanvasPage(S.page - 1); }
+
+    /* 课件全量跳转 (仅在初始载入、显式增加板书页或刷新时调用) */
     function goPage(n, quiet) {
       n = clamp(n | 0, 1, total());
       if (n === S.page && !quiet) { updatePageUI(); return; }
@@ -548,8 +576,8 @@
       markFilm();
       saveSoon();
     }
-    function nextPage() { goPage(S.page + 1); }
-    function prevPage() { goPage(S.page - 1); }
+    function nextPage() { canvasNextPage(); }
+    function prevPage() { canvasPrevPage(); }
     function addPage() {
       S.extra++;
       goPage(total());
@@ -1055,7 +1083,7 @@
             (n > S.slides ? '<i class="ms-thumb-board">板</i>' : '<i class="ms-thumb-no">' + n + '</i>') + '</span>' +
             '<span class="ms-thumb-cap">' + (n > S.slides ? '板书页' : '第 ' + n + ' 页') +
             '<em class="ms-thumb-ink hidden">✎</em></span>';
-          c.onclick = function () { goPage(n); };
+          c.onclick = function () { goCanvasPage(n); };
           list.appendChild(c);
         })(i);
       }
@@ -1302,13 +1330,11 @@
       var a = b.getAttribute('data-a');
       switch (a) {
         case 'exit': doExit(); break;
-        case 'prev':
-          prevPage();
-          focusIframe();
+        case 'prev': case 'pgprev':
+          canvasPrevPage();
           break;
-        case 'next':
-          nextPage();
-          focusIframe();
+        case 'next': case 'pgnext':
+          canvasNextPage();
           break;
         case 'addpage': addPage(); break;
         case 'undo': undo(); break;
@@ -1366,14 +1392,14 @@
           var inp = body.querySelector('input');
           inp.focus(); inp.select();
           inp.onkeydown = function (ev) {
-            if (ev.key === 'Enter') { goPage(+inp.value || 1); close(); }
+            if (ev.key === 'Enter') { goCanvasPage(+inp.value || 1); close(); }
           };
           var g = body.querySelector('#msGotoGrid');
           for (var i = 1; i <= total(); i++) {
             (function (n) {
               var b = el('button', 'ms-goto-n' + (n === S.page ? ' on' : ''));
               b.textContent = n;
-              b.onclick = function () { goPage(n); close(); };
+              b.onclick = function () { goCanvasPage(n); close(); };
               g.appendChild(b);
             })(i);
           }
