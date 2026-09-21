@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/files")
 # ---- OnlyOffice 配置 (docker-compose 里启用) ----
 OO_URL = os.environ.get("ONLYOFFICE_URL", "").rstrip("/")          # 浏览器访问路径, 如 /ds
 OO_JWT = os.environ.get("ONLYOFFICE_JWT_SECRET", "").strip()       # 与 documentserver 共享的 JWT 密钥(可为空=不签名)
-APP_INTERNAL = os.environ.get("APP_INTERNAL_URL", "http://app:8000").rstrip("/")  # documentserver 回源地址
+APP_INTERNAL = os.environ.get("APP_INTERNAL_URL", f"http://app:{os.environ.get('PORT', '8306')}").rstrip("/")  # documentserver 回源地址
 OO_ENABLED = bool(OO_URL)
 
 OFFICE = converter.CONVERTIBLE

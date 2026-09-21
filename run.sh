@@ -53,7 +53,7 @@ case "${1:-help}" in
     ;;
   status)
     echo "── FLA 容器状态 (compose: $CF ${PROF:+profile:$PROF}) ──"
-    docker ps -a --filter name=fla --filter name=nginx --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+    docker ps -a --filter name=fla --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
     echo ""
     echo "── 健康检查 ──"
     PHOST=$(echo "${PUBLIC_URL:-}" | sed -E 's~https?://([^/:]+).*~\1~')
@@ -114,12 +114,13 @@ case "${1:-help}" in
     ;;
   start)
     echo ">> 启动 FLA ..."
-    $DC $DCP -f "$CF" up -d || { echo "✘ 启动失败, 查看日志: sudo bash run.sh logs"; exit 1; }
+    docker rm -f nginx 2>/dev/null || true
+    $DC $DCP -f "$CF" up -d --remove-orphans || { echo "✘ 启动失败, 查看日志: sudo bash run.sh logs"; exit 1; }
     for i in $(seq 1 20); do
       curl -sf -m 3 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && { echo "✔ 已启动"; exit 0; }
-      sleep 3
+      sleep 2
     done
-    echo "⚠ 容器已启动但健康检查未通过, 请稍候或查看: sudo bash run.sh logs app"
+    echo "⚠ 容器已启动但健康检查未通过, 请稍候或查看: sudo bash run.sh logs"
     ;;
   stop)
     echo ">> 停止 FLA (数据保留) ..."
@@ -128,12 +129,13 @@ case "${1:-help}" in
     ;;
   restart)
     echo ">> 重启 FLA ..."
-    $DC $DCP -f "$CF" restart
+    docker rm -f nginx 2>/dev/null || true
+    $DC $DCP -f "$CF" up -d --remove-orphans
     for i in $(seq 1 20); do
       curl -sf -m 3 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && { echo "✔ 已重启"; exit 0; }
-      sleep 3
+      sleep 2
     done
-    echo "⚠ 重启完成但健康检查未通过, 请查看: sudo bash run.sh logs app"
+    echo "⚠ 重启完成但健康检查未通过, 请查看: sudo bash run.sh logs"
     ;;
   logs)
     shift
@@ -152,8 +154,28 @@ case "${1:-help}" in
       echo "  (非 git 仓库，通过官方归档包更新代码)"
       curl -sL https://github.com/CLRV-FYX/fla/archive/refs/heads/arena/01a0add0-fla.tar.gz | tar -xz --strip-components=1
     fi
-    echo ">> 重启 app 容器以加载新代码 ..."
-    $DC $DCP -f "$CF" restart app
+    echo ">> 清理旧中间层容器 (释放 8306 端口归还给 fla 容器) ..."
+    docker rm -f nginx 2>/dev/null || true
+    echo ">> 重建并拉起 fla 容器 ($PORT->$PORT) ..."
+    $DC $DCP -f "$CF" up -d --remove-orphans
+    echo ">> 等待服务健康检查 ..."
+    OK=0
+    for i in $(seq 1 20); do
+      if curl -sf -m 3 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
+        OK=1
+        break
+      fi
+      sleep 2
+    done
+    if [ "$OK" = "1" ]; then
+      echo "✔ 应用已就绪 (http://127.0.0.1:$PORT/)"
+    else
+      echo "⚠ 应用启动中，若未响应可查看日志: sudo bash run.sh logs"
+    fi
+    echo ""
+    echo "── 容器状态 ──"
+    docker ps -a --filter name=fla --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+    echo ""
     echo "✔ 更新完成！"
     ;;
   update)

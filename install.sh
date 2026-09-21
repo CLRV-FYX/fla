@@ -518,7 +518,7 @@ else
     fi
     if [ "$PULLED" = "1" ]; then
       set_env ONLYOFFICE_URL "/ds"
-      set_env APP_INTERNAL_URL "http://app:8000"
+      set_env APP_INTERNAL_URL "http://app:${PORT}"
       PROFILE="ds"
       BUNDLED_DS=1
       MODE_TXT="完整(自带 OnlyOffice)"
@@ -580,6 +580,7 @@ check_endpoint(){
 }
 
 check_fla_internal(){
+  docker exec fla python3 -c "import urllib.request, os; p=os.environ.get('PORT', '8306'); urllib.request.urlopen(f'http://127.0.0.1:{p}/api/health', timeout=3)" >/dev/null 2>&1 || \
   docker exec fla python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)" >/dev/null 2>&1
 }
 

@@ -1038,6 +1038,14 @@ gen_conf
           "../web:/app/web" in dc_main and "../server:/app/server" in dc_main and
           "../web:/app/web" in dc_lite and "../server:/app/server" in dc_lite, "")
 
+    check("docker-compose 中 fla 容器直接映射对外发布 8306 端口且剔除占位 nginx 容器",
+          "${PORT:-8306}:${PORT:-8306}" in dc_main and "${PORT:-8306}:${PORT:-8306}" in dc_lite and
+          "container_name: nginx" not in dc_main and "container_name: nginx" not in dc_lite, "")
+
+    r_sh = (root / "run.sh").read_text()
+    check("run.sh pull 支持一键自动清理旧占位 nginx 容器并以 8306->8306 拉起 fla",
+          "docker rm -f nginx" in r_sh and "up -d --remove-orphans" in r_sh, "")
+
     check("放映舞台彻底移除画布翻页自动跳转与触屏误触(回归纯手动翻页)",
           "wasTap" not in ms_js and "goPage(p)" not in ms_js and "prevPage()" in ms_js and "nextPage()" in ms_js, "")
 

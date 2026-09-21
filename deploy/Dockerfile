@@ -22,15 +22,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY server ./server
 COPY web ./web
 
-ENV FLA_DATA_DIR=/data
+ENV FLA_DATA_DIR=/data PORT=8306
 RUN mkdir -p /data
 VOLUME /data
-EXPOSE 8000
+EXPOSE 8306 8000
 
 HEALTHCHECK --interval=60s --timeout=10s --retries=5 \
-  CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=8)" || exit 1
+  CMD python -c "import urllib.request, os; p=os.environ.get('PORT', '8306'); urllib.request.urlopen(f'http://127.0.0.1:{p}/api/health', timeout=8)" || exit 1
 
-# v1.27: --proxy-headers 让应用信任边缘 nginx 传来的 X-Forwarded-Proto/For,
-#        否则 https 访问会被当成 http(微软放映直链判定失败、安全上下文丢失)
-CMD ["uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", \
-     "--proxy-headers", "--forwarded-allow-ips", "*"]
+# v1.27: 端口从环境变量 PORT 读取 (默认 8306)
+CMD ["sh", "-c", "exec uvicorn server.main:app --host 0.0.0.0 --port \"${PORT:-8306}\" --workers 1 --proxy-headers --forwarded-allow-ips '*'"]
