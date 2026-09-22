@@ -957,6 +957,9 @@ gen_conf
     check("落地验证会识别 Welcome to nginx 并给补救命令",
           "Welcome to nginx" in edge and "PROBE_KIND=welcome" in edge and "edge.sh fix" in edge, "")
 
+    check("edge.sh 支持 no-catchall 移除默认监听，仅保留指定域名与 8306",
+          "no-catchall" in edge and "NO_CATCHALL" in edge, "")
+
     # 8.3 SSL: 必须是文件验证(HTTP-01), 不能抢占 80
     hs = (root / "https.sh").read_text()
     check("https.sh 用 --webroot 文件验证", "--webroot" in hs and '-w "$WEBROOT"' in hs, "")

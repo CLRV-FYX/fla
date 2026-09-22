@@ -99,6 +99,7 @@ case "${1:-help}" in
       reload) exec bash ./edge.sh --port "$PORT" reload ;;
       setup)  shift; exec bash ./edge.sh --port "$PORT" setup "$@" ;;
       remove) exec bash ./edge.sh remove ;;
+      no-catchall) exec bash ./edge.sh --port "$PORT" no-catchall ;;
       *)      exec bash ./edge.sh status ;;
     esac
     ;;

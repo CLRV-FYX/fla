@@ -38,11 +38,13 @@ STATE="/etc/fla/edge.state"          # 记录已配置域名, 供 https.sh / run
 
 # ---------- 参数 ----------
 ACTION="setup"; DOMS=""; PORT_OVERRIDE=""
+NO_CATCHALL=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    setup|status|reload|remove|doctor|fix|-h|--help) ACTION="${1#-}"; [ "$ACTION" = "help" ] && ACTION="--help"; shift ;;
+    setup|status|reload|remove|doctor|fix|no-catchall|-h|--help) ACTION="${1#-}"; [ "$ACTION" = "help" ] && ACTION="--help"; shift ;;
     --port) PORT_OVERRIDE="${2:-}"; shift 2 ;;
     --domain|--domains) DOMS="$DOMS ${2:-}"; shift 2 ;;
+    --no-catchall|--only-domains|--strict-domains) NO_CATCHALL=1; shift ;;
     --yes|-y) shift ;;
     -*) echo "未知参数: $1"; exit 1 ;;
     *) DOMS="$DOMS $1"; shift ;;
@@ -65,9 +67,11 @@ fla_port(){
   echo "${P:-8306}"
 }
 saved_doms(){ grep -E '^DOMAINS=' "$STATE" 2>/dev/null | head -1 | cut -d= -f2-; }
+saved_no_catchall(){ grep -E '^NO_CATCHALL=' "$STATE" 2>/dev/null | head -1 | cut -d= -f2; }
 
 PORT=$(fla_port)
 [ -z "$DOMS" ] && DOMS=$(saved_doms)
+[ "$NO_CATCHALL" = "0" ] && [ "$(saved_no_catchall)" = "1" ] && NO_CATCHALL=1
 
 save_state(){
   mkdir -p "$(dirname "$STATE")" 2>/dev/null
@@ -75,6 +79,7 @@ save_state(){
     echo "# FLA 边缘网关状态 (由 edge.sh 维护)"
     echo "PORT=$PORT"
     echo "DOMAINS=$DOMS"
+    echo "NO_CATCHALL=$NO_CATCHALL"
     echo "UPDATED=$(date '+%F %T')"
   } > "$STATE" 2>/dev/null
 }
@@ -383,9 +388,9 @@ __PROXY__
   fi
 
   # ---- ② catch-all default_server (只有确认没有别处占用 default_server 才生成,
-  #        否则 nginx -t 会因 "duplicate default server" 直接失败 → 整站起不来) ----
+  #        并且用户未要求仅限域名模式) ----
   local CAT80="" CAT443=""
-  if [ "${DEFAULT_OK:-1}" = "1" ]; then
+  if [ "${DEFAULT_OK:-1}" = "1" ] && [ "${NO_CATCHALL:-0}" != "1" ]; then
     CAT80="
 # ---------- 兜底: 其余任意域名/IP 也落到 FLA (不留发行版欢迎页) ----------
 server {
@@ -775,6 +780,22 @@ do_remove(){
   command -v nginx >/dev/null 2>&1 && nginx -t >>"$LOG" 2>&1 && { try systemctl reload nginx; log "nginx 已重载"; }
 }
 
+do_no_catchall(){
+  [ "$(id -u)" = "0" ] || die "请用 root 运行: sudo bash edge.sh no-catchall"
+  : >>"$LOG" 2>/dev/null
+  log "===== FLA 边缘网关: 移除 80/443 catch-all 兜底 ====="
+  log "保留反代域名: ${DOMS:-（未指定域名! 请先执行 sudo bash edge.sh setup 域名）}"
+  [ -z "$DOMS" ] && die "当前未配置任何域名，不能移除默认站点。请先指定域名: sudo bash edge.sh setup 域名1 域名2"
+  NO_CATCHALL=1
+  DEFAULT_OK=0
+  gen_conf
+  save_state
+  start_nginx || systemctl reload nginx 2>/dev/null || nginx -s reload 2>/dev/null
+  log "✔ 已更新 Nginx 配置 ($CONF): 彻底移除了 default_server 与 catch-all 监听"
+  log "✔ FLA 现仅在反代域名 (${DOMS}) 及直接访问 8306 端口时可用"
+  log "✔ 服务器 80/443 默认访问及其他域名已完全让出，供您的其他项目自由使用！"
+}
+
 case "$ACTION" in
   setup)  do_setup ;;
   status) do_status ;;
@@ -783,5 +804,6 @@ case "$ACTION" in
   remove) do_remove ;;
   doctor) do_doctor ;;
   fix)    do_fix ;;
+  no-catchall) do_no_catchall ;;
   *)      grep '^#' "$0" | sed 's/^# \{0,2\}//' ;;
 esac
