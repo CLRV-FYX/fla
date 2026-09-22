@@ -78,7 +78,11 @@
     back: '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
     down: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
     grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
-    timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M9 2h6"/>'
+    timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M9 2h6"/>',
+    dice: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.5" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.5" fill="currentColor"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    stepNext: '<path d="M5 4l10 8-10 8V4z"/><path d="M19 5v14"/>',
+    stepPrev: '<path d="M19 20L9 12l10-8v16z"/><path d="M5 19V5"/>'
   };
 
   function icon(n, s) {
@@ -102,6 +106,42 @@
   function fmtT(sec) {
     var m = Math.floor(sec / 60), s = sec % 60;
     return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function makeDraggable(widget, handle) {
+    if (!widget || !handle) return;
+    var isDragging = false, startX = 0, startY = 0, origX = 0, origY = 0;
+    handle.addEventListener('pointerdown', function (e) {
+      if (e.target.closest('button, input, select, textarea, label')) return;
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      var rect = widget.getBoundingClientRect();
+      origX = rect.left;
+      origY = rect.top;
+      try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    handle.addEventListener('pointermove', function (e) {
+      if (!isDragging) return;
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+      var maxW = window.innerWidth - widget.offsetWidth - 10;
+      var maxH = window.innerHeight - widget.offsetHeight - 10;
+      var nx = Math.max(10, Math.min(maxW, origX + dx));
+      var ny = Math.max(10, Math.min(maxH, origY + dy));
+      widget.style.left = nx + 'px';
+      widget.style.top = ny + 'px';
+      widget.style.right = 'auto';
+      widget.style.bottom = 'auto';
+      widget.style.transform = 'none';
+    });
+    function stopDrag(e) {
+      if (isDragging) {
+        isDragging = false;
+        try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
+      }
+    }
+    handle.addEventListener('pointerup', stopDrag);
+    handle.addEventListener('pointercancel', stopDrag);
   }
 
   /* ================================================================== */
@@ -175,6 +215,7 @@
       '<button class="ms-tb" data-a="align" title="微调板书区域(对准幻灯片)">' + icon('move', 17) + '</button>' +
       '<span class="ms-sep"></span>' +
       '<button class="ms-tb" data-a="time" id="msTime" title="点击归零">00:00</button>' +
+      '<button class="ms-tb" data-a="settings" title="工具栏个性化定制">' + icon('settings', 17) + '</button>' +
       '<button class="ms-tb" data-a="full" title="全屏 (F)">' + icon('full', 17) + '</button>';
     wrap.appendChild(top);
 
@@ -206,11 +247,16 @@
       b.setAttribute('data-a', act); b.title = title; b.innerHTML = ic;
       barR.appendChild(b); return b;
     }
+    rbtn('stepPrev', 'PPT 动画步退 / 上一步 (翻页笔穿透)', icon('stepPrev', 19));
+    rbtn('stepNext', 'PPT 动画步进 / 下一步 (翻页笔穿透)', icon('stepNext', 19));
+    rbtn('timer', '课堂计时器 (秒表 / 倒计时)', icon('timer', 20));
+    rbtn('picker', '随机抽选 (名单抽人 / 数字摇号)', icon('dice', 20));
     rbtn('film', '缩略图导航 (G)', icon('film', 20));
     rbtn('clear', '清空本页板书', icon('trash', 20));
     rbtn('bnb', '板中板: 独立小黑板(可加页)', icon('board', 20));
     rbtn('bg', '板书页底色: 白 / 黑板 / 绿黑板', '<span class="ms-dotbg"></span>');
     rbtn('black', '黑屏 (B)', icon('square', 20));
+    rbtn('settings', '工具栏功能个性化设置', icon('settings', 20));
     rbtn('local', '本地引擎(离线高保真渲染, 含动画)', icon('bolt', 20));
     if (S.mode === 'view') {
       rbtn('present', '全屏放映', icon('full', 20));
@@ -242,6 +288,845 @@
       '<canvas id="bbCv"></canvas>';
     wrap.appendChild(bnb);
     var bbCv = bnb.querySelector('#bbCv');
+
+    /* ---------------- 工具栏个性化定制配置 ---------------- */
+    var DEFAULT_TB_PREFS = {
+      cursor: true,
+      pen: true,
+      marker: true,
+      shape: true,
+      text: true,
+      laser: true,
+      eraser: true,
+      undo: true,
+      pageNav: true,
+      addpage: true,
+      stepBtns: true,
+      timer: true,
+      picker: true,
+      film: true,
+      clear: true,
+      bnb: true,
+      bg: true,
+      black: true,
+      settings: true,
+      local: false
+    };
+
+    function loadTbPrefs() {
+      try {
+        var raw = localStorage.getItem('fla_tb_prefs');
+        if (!raw) return Object.assign({}, DEFAULT_TB_PREFS);
+        return Object.assign({}, DEFAULT_TB_PREFS, JSON.parse(raw));
+      } catch (e) {
+        return Object.assign({}, DEFAULT_TB_PREFS);
+      }
+    }
+
+    var tbPrefs = loadTbPrefs();
+
+    function applyTbPrefs() {
+      ['cursor', 'pen', 'marker', 'shape', 'text', 'laser', 'eraser'].forEach(function (k) {
+        var elTool = barL.querySelector('[data-tool="' + k + '"]');
+        if (elTool) elTool.style.display = tbPrefs[k] === false ? 'none' : '';
+      });
+      var uEl = barL.querySelector('[data-a="undo"]');
+      var rEl = barL.querySelector('[data-a="redo"]');
+      if (uEl) uEl.style.display = tbPrefs.undo === false ? 'none' : '';
+      if (rEl) rEl.style.display = tbPrefs.undo === false ? 'none' : '';
+
+      var prevEl = barL.querySelector('[data-a="pgprev"]');
+      var nextEl = barL.querySelector('[data-a="pgnext"]');
+      if (prevEl) prevEl.style.display = tbPrefs.pageNav === false ? 'none' : '';
+      if (nextEl) nextEl.style.display = tbPrefs.pageNav === false ? 'none' : '';
+
+      var addEl = barL.querySelector('[data-a="addpage"]');
+      if (addEl) addEl.style.display = tbPrefs.addpage === false ? 'none' : '';
+
+      var spEl = barR.querySelector('[data-a="stepPrev"]');
+      var snEl = barR.querySelector('[data-a="stepNext"]');
+      if (spEl) spEl.style.display = tbPrefs.stepBtns === false ? 'none' : '';
+      if (snEl) snEl.style.display = tbPrefs.stepBtns === false ? 'none' : '';
+
+      ['timer', 'picker', 'film', 'clear', 'bnb', 'bg', 'black', 'settings', 'local'].forEach(function (k) {
+        var elA = barR.querySelector('[data-a="' + k + '"]');
+        if (elA) elA.style.display = tbPrefs[k] === false ? 'none' : '';
+      });
+
+      try {
+        localStorage.setItem('fla_tb_prefs', JSON.stringify(tbPrefs));
+      } catch (e) {}
+    }
+    applyTbPrefs();
+
+    /* ---------------- 设置弹窗 ---------------- */
+    var settingsModal = el('div', 'fla-settings-modal hidden');
+    wrap.appendChild(settingsModal);
+
+    function renderSettingsModal() {
+      settingsModal.innerHTML =
+        '<div class="fla-sm-head">' +
+          '<div class="fla-sm-title">⚙️ 工具栏个性化定制</div>' +
+          '<button class="fla-wh-btn" data-act="close" title="关闭">✕</button>' +
+        '</div>' +
+        '<div class="fla-sm-body">' +
+          '<div class="fla-sm-section">' +
+            '<div class="fla-sm-sec-title">左侧核心工具栏</div>' +
+            '<div class="fla-sm-grid">' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="cursor"' + (tbPrefs.cursor ? ' checked' : '') + '> 光标 / 选择</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="pen"' + (tbPrefs.pen ? ' checked' : '') + '> 画笔</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="marker"' + (tbPrefs.marker ? ' checked' : '') + '> 荧光笔</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="shape"' + (tbPrefs.shape ? ' checked' : '') + '> 几何图形</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="text"' + (tbPrefs.text ? ' checked' : '') + '> 文本输入</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="laser"' + (tbPrefs.laser ? ' checked' : '') + '> 激光笔</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="eraser"' + (tbPrefs.eraser ? ' checked' : '') + '> 橡皮擦</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="undo"' + (tbPrefs.undo ? ' checked' : '') + '> 撤销 / 重做</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="pageNav"' + (tbPrefs.pageNav ? ' checked' : '') + '> 画布上一页/下一页</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="addpage"' + (tbPrefs.addpage ? ' checked' : '') + '> 加一页板书</label>' +
+            '</div>' +
+          '</div>' +
+          '<div class="fla-sm-section">' +
+            '<div class="fla-sm-sec-title">右侧辅助教学工具栏</div>' +
+            '<div class="fla-sm-grid">' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="stepBtns"' + (tbPrefs.stepBtns ? ' checked' : '') + '> PPT 动画步退/步进</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="timer"' + (tbPrefs.timer ? ' checked' : '') + '> 课堂计时器</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="picker"' + (tbPrefs.picker ? ' checked' : '') + '> 随机抽选 (名单/摇号)</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="film"' + (tbPrefs.film ? ' checked' : '') + '> 缩略图导航</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="clear"' + (tbPrefs.clear ? ' checked' : '') + '> 清空本页板书</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="bnb"' + (tbPrefs.bnb ? ' checked' : '') + '> 板中板 (小黑板)</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="bg"' + (tbPrefs.bg ? ' checked' : '') + '> 板书底色切换</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="black"' + (tbPrefs.black ? ' checked' : '') + '> 幕布黑屏</label>' +
+              '<label class="fla-sm-item"><input type="checkbox" data-pref="local"' + (tbPrefs.local ? ' checked' : '') + '> 本地渲染引擎</label>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="fla-sm-foot">' +
+          '<button class="fla-tbtn fla-tbtn-sec" id="flaTbResetBtn">恢复默认推荐</button>' +
+          '<button class="fla-tbtn fla-tbtn-pri" id="flaTbDoneBtn">完成</button>' +
+        '</div>';
+
+      settingsModal.querySelectorAll('input[data-pref]').forEach(function (inp) {
+        inp.addEventListener('change', function () {
+          var k = inp.getAttribute('data-pref');
+          tbPrefs[k] = inp.checked;
+          applyTbPrefs();
+        });
+      });
+
+      var closeBtn = settingsModal.querySelector('[data-act="close"]');
+      if (closeBtn) closeBtn.onclick = function () { settingsModal.classList.add('hidden'); };
+      var doneBtn = settingsModal.querySelector('#flaTbDoneBtn');
+      if (doneBtn) doneBtn.onclick = function () { settingsModal.classList.add('hidden'); };
+      var resetBtn = settingsModal.querySelector('#flaTbResetBtn');
+      if (resetBtn) resetBtn.onclick = function () {
+        tbPrefs = Object.assign({}, DEFAULT_TB_PREFS);
+        applyTbPrefs();
+        renderSettingsModal();
+        toast('已恢复默认工具栏设置');
+      };
+    }
+
+    function toggleSettingsModal() {
+      if (settingsModal.classList.contains('hidden')) {
+        renderSettingsModal();
+        settingsModal.classList.remove('hidden');
+      } else {
+        settingsModal.classList.add('hidden');
+      }
+    }
+
+    /* ---------------- 课堂计时器 (倒计时 & 秒表) ---------------- */
+    var timerWidget = el('div', 'fla-widget fla-timer-widget hidden');
+    wrap.appendChild(timerWidget);
+
+    var timerMin = el('div', 'fla-timer-min hidden');
+    timerMin.innerHTML = icon('timer', 15) + '<span id="tmMinTxt">05:00</span>';
+    wrap.appendChild(timerMin);
+
+    var TMR = {
+      mode: 'countdown',
+      countdownSec: 300,
+      countdownRem: 300,
+      countdownRun: false,
+      countdownTimer: null,
+      stopwatchMs: 0,
+      stopwatchRun: false,
+      stopwatchTimer: null,
+      stopwatchLast: 0,
+      stopwatchLaps: []
+    };
+
+    function playTone(freq, dur, type, delay) {
+      try {
+        var AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        var ctx = TMR._actx || (TMR._actx = new AudioContext());
+        if (ctx.state === 'suspended') ctx.resume();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = type || 'sine';
+        var t = ctx.currentTime + (delay || 0);
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0.15, t);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + dur);
+      } catch (e) {}
+    }
+
+    function playAlarm() {
+      playTone(523.25, 0.35, 'sine', 0);
+      playTone(659.25, 0.35, 'sine', 0.15);
+      playTone(783.99, 0.35, 'sine', 0.30);
+      playTone(1046.50, 0.65, 'sine', 0.45);
+    }
+
+    function fmtStopwatch(ms) {
+      var totalSec = Math.floor(ms / 1000);
+      var m = Math.floor(totalSec / 60);
+      var s = totalSec % 60;
+      var tenths = Math.floor((ms % 1000) / 100);
+      return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s + '.' + tenths;
+    }
+
+    function updateTimerUI() {
+      var cdDigits = timerWidget.querySelector('#tmCountdownDigits');
+      if (cdDigits) {
+        cdDigits.textContent = fmtT(TMR.countdownRem);
+        if (TMR.countdownRem === 0) cdDigits.classList.add('times-up');
+        else cdDigits.classList.remove('times-up');
+      }
+      var swDigits = timerWidget.querySelector('#tmStopwatchDigits');
+      if (swDigits) {
+        swDigits.textContent = fmtStopwatch(TMR.stopwatchMs);
+      }
+      var minTxt = timerMin.querySelector('#tmMinTxt');
+      if (minTxt) {
+        minTxt.textContent = TMR.mode === 'countdown' ? fmtT(TMR.countdownRem) : fmtStopwatch(TMR.stopwatchMs);
+      }
+    }
+
+    function renderTimerWidget() {
+      timerWidget.innerHTML =
+        '<div class="fla-widget-head" id="tmHead">' +
+          '<div class="fla-wh-title">' + icon('timer', 16) + ' 课堂计时器</div>' +
+          '<div class="fla-wh-actions">' +
+            '<button class="fla-wh-btn" data-act="min" title="最小化到侧边">🗕</button>' +
+            '<button class="fla-wh-btn" data-act="close" title="关闭">✕</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="fla-widget-tabs">' +
+          '<button class="fla-wtab ' + (TMR.mode === 'countdown' ? 'on' : '') + '" data-tab="countdown">倒计时</button>' +
+          '<button class="fla-wtab ' + (TMR.mode === 'stopwatch' ? 'on' : '') + '" data-tab="stopwatch">秒表</button>' +
+        '</div>' +
+        '<div class="fla-widget-body" id="tmCountdownBody" style="' + (TMR.mode === 'countdown' ? '' : 'display:none;') + '">' +
+          '<div class="fla-timer-digits' + (TMR.countdownRem === 0 ? ' times-up' : '') + '" id="tmCountdownDigits">' + fmtT(TMR.countdownRem) + '</div>' +
+          '<div class="fla-timer-presets">' +
+            '<button class="fla-tpill" data-sec="30">30秒</button>' +
+            '<button class="fla-tpill" data-sec="60">1分钟</button>' +
+            '<button class="fla-tpill" data-sec="120">2分钟</button>' +
+            '<button class="fla-tpill" data-sec="180">3分钟</button>' +
+            '<button class="fla-tpill" data-sec="300">5分钟</button>' +
+            '<button class="fla-tpill" data-sec="600">10分钟</button>' +
+          '</div>' +
+          '<div class="fla-timer-presets" style="margin-bottom:12px;">' +
+            '<button class="fla-tpill" data-adj="-60">-1分</button>' +
+            '<button class="fla-tpill" data-adj="30">+30秒</button>' +
+            '<button class="fla-tpill" data-adj="60">+1分</button>' +
+          '</div>' +
+          '<div class="fla-timer-ctrls">' +
+            '<button class="fla-tbtn fla-tbtn-pri" id="tmCdStartBtn">' + (TMR.countdownRun ? '⏸ 暂停' : '▶ 开始') + '</button>' +
+            '<button class="fla-tbtn fla-tbtn-sec" id="tmCdResetBtn">⟲ 重置</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="fla-widget-body" id="tmStopwatchBody" style="' + (TMR.mode === 'stopwatch' ? '' : 'display:none;') + '">' +
+          '<div class="fla-timer-digits" id="tmStopwatchDigits">' + fmtStopwatch(TMR.stopwatchMs) + '</div>' +
+          '<div class="fla-timer-ctrls">' +
+            '<button class="fla-tbtn fla-tbtn-pri" id="tmSwStartBtn">' + (TMR.stopwatchRun ? '⏸ 暂停' : '▶ 开始') + '</button>' +
+            '<button class="fla-tbtn fla-tbtn-sec" id="tmSwLapBtn">🚩 计次</button>' +
+            '<button class="fla-tbtn fla-tbtn-sec" id="tmSwResetBtn">⟲ 重置</button>' +
+          '</div>' +
+          '<div class="fla-lap-list" id="tmLapList" style="' + (TMR.stopwatchLaps.length ? '' : 'display:none;') + '"></div>' +
+        '</div>';
+
+      renderLaps();
+      bindTimerEvents();
+      makeDraggable(timerWidget, timerWidget.querySelector('#tmHead'));
+    }
+
+    function renderLaps() {
+      var lapList = timerWidget.querySelector('#tmLapList');
+      if (!lapList) return;
+      if (!TMR.stopwatchLaps.length) { lapList.style.display = 'none'; return; }
+      lapList.style.display = 'block';
+      lapList.innerHTML = TMR.stopwatchLaps.map(function (lap, idx) {
+        return '<div class="fla-lap-row"><span>第 ' + (idx + 1) + ' 次</span><span>分段: +' + fmtStopwatch(lap.split) + '</span><span>' + fmtStopwatch(lap.total) + '</span></div>';
+      }).reverse().join('');
+    }
+
+    function bindTimerEvents() {
+      timerWidget.querySelectorAll('.fla-wtab').forEach(function (tab) {
+        tab.onclick = function () {
+          TMR.mode = tab.getAttribute('data-tab');
+          renderTimerWidget();
+        };
+      });
+
+      timerWidget.querySelectorAll('[data-sec]').forEach(function (b) {
+        b.onclick = function () {
+          var s = parseInt(b.getAttribute('data-sec'), 10) || 60;
+          TMR.countdownSec = s;
+          TMR.countdownRem = s;
+          stopCountdown();
+          renderTimerWidget();
+        };
+      });
+
+      timerWidget.querySelectorAll('[data-adj]').forEach(function (b) {
+        b.onclick = function () {
+          var adj = parseInt(b.getAttribute('data-adj'), 10) || 0;
+          TMR.countdownRem = Math.max(5, TMR.countdownRem + adj);
+          TMR.countdownSec = Math.max(TMR.countdownSec, TMR.countdownRem);
+          updateTimerUI();
+        };
+      });
+
+      var cdStart = timerWidget.querySelector('#tmCdStartBtn');
+      if (cdStart) {
+        cdStart.onclick = function () {
+          if (TMR.countdownRun) {
+            stopCountdown();
+            cdStart.textContent = '▶ 继续';
+          } else {
+            startCountdown();
+            cdStart.textContent = '⏸ 暂停';
+          }
+        };
+      }
+
+      var cdReset = timerWidget.querySelector('#tmCdResetBtn');
+      if (cdReset) {
+        cdReset.onclick = function () {
+          stopCountdown();
+          TMR.countdownRem = TMR.countdownSec;
+          renderTimerWidget();
+        };
+      }
+
+      var swStart = timerWidget.querySelector('#tmSwStartBtn');
+      if (swStart) {
+        swStart.onclick = function () {
+          if (TMR.stopwatchRun) {
+            stopStopwatch();
+            swStart.textContent = '▶ 继续';
+          } else {
+            startStopwatch();
+            swStart.textContent = '⏸ 暂停';
+          }
+        };
+      }
+
+      var swLap = timerWidget.querySelector('#tmSwLapBtn');
+      if (swLap) {
+        swLap.onclick = function () {
+          if (!TMR.stopwatchMs) return;
+          var last = TMR.stopwatchLaps.length ? TMR.stopwatchLaps[TMR.stopwatchLaps.length - 1].total : 0;
+          TMR.stopwatchLaps.push({ split: TMR.stopwatchMs - last, total: TMR.stopwatchMs });
+          renderLaps();
+        };
+      }
+
+      var swReset = timerWidget.querySelector('#tmSwResetBtn');
+      if (swReset) {
+        swReset.onclick = function () {
+          stopStopwatch();
+          TMR.stopwatchMs = 0;
+          TMR.stopwatchLaps = [];
+          renderTimerWidget();
+        };
+      }
+
+      var minBtn = timerWidget.querySelector('[data-act="min"]');
+      if (minBtn) minBtn.onclick = function () {
+        timerWidget.classList.add('hidden');
+        timerMin.classList.remove('hidden');
+      };
+      var closeBtn = timerWidget.querySelector('[data-act="close"]');
+      if (closeBtn) closeBtn.onclick = function () {
+        timerWidget.classList.add('hidden');
+        timerMin.classList.add('hidden');
+      };
+    }
+
+    timerMin.onclick = function () {
+      timerMin.classList.add('hidden');
+      timerWidget.classList.remove('hidden');
+      renderTimerWidget();
+    };
+    makeDraggable(timerMin, timerMin);
+
+    function startCountdown() {
+      if (TMR.countdownRem <= 0) TMR.countdownRem = TMR.countdownSec;
+      TMR.countdownRun = true;
+      clearInterval(TMR.countdownTimer);
+      var lastTick = Date.now();
+      TMR.countdownTimer = setInterval(function () {
+        var now = Date.now();
+        var delta = Math.floor((now - lastTick) / 1000);
+        if (delta >= 1) {
+          TMR.countdownRem = Math.max(0, TMR.countdownRem - delta);
+          lastTick = now;
+          updateTimerUI();
+          if (TMR.countdownRem === 0) {
+            stopCountdown();
+            playAlarm();
+            toast('⏰ 倒计时结束！');
+            renderTimerWidget();
+          }
+        }
+      }, 250);
+    }
+
+    function stopCountdown() {
+      TMR.countdownRun = false;
+      clearInterval(TMR.countdownTimer);
+      TMR.countdownTimer = null;
+    }
+
+    function startStopwatch() {
+      TMR.stopwatchRun = true;
+      clearInterval(TMR.stopwatchTimer);
+      TMR.stopwatchLast = Date.now();
+      TMR.stopwatchTimer = setInterval(function () {
+        var now = Date.now();
+        TMR.stopwatchMs += (now - TMR.stopwatchLast);
+        TMR.stopwatchLast = now;
+        updateTimerUI();
+      }, 50);
+    }
+
+    function stopStopwatch() {
+      TMR.stopwatchRun = false;
+      clearInterval(TMR.stopwatchTimer);
+      TMR.stopwatchTimer = null;
+    }
+
+    function toggleTimerWidget() {
+      if (timerWidget.classList.contains('hidden') && timerMin.classList.contains('hidden')) {
+        renderTimerWidget();
+        timerWidget.style.right = '70px';
+        timerWidget.style.top = '70px';
+        timerWidget.classList.remove('hidden');
+      } else {
+        timerWidget.classList.add('hidden');
+        timerMin.classList.add('hidden');
+      }
+    }
+
+    /* ---------------- 课堂抽选 (名单抽人 & 数字摇号) ---------------- */
+    var pickerWidget = el('div', 'fla-widget fla-picker-widget hidden');
+    wrap.appendChild(pickerWidget);
+
+    var DEFAULT_ROSTER = [
+      '张明', '李华', '王强', '赵敏', '钱程', '孙悦', '周杰', '吴桐',
+      '郑浩', '陈晨', '韩雪', '刘洋', '杨柳', '黄晓', '何润', '徐静'
+    ];
+
+    function loadRoster() {
+      try {
+        var raw = localStorage.getItem('fla_picker_roster');
+        if (raw) {
+          var arr = JSON.parse(raw);
+          if (Array.isArray(arr) && arr.length) return arr;
+        }
+      } catch (e) {}
+      return DEFAULT_ROSTER.slice();
+    }
+
+    var PK = {
+      mode: 'roster',
+      roster: loadRoster(),
+      pool: [],
+      pickCount: 1,
+      noRepeat: true,
+      numMin: 1,
+      numMax: 50,
+      numPool: [],
+      numPickCount: 1,
+      numNoRepeat: true,
+      rolling: false,
+      rollTimer: null,
+      drawerOpen: false
+    };
+    PK.pool = PK.roster.slice();
+    function initNumPool() {
+      PK.numPool = [];
+      for (var i = PK.numMin; i <= PK.numMax; i++) PK.numPool.push(i);
+    }
+    initNumPool();
+
+    function renderPickerWidget() {
+      pickerWidget.innerHTML =
+        '<div class="fla-widget-head" id="pkHead">' +
+          '<div class="fla-wh-title">' + icon('dice', 16) + ' 课堂随机抽选</div>' +
+          '<div class="fla-wh-actions">' +
+            '<button class="fla-wh-btn" data-act="close" title="关闭">✕</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="fla-widget-tabs">' +
+          '<button class="fla-wtab ' + (PK.mode === 'roster' ? 'on' : '') + '" data-tab="roster">名单抽人</button>' +
+          '<button class="fla-wtab ' + (PK.mode === 'number' ? 'on' : '') + '" data-tab="number">数字摇号</button>' +
+        '</div>' +
+        '<div class="fla-widget-body" id="pkRosterBody" style="' + (PK.mode === 'roster' ? '' : 'display:none;') + '">' +
+          '<div class="fla-pk-subbar">' +
+            '<span id="pkPoolStatus">候选池: ' + PK.pool.length + ' / ' + PK.roster.length + ' 人</span>' +
+            '<div style="display:flex; gap:6px;">' +
+              '<button class="fla-tpill" id="pkResetPoolBtn" title="恢复全部人员至候选池">重置池</button>' +
+              '<button class="fla-tpill" id="pkToggleDrawerBtn">' + (PK.drawerOpen ? '收起名单' : '导入/编辑') + '</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="fla-pk-drawer ' + (PK.drawerOpen ? '' : 'hidden') + '" id="pkDrawer">' +
+            '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+              '<span style="font-size:12px; font-weight:700;">学生名单管理</span>' +
+              '<input type="file" id="pkFileInput" accept=".xlsx,.csv,.txt" style="display:none;">' +
+              '<button class="fla-tpill" id="pkUploadBtn" style="background:#2563eb; color:#fff;">📁 导入表格 (Excel/CSV)</button>' +
+            '</div>' +
+            '<textarea class="fla-pk-textarea" id="pkRosterText" placeholder="每行一个学生姓名，如：&#10;张明&#10;李华&#10;王强">' + PK.roster.join('\n') + '</textarea>' +
+            '<div style="display:flex; justify-content:flex-end; gap:6px;">' +
+              '<button class="fla-tpill" id="pkDemoBtn">示例名单</button>' +
+              '<button class="fla-tpill" id="pkSaveBtn" style="background:#10b981; color:#fff;">保存名单</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="fla-pk-subbar" style="margin-top:4px;">' +
+            '<div style="display:flex; align-items:center; gap:6px;">' +
+              '<span>人数:</span>' +
+              '<select class="fla-pk-sel" id="pkCountSel">' +
+                '<option value="1"' + (PK.pickCount === 1 ? ' selected' : '') + '>抽 1 人</option>' +
+                '<option value="2"' + (PK.pickCount === 2 ? ' selected' : '') + '>抽 2 人</option>' +
+                '<option value="3"' + (PK.pickCount === 3 ? ' selected' : '') + '>抽 3 人</option>' +
+                '<option value="5"' + (PK.pickCount === 5 ? ' selected' : '') + '>抽 5 人</option>' +
+              '</select>' +
+            '</div>' +
+            '<label class="fla-pk-chk"><input type="checkbox" id="pkNoRepeatChk"' + (PK.noRepeat ? ' checked' : '') + '> 不重复抽取</label>' +
+          '</div>' +
+          '<div class="fla-pk-stage" id="pkStage">' +
+            '<div class="fla-pk-card" id="pkCard">等待开始</div>' +
+            '<div class="fla-pk-winners-row" id="pkWinnersRow" style="display:none; margin-top:8px;"></div>' +
+          '</div>' +
+          '<button class="fla-tbtn fla-tbtn-pri" id="pkStartBtn" style="width:100%; justify-content:center;">' + (PK.rolling ? '⏹ 停止' : '🎯 开始抽人') + '</button>' +
+        '</div>' +
+        '<div class="fla-widget-body" id="pkNumberBody" style="' + (PK.mode === 'number' ? '' : 'display:none;') + '">' +
+          '<div class="fla-pk-subbar">' +
+            '<div style="display:flex; align-items:center; gap:6px;">' +
+              '<span>范围:</span>' +
+              '<input type="number" id="pkNumMin" value="' + PK.numMin + '" min="0" max="9999" style="width:58px; padding:3px 6px; border-radius:6px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); color:#fff; text-align:center;">' +
+              '<span>~</span>' +
+              '<input type="number" id="pkNumMax" value="' + PK.numMax + '" min="1" max="9999" style="width:58px; padding:3px 6px; border-radius:6px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); color:#fff; text-align:center;">' +
+            '</div>' +
+            '<button class="fla-tpill" id="pkNumResetPoolBtn">重置数字池</button>' +
+          '</div>' +
+          '<div class="fla-pk-subbar">' +
+            '<div style="display:flex; align-items:center; gap:6px;">' +
+              '<span>个数:</span>' +
+              '<select class="fla-pk-sel" id="pkNumCountSel">' +
+                '<option value="1"' + (PK.numPickCount === 1 ? ' selected' : '') + '>抽 1 个</option>' +
+                '<option value="2"' + (PK.numPickCount === 2 ? ' selected' : '') + '>抽 2 个</option>' +
+                '<option value="3"' + (PK.numPickCount === 3 ? ' selected' : '') + '>抽 3 个</option>' +
+              '</select>' +
+            '</div>' +
+            '<label class="fla-pk-chk"><input type="checkbox" id="pkNumNoRepeatChk"' + (PK.numNoRepeat ? ' checked' : '') + '> 不重复摇号</label>' +
+          '</div>' +
+          '<div class="fla-pk-stage" id="pkNumStage">' +
+            '<div class="fla-pk-card" id="pkNumCard">' + PK.numMin + ' ~ ' + PK.numMax + '</div>' +
+            '<div class="fla-pk-winners-row" id="pkNumWinnersRow" style="display:none; margin-top:8px;"></div>' +
+          '</div>' +
+          '<button class="fla-tbtn fla-tbtn-pri" id="pkNumStartBtn" style="width:100%; justify-content:center;">' + (PK.rolling ? '⏹ 停止' : '🎲 开始摇号') + '</button>' +
+        '</div>';
+
+      bindPickerEvents();
+      makeDraggable(pickerWidget, pickerWidget.querySelector('#pkHead'));
+    }
+
+    function bindPickerEvents() {
+      pickerWidget.querySelectorAll('.fla-wtab').forEach(function (tab) {
+        tab.onclick = function () {
+          if (PK.rolling) return;
+          PK.mode = tab.getAttribute('data-tab');
+          renderPickerWidget();
+        };
+      });
+
+      var closeBtn = pickerWidget.querySelector('[data-act="close"]');
+      if (closeBtn) closeBtn.onclick = function () {
+        if (PK.rolling) stopPickerRoll();
+        pickerWidget.classList.add('hidden');
+      };
+
+      var resetPoolBtn = pickerWidget.querySelector('#pkResetPoolBtn');
+      if (resetPoolBtn) resetPoolBtn.onclick = function () {
+        PK.pool = PK.roster.slice();
+        toast('已恢复全部 ' + PK.roster.length + ' 人至候选池');
+        renderPickerWidget();
+      };
+
+      var countSel = pickerWidget.querySelector('#pkCountSel');
+      if (countSel) countSel.onchange = function () {
+        PK.pickCount = parseInt(countSel.value, 10) || 1;
+      };
+
+      var noRepChk = pickerWidget.querySelector('#pkNoRepeatChk');
+      if (noRepChk) noRepChk.onchange = function () {
+        PK.noRepeat = noRepChk.checked;
+      };
+
+      var startBtn = pickerWidget.querySelector('#pkStartBtn');
+      if (startBtn) startBtn.onclick = function () {
+        if (PK.rolling) stopPickerRoll();
+        else startPickerRoll(false);
+      };
+
+      var toggleDrawerBtn = pickerWidget.querySelector('#pkToggleDrawerBtn');
+      if (toggleDrawerBtn) toggleDrawerBtn.onclick = function () {
+        PK.drawerOpen = !PK.drawerOpen;
+        var drw = pickerWidget.querySelector('#pkDrawer');
+        if (drw) drw.classList.toggle('hidden', !PK.drawerOpen);
+        toggleDrawerBtn.textContent = PK.drawerOpen ? '收起名单' : '导入/编辑';
+      };
+
+      var uploadBtn = pickerWidget.querySelector('#pkUploadBtn');
+      var fileInp = pickerWidget.querySelector('#pkFileInput');
+      if (uploadBtn && fileInp) {
+        uploadBtn.onclick = function () { fileInp.click(); };
+        fileInp.onchange = function () {
+          var f = fileInp.files && fileInp.files[0];
+          if (!f) return;
+          var fd = new FormData();
+          fd.append('file', f);
+          toast('正在解析名单文件…');
+          fetch('/api/tools/parse-roster', { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+              if (res.ok && res.names && res.names.length) {
+                PK.roster = res.names;
+                PK.pool = res.names.slice();
+                try { localStorage.setItem('fla_picker_roster', JSON.stringify(PK.roster)); } catch (e) {}
+                toast('成功导入 ' + res.names.length + ' 名学生！');
+                PK.drawerOpen = false;
+                renderPickerWidget();
+              } else {
+                toast('未能在表格中识别到姓名列，请核对文件');
+              }
+            })
+            .catch(function () {
+              var reader = new FileReader();
+              reader.onload = function (evt) {
+                var txt = evt.target.result || '';
+                var lines = txt.split(/[\r\n]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+                if (lines.length) {
+                  PK.roster = lines;
+                  PK.pool = lines.slice();
+                  try { localStorage.setItem('fla_picker_roster', JSON.stringify(PK.roster)); } catch (e) {}
+                  toast('导入成功 ' + lines.length + ' 名学生！');
+                  PK.drawerOpen = false;
+                  renderPickerWidget();
+                }
+              };
+              reader.readAsText(f);
+            });
+        };
+      }
+
+      var saveBtn = pickerWidget.querySelector('#pkSaveBtn');
+      if (saveBtn) saveBtn.onclick = function () {
+        var tx = pickerWidget.querySelector('#pkRosterText').value;
+        var names = tx.split(/[\r\n]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+        if (!names.length) { toast('名单不能为空'); return; }
+        PK.roster = names;
+        PK.pool = names.slice();
+        try { localStorage.setItem('fla_picker_roster', JSON.stringify(PK.roster)); } catch (e) {}
+        toast('已保存 ' + names.length + ' 名学生名单');
+        PK.drawerOpen = false;
+        renderPickerWidget();
+      };
+
+      var demoBtn = pickerWidget.querySelector('#pkDemoBtn');
+      if (demoBtn) demoBtn.onclick = function () {
+        var txEl = pickerWidget.querySelector('#pkRosterText');
+        if (txEl) txEl.value = DEFAULT_ROSTER.join('\n');
+      };
+
+      var numMinInp = pickerWidget.querySelector('#pkNumMin');
+      var numMaxInp = pickerWidget.querySelector('#pkNumMax');
+      if (numMinInp && numMaxInp) {
+        numMinInp.onchange = function () {
+          PK.numMin = parseInt(numMinInp.value, 10) || 1;
+          initNumPool();
+        };
+        numMaxInp.onchange = function () {
+          PK.numMax = parseInt(numMaxInp.value, 10) || 50;
+          initNumPool();
+        };
+      }
+      var numResetBtn = pickerWidget.querySelector('#pkNumResetPoolBtn');
+      if (numResetBtn) numResetBtn.onclick = function () {
+        initNumPool();
+        toast('已重置数字池为 ' + PK.numMin + ' ~ ' + PK.numMax);
+      };
+      var numCountSel = pickerWidget.querySelector('#pkNumCountSel');
+      if (numCountSel) numCountSel.onchange = function () {
+        PK.numPickCount = parseInt(numCountSel.value, 10) || 1;
+      };
+      var numNoRepChk = pickerWidget.querySelector('#pkNumNoRepeatChk');
+      if (numNoRepChk) numNoRepChk.onchange = function () {
+        PK.numNoRepeat = numNoRepChk.checked;
+      };
+      var numStartBtn = pickerWidget.querySelector('#pkNumStartBtn');
+      if (numStartBtn) numStartBtn.onclick = function () {
+        if (PK.rolling) stopPickerRoll();
+        else startPickerRoll(true);
+      };
+    }
+
+    function startPickerRoll(isNumber) {
+      if (isNumber) {
+        if (PK.numNoRepeat && PK.numPool.length < PK.numPickCount) {
+          initNumPool();
+          toast('数字池已抽完，已自动重置');
+        }
+      } else {
+        if (!PK.roster.length) { toast('请先导入或添加学生名单'); return; }
+        if (PK.noRepeat && PK.pool.length < PK.pickCount) {
+          PK.pool = PK.roster.slice();
+          toast('候选池人数不足，已自动重新装满候选池');
+        }
+      }
+
+      PK.rolling = true;
+      var cardEl = isNumber ? pickerWidget.querySelector('#pkNumCard') : pickerWidget.querySelector('#pkCard');
+      var winRow = isNumber ? pickerWidget.querySelector('#pkNumWinnersRow') : pickerWidget.querySelector('#pkWinnersRow');
+      var startBtn = isNumber ? pickerWidget.querySelector('#pkNumStartBtn') : pickerWidget.querySelector('#pkStartBtn');
+      if (startBtn) startBtn.textContent = '⏹ 停止';
+      if (winRow) { winRow.style.display = 'none'; winRow.innerHTML = ''; }
+      if (cardEl) {
+        cardEl.style.display = 'block';
+        cardEl.classList.remove('winner');
+        cardEl.classList.add('rolling');
+      }
+
+      var source = isNumber ? PK.numPool : PK.pool;
+      if (!source.length) source = isNumber ? [1, 2, 3] : PK.roster;
+      var rollInterval = 45;
+      var startTime = Date.now();
+
+      function tick() {
+        if (!PK.rolling) return;
+        var rIdx = Math.floor(Math.random() * source.length);
+        if (cardEl) cardEl.textContent = source[rIdx];
+        playTone(300 + Math.random() * 200, 0.04, 'triangle', 0);
+        if (Date.now() - startTime > 2200) {
+          stopPickerRoll(isNumber);
+          return;
+        }
+        PK.rollTimer = setTimeout(tick, rollInterval);
+      }
+      tick();
+    }
+
+    function stopPickerRoll(isNumber) {
+      if (!PK.rolling) return;
+      clearTimeout(PK.rollTimer);
+      PK.rolling = false;
+
+      var cardEl = isNumber ? pickerWidget.querySelector('#pkNumCard') : pickerWidget.querySelector('#pkCard');
+      var winRow = isNumber ? pickerWidget.querySelector('#pkNumWinnersRow') : pickerWidget.querySelector('#pkWinnersRow');
+      var startBtn = isNumber ? pickerWidget.querySelector('#pkNumStartBtn') : pickerWidget.querySelector('#pkStartBtn');
+      if (startBtn) startBtn.textContent = isNumber ? '🎲 开始摇号' : '🎯 开始抽人';
+
+      var delays = [70, 110, 160, 240, 360];
+      var step = 0;
+      var source = isNumber ? (PK.numNoRepeat ? PK.numPool : null) : (PK.noRepeat ? PK.pool : null);
+      if (!source || !source.length) source = isNumber ? PK.numPool : PK.roster;
+      if (!source.length) source = isNumber ? [1, 2, 3] : ['学生'];
+
+      function decelerate() {
+        if (step < delays.length) {
+          var rIdx = Math.floor(Math.random() * source.length);
+          if (cardEl) cardEl.textContent = source[rIdx];
+          playTone(400 + step * 60, 0.06, 'sine', 0);
+          setTimeout(decelerate, delays[step++]);
+        } else {
+          finalizePick(isNumber);
+        }
+      }
+      decelerate();
+    }
+
+    function finalizePick(isNumber) {
+      var cardEl = isNumber ? pickerWidget.querySelector('#pkNumCard') : pickerWidget.querySelector('#pkCard');
+      var winRow = isNumber ? pickerWidget.querySelector('#pkNumWinnersRow') : pickerWidget.querySelector('#pkWinnersRow');
+      var count = isNumber ? PK.numPickCount : PK.pickCount;
+      var winners = [];
+
+      if (isNumber) {
+        var avail = PK.numNoRepeat ? PK.numPool : [];
+        if (!avail.length) {
+          for (var ni = PK.numMin; ni <= PK.numMax; ni++) avail.push(ni);
+        }
+        for (var i = 0; i < count; i++) {
+          if (!avail.length) break;
+          var pickIdx = Math.floor(Math.random() * avail.length);
+          var val = avail.splice(pickIdx, 1)[0];
+          winners.push(val);
+        }
+        if (PK.numNoRepeat) PK.numPool = avail;
+      } else {
+        var pool = PK.noRepeat ? PK.pool : PK.roster.slice();
+        if (pool.length < count) pool = PK.roster.slice();
+        for (var j = 0; j < count; j++) {
+          if (!pool.length) break;
+          var pIdx = Math.floor(Math.random() * pool.length);
+          var name = pool.splice(pIdx, 1)[0];
+          winners.push(name);
+        }
+        if (PK.noRepeat) PK.pool = pool;
+      }
+
+      if (cardEl) {
+        cardEl.classList.remove('rolling');
+        if (winners.length === 1) {
+          cardEl.textContent = '🎉 ' + winners[0] + ' 🎉';
+          cardEl.classList.add('winner');
+        } else {
+          cardEl.style.display = 'none';
+        }
+      }
+
+      if (winRow && winners.length > 1) {
+        winRow.style.display = 'flex';
+        winRow.innerHTML = winners.map(function (w) {
+          return '<span class="fla-pk-win-badge">🎉 ' + w + '</span>';
+        }).join('');
+      }
+
+      playAlarm();
+
+      var poolStatus = pickerWidget.querySelector('#pkPoolStatus');
+      if (poolStatus) poolStatus.textContent = '候选池: ' + PK.pool.length + ' / ' + PK.roster.length + ' 人';
+    }
+
+    function togglePickerWidget() {
+      if (pickerWidget.classList.contains('hidden')) {
+        renderPickerWidget();
+        pickerWidget.style.right = '70px';
+        pickerWidget.style.top = '120px';
+        pickerWidget.classList.remove('hidden');
+      } else {
+        if (PK.rolling) stopPickerRoll();
+        pickerWidget.classList.add('hidden');
+      }
+    }
 
     host.appendChild(wrap);
 
@@ -419,9 +1304,36 @@
       var f = curFrame();
       if (f && f.contentWindow) {
         try {
+          f.focus();
           f.contentWindow.focus();
         } catch (e) { }
       }
+    }
+    function sendMsAction(fwd) {
+      var dir = fwd ? 'next' : 'previous';
+      var msgs = [
+        { MessageId: fwd ? 'Action_NextSlide' : 'Action_PreviousSlide', SendTime: Date.now(), Values: {} },
+        { MessageId: fwd ? 'UI_Next' : 'UI_Prev', SendTime: Date.now(), Values: {} },
+        { MessageId: fwd ? 'Action_StepNext' : 'Action_StepPrevious', SendTime: Date.now(), Values: {} },
+        { MessageId: 'Action_NavigateTo', SendTime: Date.now(), Values: { direction: dir } },
+        { MessageId: 'Send_Keyboard_Event', SendTime: Date.now(), Values: { keyCode: fwd ? 39 : 37, key: fwd ? 'ArrowRight' : 'ArrowLeft' } },
+        { type: 'action', action: dir },
+        { action: fwd ? 'next' : 'prev' }
+      ];
+      if (S.frames && S.frames.length) {
+        for (var fi = 0; fi < S.frames.length; fi++) {
+          var frm = S.frames[fi];
+          if (frm && frm.contentWindow) {
+            msgs.forEach(function (m) {
+              try {
+                frm.contentWindow.postMessage(JSON.stringify(m), '*');
+                frm.contentWindow.postMessage(m, '*');
+              } catch (err) {}
+            });
+          }
+        }
+      }
+      focusIframe();
     }
     function urlFor(n) {
       if (!S.mv) return '';
@@ -1388,6 +2300,23 @@
           break;
         case 'align': S.align ? exitAlign() : enterAlign(); break;
         case 'time': S.t0 = Date.now(); break;
+        case 'stepPrev':
+          sendMsAction(false);
+          toast('PPT 动画步退 (已向微软发送指令)');
+          break;
+        case 'stepNext':
+          sendMsAction(true);
+          toast('PPT 动画步进 (已向微软发送指令)');
+          break;
+        case 'timer':
+          toggleTimerWidget();
+          break;
+        case 'picker':
+          togglePickerWidget();
+          break;
+        case 'settings':
+          toggleSettingsModal();
+          break;
         case 'full': toggleFull(); break;
       }
     });
@@ -1477,11 +2406,18 @@
       var rawKey = e.key || '';
       var k = rawKey.toLowerCase();
 
-      /* ★ 核心规范: 我们的程序完全不监听、不拦截上下左右以及所有的翻页按键 (翻页笔、方向键、PageDown/PageUp、空格等)
-       * 无论当前选择的是光标、画笔、荧光笔还是任何工具，全部放行交由微软 Office 原生响应，我们不做任何干预！ */
-      if (/^(arrow(up|down|left|right)|page(up|down)|next|prior| )$/i.test(rawKey) ||
-          e.keyCode === 32 || e.keyCode === 33 || e.keyCode === 34 || e.keyCode === 37 || e.keyCode === 38 || e.keyCode === 39 || e.keyCode === 40) {
-        focusIframe();
+      /* ★ 核心规范与翻页笔穿透指令: 
+       * 翻页笔及键盘方向键 arrow(up|down|left|right) (PageDown, PageUp, ArrowRight, ArrowLeft, Space 等)
+       * 当老师使用画笔、荧光笔或任何绘图工具时，点击翻页笔不会切换白板页码，而是直接向微软 iframe
+       * 派发 postMessage 步进指令 (驱动元素级动画步进及幻灯片前进)，并交还焦点给 iframe！ */
+      var fwdKey = /^(pagedown|arrowright|arrowdown|next)$/i.test(rawKey) ||
+                   e.keyCode === 34 || e.keyCode === 39 || e.keyCode === 40;
+      var isPrevKey = /^(pageup|arrowleft|arrowup|prior)$/i.test(rawKey) ||
+                      e.keyCode === 33 || e.keyCode === 37 || e.keyCode === 38;
+      var isSpaceKey = rawKey === ' ' || e.keyCode === 32;
+
+      if (fwdKey || isSpaceKey || isPrevKey) {
+        sendMsAction(fwdKey || isSpaceKey);
         return;
       }
 
@@ -1621,6 +2557,9 @@
         if (S.dead) return;
         S.dead = true;
         flushSave();
+        stopCountdown();
+        stopStopwatch();
+        if (PK.rolling) stopPickerRoll(PK.mode === 'number');
         window.removeEventListener('keydown', onKey, true);
         window.removeEventListener('message', onMsMessage, false);
         /* 摘掉全部窗口级监听与定时器: 反复进出放映不累积泄漏 */

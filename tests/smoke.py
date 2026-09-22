@@ -725,6 +725,23 @@ def run(c):
         r = c.post(f"/api/chat/rooms/{official['id']}/leave", headers=s3)
         check("官方大厅不允许退群", r.status_code in (400, 403), r.status_code)
 
+    # --- 课堂工具: 学生名单解析 (Excel / CSV / TXT) ---
+    csv_bytes = "姓名,学号\n张三,1001\n李四,1002\n王五,1003\n".encode("utf-8")
+    r = c.post("/api/tools/parse-roster", files={"file": ("roster.csv", csv_bytes, "text/csv")})
+    check("POST /api/tools/parse-roster 解析 CSV 名单",
+          r.status_code == 200 and r.json().get("ok") is True and r.json().get("names") == ["张三", "李四", "王五"], r.text[:100])
+
+    import io
+    import zipfile
+    bio = io.BytesIO()
+    with zipfile.ZipFile(bio, "w") as z:
+        z.writestr("xl/sharedStrings.xml", '<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>姓名</t></si><si><t>赵六</t></si><si><t>钱七</t></si></sst>')
+        z.writestr("xl/worksheets/sheet1.xml", '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row><row r="2"><c r="A2" t="s"><v>1</v></c></row><row r="3"><c r="A3" t="s"><v>2</v></c></row></sheetData></worksheet>')
+    xlsx_bytes = bio.getvalue()
+    r = c.post("/api/tools/parse-roster", files={"file": ("students.xlsx", xlsx_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
+    check("POST /api/tools/parse-roster 解析 Excel XLSX 名单",
+          r.status_code == 200 and r.json().get("ok") is True and r.json().get("names") == ["赵六", "钱七"], r.text[:100])
+
     section("6. 前端资源")
     r = c.get("/")
     check("首页引入 msstage.js", r.status_code == 200 and "msstage.js" in r.text, r.status_code)
@@ -1067,6 +1084,18 @@ gen_conf
     sync_doc = (root / "docs" / "SLIDE_SYNC_BACKUP.md").read_text()
     check("备用技术文档详细记录课件与画布自动同步实现方案",
           (root / "docs" / "SLIDE_SYNC_BACKUP.md").exists() and "sftc=1" in sync_doc and "App_IsFrameTrusted" in sync_doc, "")
+
+    check("放映舞台内置课堂计时器(倒计时+秒表+音效提醒+最小化)",
+          "fla-timer-widget" in ms_js and "countdown" in ms_js and "stopwatch" in ms_js and "playAlarm" in ms_js and "fla-timer-min" in ms_js, "")
+
+    check("放映舞台内置随机抽选(名单导入+数字摇号+减速动画+祝贺动效)",
+          "fla-picker-widget" in ms_js and "parse-roster" in ms_js and "startPickerRoll" in ms_js and "finalizePick" in ms_js and "pkNumMin" in ms_js, "")
+
+    check("放映舞台向微软iframe发送postMessage穿透步进指令(元素级动画步进)",
+          "sendMsAction" in ms_js and "Action_StepNext" in ms_js and "Action_NextSlide" in ms_js and "postMessage" in ms_js, "")
+
+    check("放映舞台支持工具栏个性化定制与持久化",
+          "fla-settings-modal" in ms_js and "fla_tb_prefs" in ms_js and "applyTbPrefs" in ms_js, "")
 
     app_js = (root / "web" / "js" / "app.js").read_text()
     ui_js = (root / "web" / "js" / "ui.js").read_text()
