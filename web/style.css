@@ -1885,154 +1885,279 @@ a { transition: color .16s var(--ease), text-decoration-color .2s var(--ease); }
 }
 
 /* ================================================================
- *  课堂辅助工具: 计时器 / 抽人摇号 / 工具栏个性化定制 (v1.27)
+ *  课堂辅助工具: 计时器 / 抽人摇号 / 工具栏个性化定制 (v1.27 希沃白板旗舰级 UI)
  * ================================================================ */
 .fla-widget {
-  position: absolute; z-index: 45; border-radius: 18px;
-  background: rgba(18, 22, 30, 0.94); border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  color: #fff; user-select: none; transition: opacity .22s cubic-bezier(.16,1,.3,1), transform .22s cubic-bezier(.16,1,.3,1);
+  position: absolute; z-index: 45; border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18), 0 8px 24px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(28px) saturate(1.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  color: #0f172a; user-select: none;
+  transition: opacity .22s cubic-bezier(.16,1,.3,1), transform .22s cubic-bezier(.16,1,.3,1);
   display: flex; flex-direction: column; overflow: hidden;
 }
 .fla-widget.hidden { display: none !important; }
+
+/* 窗口标题栏与拖拽把柄 */
 .fla-widget-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 14px; background: rgba(255, 255, 255, 0.05); border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  cursor: move; touch-action: none;
+  padding: 11px 16px; background: rgba(248, 250, 252, 0.9);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+  cursor: grab; touch-action: none;
 }
-.fla-wh-title { font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 7px; color: #f3f4f6; }
-.fla-wh-actions { display: flex; align-items: center; gap: 6px; }
+.fla-widget-head:active { cursor: grabbing; }
+.fla-wh-title {
+  font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px;
+  color: #0f172a; letter-spacing: 0.2px;
+}
+.fla-wh-actions { display: flex; align-items: center; gap: 7px; }
 .fla-wh-btn {
-  width: 24px; height: 24px; border-radius: 7px; border: 0; background: rgba(255, 255, 255, 0.08);
-  color: #9ca3af; display: grid; place-items: center; cursor: pointer; font-size: 11px;
-  transition: background .15s, color .15s;
+  width: 26px; height: 26px; border-radius: 999px; border: 1px solid #e2e8f0;
+  background: #ffffff; color: #64748b; display: grid; place-items: center;
+  cursor: pointer; font-size: 12px; font-weight: 700;
+  transition: all .16s cubic-bezier(.16,1,.3,1);
 }
-.fla-wh-btn:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
-.fla-widget-tabs { display: flex; gap: 6px; padding: 10px 14px 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
-.fla-wtab {
-  flex: 1; padding: 6px 12px; font-size: 12px; font-weight: 600; border: 0; border-radius: 8px;
-  background: transparent; color: #9ca3af; cursor: pointer; transition: all .15s; text-align: center;
-}
-.fla-wtab:hover { color: #f3f4f6; background: rgba(255, 255, 255, 0.06); }
-.fla-wtab.on { background: #3b82f6; color: #fff; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35); }
-.fla-widget-body { padding: 14px 16px; display: flex; flex-direction: column; align-items: center; }
+.fla-wh-btn:hover { background: #f1f5f9; color: #0f172a; transform: scale(1.08); }
+.fla-wh-btn.close:hover { background: #fee2e2; color: #ef4444; border-color: #fca5a5; }
 
-/* --- 计时器 --- */
-.fla-timer-widget { width: 320px; }
+/* 分段切换药丸 (Segmented Capsule Tabs) */
+.fla-widget-tabs {
+  display: flex; padding: 10px 16px 2px;
+}
+.fla-tab-capsule {
+  display: flex; width: 100%; padding: 3px; border-radius: 13px;
+  background: #f1f5f9; border: 1px solid #e2e8f0;
+}
+.fla-wtab {
+  flex: 1; padding: 6px 12px; font-size: 13px; font-weight: 600; border: 0; border-radius: 10px;
+  background: transparent; color: #64748b; cursor: pointer;
+  transition: all .18s cubic-bezier(.16,1,.3,1); text-align: center;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.fla-wtab:hover { color: #0f172a; }
+.fla-wtab.on {
+  background: #ffffff; color: #0f172a; font-weight: 700;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.fla-widget-body {
+  padding: 12px 16px 16px; display: flex; flex-direction: column; align-items: center;
+}
+
+/* ==================== 计时器 (希沃白板风格) ==================== */
+.fla-timer-widget { width: 330px; }
+
+/* 大数字显示屏 */
+.fla-timer-board {
+  width: 100%; padding: 16px; border-radius: 18px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1.5px solid #e2e8f0; box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.03);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  margin-bottom: 12px; position: relative;
+}
 .fla-timer-digits {
-  font: 700 48px/1 ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, monospace;
-  color: #fff; letter-spacing: 2px; margin: 12px 0 14px; text-shadow: 0 0 16px rgba(59, 130, 246, 0.35);
-  font-variant-numeric: tabular-nums;
+  font: 800 52px/1 ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, monospace;
+  color: #0f172a; letter-spacing: 2px; font-variant-numeric: tabular-nums;
+  transition: transform .2s ease, color .2s ease;
 }
 .fla-timer-digits.times-up {
-  color: #ef4444; animation: flaTimeAlert .8s infinite alternate;
+  color: #dc2626; animation: flaTimeAlert .8s infinite alternate cubic-bezier(.16,1,.3,1);
 }
 @keyframes flaTimeAlert {
-  from { transform: scale(1); text-shadow: 0 0 12px rgba(239, 68, 68, 0.4); }
-  to { transform: scale(1.05); text-shadow: 0 0 28px rgba(239, 68, 68, 0.9); }
+  from { transform: scale(1); text-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
+  to { transform: scale(1.08); text-shadow: 0 0 24px rgba(239, 68, 68, 0.7); }
 }
-.fla-timer-presets { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 14px; }
+
+/* 预设时间胶囊 */
+.fla-timer-presets { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 10px; }
 .fla-tpill {
-  padding: 4px 10px; font-size: 11.5px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06); color: #d1d5db; cursor: pointer; transition: all .15s;
+  padding: 5px 12px; font-size: 12px; font-weight: 600; border-radius: 999px;
+  border: 1px solid #e2e8f0; background: #ffffff; color: #475569;
+  cursor: pointer; transition: all .15s cubic-bezier(.16,1,.3,1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
-.fla-tpill:hover { background: rgba(255, 255, 255, 0.16); color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+.fla-tpill:hover {
+  background: #eff6ff; color: #2563eb; border-color: #bfdbfe;
+  transform: translateY(-1px); box-shadow: 0 3px 8px rgba(37, 99, 235, 0.12);
+}
+.fla-tpill:active { transform: scale(0.96); }
+
+/* 操作控制按钮 */
 .fla-timer-ctrls { display: flex; gap: 10px; width: 100%; justify-content: center; }
 .fla-tbtn {
-  padding: 9px 20px; font-size: 13.5px; font-weight: 600; border-radius: 10px; border: 0;
-  cursor: pointer; display: flex; align-items: center; gap: 6px; transition: transform .15s, opacity .15s, box-shadow .15s;
+  flex: 1; padding: 10px 18px; font-size: 14px; font-weight: 700; border-radius: 13px; border: 0;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: all .16s cubic-bezier(.16,1,.3,1);
 }
-.fla-tbtn:active { transform: scale(0.95); }
-.fla-tbtn-pri { background: #3b82f6; color: #fff; box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4); }
-.fla-tbtn-pri:hover { background: #2563eb; }
-.fla-tbtn-sec { background: rgba(255, 255, 255, 0.1); color: #e5e7eb; border: 1px solid rgba(255, 255, 255, 0.14); }
-.fla-tbtn-sec:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+.fla-tbtn:active { transform: scale(0.96); }
+.fla-tbtn-start {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+.fla-tbtn-start:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.45); transform: translateY(-1px);
+}
+.fla-tbtn-pause {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #ffffff; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+}
+.fla-tbtn-pause:hover {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  transform: translateY(-1px);
+}
+.fla-tbtn-sec {
+  background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;
+}
+.fla-tbtn-sec:hover { background: #e2e8f0; color: #0f172a; }
+
+/* 秒表计次列表 */
 .fla-lap-list {
-  margin-top: 12px; width: 100%; max-height: 120px; overflow-y: auto; font-size: 11.5px;
-  background: rgba(0, 0, 0, 0.25); border-radius: 8px; padding: 6px 10px;
+  margin-top: 10px; width: 100%; max-height: 110px; overflow-y: auto; font-size: 12px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 6px 12px;
 }
-.fla-lap-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: #9ca3af; }
+.fla-lap-row {
+  display: flex; justify-content: space-between; padding: 4px 0;
+  border-bottom: 1px solid #edf2f7; color: #64748b; font-variant-numeric: tabular-nums;
+}
 .fla-lap-row:last-child { border-bottom: 0; }
+.fla-lap-badge { font-weight: 700; color: #0f172a; }
 
-/* 计时器最小化药丸 */
+/* 极简常驻微型灵动岛药丸 */
 .fla-timer-min {
-  position: absolute; z-index: 45; border-radius: 20px;
-  padding: 6px 14px; background: rgba(18, 22, 30, 0.92); border: 1px solid rgba(59, 130, 246, 0.4);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); color: #fff; font: 700 13px/1 ui-monospace, monospace;
-  display: flex; align-items: center; gap: 8px; cursor: pointer; backdrop-filter: blur(12px);
+  position: absolute; z-index: 45; border-radius: 999px;
+  padding: 8px 16px; background: rgba(15, 23, 42, 0.92); border: 1.5px solid rgba(59, 130, 246, 0.5);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); color: #ffffff; font: 700 14px/1 ui-monospace, monospace;
+  display: flex; align-items: center; gap: 8px; cursor: pointer; backdrop-filter: blur(16px);
+  transition: transform .18s cubic-bezier(.16,1,.3,1), border-color .18s;
 }
-.fla-timer-min:hover { border-color: #3b82f6; transform: scale(1.04); }
+.fla-timer-min:hover { border-color: #3b82f6; transform: scale(1.05); }
+.fla-timer-min-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #10b981;
+  box-shadow: 0 0 8px #10b981; animation: flaDotPulse 1.2s infinite alternate;
+}
+@keyframes flaDotPulse { from { opacity: 0.5; transform: scale(0.85); } to { opacity: 1; transform: scale(1.15); } }
 
-/* --- 抽人/摇号 --- */
-.fla-picker-widget { width: 350px; }
+/* ==================== 抽人与摇号大舞台 (希沃 3D 盲盒级) ==================== */
+.fla-picker-widget { width: 420px; }
+
+/* 3D 盲盒舞台 */
 .fla-pk-stage {
-  width: 100%; min-height: 96px; border-radius: 14px;
-  background: radial-gradient(circle at center, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.95));
-  border: 1.5px solid rgba(255, 255, 255, 0.12); display: flex; flex-direction: column;
-  align-items: center; justify-content: center; padding: 12px; margin: 8px 0 14px;
-  box-shadow: inset 0 2px 10px rgba(0,0,0,0.5); position: relative; overflow: hidden;
+  width: 100%; min-height: 140px; border-radius: 18px;
+  background: radial-gradient(circle at 50% 25%, #2e1065 0%, #1e1b4b 60%, #0f172a 100%);
+  border: 1.5px solid rgba(192, 132, 252, 0.35); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 18px 16px; margin: 8px 0 14px;
+  box-shadow: inset 0 2px 18px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(88, 28, 135, 0.22);
+  position: relative; overflow: hidden; perspective: 800px;
+}
+.fla-pk-confetti-cv {
+  position: absolute; inset: 0; pointer-events: none; width: 100%; height: 100%; z-index: 10;
 }
 .fla-pk-card {
-  font-size: 28px; font-weight: 800; color: #f3f4f6; text-align: center;
-  transition: transform .15s ease-out; letter-spacing: 1px;
+  font-size: 34px; font-weight: 800; color: #ffffff; text-align: center;
+  letter-spacing: 1px; z-index: 5; text-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  transition: transform .12s cubic-bezier(.16,1,.3,1);
 }
-.fla-pk-card.rolling { color: #60a5fa; transform: scale(1.1); filter: blur(0.5px); }
+.fla-pk-card.rolling {
+  color: #c084fc; transform: scale(1.15) rotateX(12deg);
+  text-shadow: 0 0 24px rgba(192, 132, 252, 0.85);
+}
 .fla-pk-card.winner {
-  color: #fbbf24; animation: flaWinnerPulse .6s cubic-bezier(.16,1,.3,1) both;
-  text-shadow: 0 0 20px rgba(251, 191, 36, 0.6);
+  color: #fbbf24;
+  animation: flaWinnerPop .65s cubic-bezier(.16,1,.3,1) both;
+  text-shadow: 0 0 28px rgba(251, 191, 36, 0.9), 0 4px 14px rgba(0, 0, 0, 0.6);
 }
-@keyframes flaWinnerPulse {
-  0% { transform: scale(0.6); opacity: 0; }
-  60% { transform: scale(1.15); opacity: 1; }
-  100% { transform: scale(1); }
+@keyframes flaWinnerPop {
+  0% { transform: scale(0.4) translateY(18px); opacity: 0; }
+  65% { transform: scale(1.2) translateY(-4px); opacity: 1; }
+  100% { transform: scale(1) translateY(0); }
 }
-.fla-pk-winners-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.fla-pk-winners-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; z-index: 5; }
 .fla-pk-win-badge {
-  padding: 6px 14px; border-radius: 12px; background: rgba(251, 191, 36, 0.15);
-  border: 1.5px solid #fbbf24; color: #fbbf24; font-size: 16px; font-weight: 700;
-  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.25);
+  padding: 7px 16px; border-radius: 12px;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.25), rgba(245, 158, 11, 0.15));
+  border: 1.5px solid #fbbf24; color: #fbbf24; font-size: 17px; font-weight: 800;
+  box-shadow: 0 4px 14px rgba(251, 191, 36, 0.35); text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+  animation: flaWinnerPop .55s cubic-bezier(.16,1,.3,1) both;
 }
-.fla-pk-subbar { display: flex; align-items: center; justify-content: space-between; width: 100%; font-size: 12px; color: #9ca3af; margin-bottom: 12px; }
-.fla-pk-sel { background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15); color: #fff; border-radius: 8px; padding: 4px 8px; font-size: 12px; }
-.fla-pk-chk { display: flex; align-items: center; gap: 5px; cursor: pointer; color: #d1d5db; font-size: 12px; }
+
+/* 控制子栏与切换芯片 */
+.fla-pk-subbar {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; font-size: 13px; color: #475569; margin-bottom: 10px;
+}
+.fla-chip-group { display: flex; gap: 4px; }
+.fla-chip {
+  padding: 4px 10px; font-size: 12px; font-weight: 600; border-radius: 8px;
+  background: #f1f5f9; border: 1px solid #e2e8f0; color: #64748b; cursor: pointer;
+  transition: all .15s;
+}
+.fla-chip:hover { color: #0f172a; background: #e2e8f0; }
+.fla-chip.on {
+  background: #2563eb; color: #ffffff; border-color: #2563eb;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+/* 大号抽选按钮 */
+.fla-pk-draw-btn {
+  width: 100%; padding: 12px 24px; font-size: 15px; font-weight: 800; border-radius: 14px;
+  background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%); color: #ffffff; border: 0;
+  cursor: pointer; box-shadow: 0 5px 18px rgba(124, 58, 237, 0.35);
+  transition: all .16s cubic-bezier(.16,1,.3,1); display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.fla-pk-draw-btn:hover {
+  background: linear-gradient(135deg, #6d28d9 0%, #4f46e5 100%);
+  box-shadow: 0 7px 22px rgba(124, 58, 237, 0.45); transform: translateY(-1px);
+}
+.fla-pk-draw-btn:active { transform: scale(0.97); }
+.fla-pk-draw-btn.rolling {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 5px 18px rgba(239, 68, 68, 0.35);
+}
+
+/* 名单管理滑出抽屉 */
 .fla-pk-drawer {
-  width: 100%; background: rgba(0, 0, 0, 0.35); border-radius: 12px; padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1); margin-top: 10px; display: flex; flex-direction: column; gap: 10px;
+  width: 100%; background: #f8fafc; border-radius: 14px; padding: 12px;
+  border: 1px solid #e2e8f0; margin-top: 8px; margin-bottom: 10px;
+  display: flex; flex-direction: column; gap: 10px;
 }
 .fla-pk-drawer.hidden { display: none; }
 .fla-pk-textarea {
-  width: 100%; height: 90px; border-radius: 8px; background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.15); color: #fff; padding: 8px; font-size: 12px; resize: vertical;
+  width: 100%; height: 80px; border-radius: 10px; background: #ffffff;
+  border: 1.5px solid #cbd5e1; color: #0f172a; padding: 8px 10px; font-size: 12.5px;
+  resize: vertical; font-family: inherit; outline: none; transition: border-color .15s;
 }
+.fla-pk-textarea:focus { border-color: #3b82f6; }
 
 /* --- 工具栏个性化定制弹窗 --- */
 .fla-settings-modal {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 50;
-  width: min(520px, 92vw); max-height: 85vh; border-radius: 20px;
-  background: rgba(18, 22, 30, 0.96); border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7); backdrop-filter: blur(28px);
-  color: #fff; display: flex; flex-direction: column; overflow: hidden;
+  width: min(520px, 92vw); max-height: 85vh; border-radius: 22px;
+  background: rgba(255, 255, 255, 0.98); border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22); backdrop-filter: blur(28px);
+  color: #0f172a; display: flex; flex-direction: column; overflow: hidden;
 }
 .fla-settings-modal.hidden { display: none !important; }
 .fla-sm-head {
-  display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex; align-items: center; justify-content: space-between; padding: 14px 20px;
+  background: #f8fafc; border-bottom: 1px solid #e2e8f0;
 }
-.fla-sm-title { font-size: 16px; font-weight: 700; color: #fff; }
+.fla-sm-title { font-size: 15px; font-weight: 700; color: #0f172a; }
 .fla-sm-body { padding: 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
 .fla-sm-section { display: flex; flex-direction: column; gap: 8px; }
-.fla-sm-sec-title { font-size: 12px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }
+.fla-sm-sec-title { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
 .fla-sm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
 .fla-sm-item {
-  display: flex; align-items: center; justify-content: space-between; padding: 8px 12px;
-  border-radius: 10px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 13px; color: #e5e7eb; cursor: pointer; transition: background .15s;
+  display: flex; align-items: center; justify-content: space-between; padding: 9px 13px;
+  border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0;
+  font-size: 13.5px; font-weight: 500; color: #1e293b; cursor: pointer; transition: all .15s;
 }
-.fla-sm-item:hover { background: rgba(255, 255, 255, 0.08); }
-.fla-sm-item input[type=checkbox] { width: 16px; height: 16px; accent-color: #3b82f6; cursor: pointer; }
+.fla-sm-item:hover { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.fla-sm-item input[type=checkbox] { width: 17px; height: 17px; accent-color: #2563eb; cursor: pointer; }
 .fla-sm-foot {
-  display: flex; align-items: center; justify-content: space-between; padding: 12px 20px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.02);
+  display: flex; align-items: center; justify-content: space-between; padding: 12px 20px 14px;
+  border-top: 1px solid #e2e8f0; background: #f8fafc;
 }
 

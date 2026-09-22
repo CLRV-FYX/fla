@@ -1088,11 +1088,14 @@ gen_conf
     check("放映舞台内置课堂计时器(倒计时+秒表+音效提醒+最小化)",
           "fla-timer-widget" in ms_js and "countdown" in ms_js and "stopwatch" in ms_js and "playAlarm" in ms_js and "fla-timer-min" in ms_js, "")
 
-    check("放映舞台内置随机抽选(名单导入+数字摇号+减速动画+祝贺动效)",
-          "fla-picker-widget" in ms_js and "parse-roster" in ms_js and "startPickerRoll" in ms_js and "finalizePick" in ms_js and "pkNumMin" in ms_js, "")
+    check("放映舞台内置随机抽选(希沃3D舞台+名单导入+数字摇号+彩带撒花动效)",
+          "fla-picker-widget" in ms_js and "parse-roster" in ms_js and "startPickerRoll" in ms_js and "finalizePick" in ms_js and "launchConfetti" in ms_js, "")
 
     check("放映舞台向微软iframe发送postMessage穿透步进指令(元素级动画步进)",
           "sendMsAction" in ms_js and "Action_StepNext" in ms_js and "Action_NextSlide" in ms_js and "postMessage" in ms_js, "")
+
+    check("放映舞台笔迹画布释放微软底栏控制区且翻页笔持续获得焦点",
+          "botI" in ms_js and "v.h - botI" in ms_js and "focusIframe" in ms_js, "")
 
     check("放映舞台支持工具栏个性化定制与持久化",
           "fla-settings-modal" in ms_js and "fla_tb_prefs" in ms_js and "applyTbPrefs" in ms_js, "")
