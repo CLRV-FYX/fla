@@ -154,10 +154,14 @@ case "${1:-help}" in
       echo "  (非 git 仓库，通过官方归档包更新代码)"
       curl -sL https://github.com/CLRV-FYX/fla/archive/refs/heads/arena/01a0add0-fla.tar.gz | tar -xz --strip-components=1
     fi
+    # 重新 exec 本脚本，防止 bash 内存缓存/文件偏移导致未执行新版指令
+    exec bash "$0" apply-update
+    ;;
+  apply-update)
     echo ">> 清理旧中间层容器 (释放 8306 端口归还给 fla 容器) ..."
     docker rm -f nginx 2>/dev/null || true
     echo ">> 重建并拉起 fla 容器 ($PORT->$PORT) ..."
-    $DC $DCP -f "$CF" up -d --remove-orphans
+    $DC $DCP -f "$CF" up -d --remove-orphans --force-recreate
     echo ">> 等待服务健康检查 ..."
     OK=0
     for i in $(seq 1 20); do
