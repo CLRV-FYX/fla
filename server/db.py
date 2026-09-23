@@ -173,12 +173,21 @@ CREATE TABLE IF NOT EXISTS chat_rooms(
   name TEXT NOT NULL,
   owner_id INTEGER NOT NULL,
   official INTEGER NOT NULL DEFAULT 0,
+  kind TEXT NOT NULL DEFAULT 'group',        -- v1.27: group 群聊 | dm 私聊
+  dm_key TEXT,                               -- v1.27: '小uid-大uid', 私聊复用同一会话
+  avatar TEXT NOT NULL DEFAULT '',           -- v1.27: 群头像
+  intro TEXT NOT NULL DEFAULT '',            -- v1.27: 群公告
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS chat_members(
   room_id INTEGER NOT NULL,
   uid INTEGER NOT NULL,
   joined_at TEXT NOT NULL,
+  last_read INTEGER NOT NULL DEFAULT 0,      -- v1.27: 已读到的消息 id (未读数 + 已读回执都靠它)
+  muted INTEGER NOT NULL DEFAULT 0,          -- v1.27: 消息免打扰
+  pinned INTEGER NOT NULL DEFAULT 0,         -- v1.27: 置顶会话
+  nickname TEXT NOT NULL DEFAULT '',         -- v1.27: 我在本群的昵称
+  left_at TEXT,                              -- v1.27: 退群时间(NULL = 在群里)
   PRIMARY KEY(room_id, uid)
 );
 CREATE TABLE IF NOT EXISTS chat_messages(
@@ -186,11 +195,50 @@ CREATE TABLE IF NOT EXISTS chat_messages(
   room_id INTEGER NOT NULL,
   uid INTEGER NOT NULL,
   content TEXT NOT NULL,
-  deleted INTEGER NOT NULL DEFAULT 0,
+  kind TEXT NOT NULL DEFAULT 'text',         -- v1.27: text|image|file|audio|system
+  att_id INTEGER,                            -- v1.27: 附件 id
+  reply_to INTEGER,                          -- v1.27: 引用的消息 id
+  deleted INTEGER NOT NULL DEFAULT 0,        -- 撤回/删除
   edited INTEGER NOT NULL DEFAULT 0,
   edited_by INTEGER,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS chat_attachments(  -- v1.27: 图片/文件/语音
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  room_id INTEGER NOT NULL DEFAULT 0,
+  uid INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  path TEXT NOT NULL,
+  name TEXT NOT NULL,
+  mime TEXT NOT NULL DEFAULT '',
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  dur_ms INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS chat_reactions(    -- v1.27: 表情回应
+  msg_id INTEGER NOT NULL,
+  uid INTEGER NOT NULL,
+  emoji TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(msg_id, uid)
+);
+CREATE TABLE IF NOT EXISTS chat_typing(       -- v1.27: "正在输入" (只用内存级时效, 定期清)
+  room_id INTEGER NOT NULL,
+  uid INTEGER NOT NULL,
+  at REAL NOT NULL,
+  PRIMARY KEY(room_id, uid)
+);
+CREATE TABLE IF NOT EXISTS chat_mentions(     -- v1.27: @我 的消息(红点提醒)
+  msg_id INTEGER NOT NULL,
+  uid INTEGER NOT NULL,
+  room_id INTEGER NOT NULL,
+  seen INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(msg_id, uid)
+);
+CREATE INDEX IF NOT EXISTS ix_msg_room ON chat_messages(room_id, id);
+CREATE INDEX IF NOT EXISTS ix_att_room ON chat_attachments(room_id, id);
+CREATE INDEX IF NOT EXISTS ix_member_uid ON chat_members(uid, room_id);
 CREATE TABLE IF NOT EXISTS qr_tickets(
   ticket TEXT PRIMARY KEY,
   uid INTEGER,
@@ -220,6 +268,23 @@ def init_db():
             c.execute("ALTER TABLE users ADD COLUMN cert_color TEXT NOT NULL DEFAULT ''")  # v1.26: 认证颜色
         if "chat_banned" not in ucols:
             c.execute("ALTER TABLE users ADD COLUMN chat_banned INTEGER NOT NULL DEFAULT 0")  # v1.26: 禁言
+        # v1.27: 聊天升级到微信级(私聊/未读/已读回执/免打扰/置顶/群昵称/附件/回应/@)
+        rcols = {r["name"] for r in c.execute("PRAGMA table_info(chat_rooms)").fetchall()}
+        for col, ddl in (("kind", "TEXT NOT NULL DEFAULT 'group'"), ("dm_key", "TEXT"),
+                         ("avatar", "TEXT NOT NULL DEFAULT ''"), ("intro", "TEXT NOT NULL DEFAULT ''")):
+            if col not in rcols:
+                c.execute(f"ALTER TABLE chat_rooms ADD COLUMN {col} {ddl}")
+        mcols = {r["name"] for r in c.execute("PRAGMA table_info(chat_members)").fetchall()}
+        for col, ddl in (("last_read", "INTEGER NOT NULL DEFAULT 0"), ("muted", "INTEGER NOT NULL DEFAULT 0"),
+                         ("pinned", "INTEGER NOT NULL DEFAULT 0"), ("nickname", "TEXT NOT NULL DEFAULT ''"),
+                         ("left_at", "TEXT")):
+            if col not in mcols:
+                c.execute(f"ALTER TABLE chat_members ADD COLUMN {col} {ddl}")
+        gcols = {r["name"] for r in c.execute("PRAGMA table_info(chat_messages)").fetchall()}
+        for col, ddl in (("kind", "TEXT NOT NULL DEFAULT 'text'"), ("att_id", "INTEGER"),
+                         ("reply_to", "INTEGER")):
+            if col not in gcols:
+                c.execute(f"ALTER TABLE chat_messages ADD COLUMN {col} {ddl}")
     except Exception:
         pass
     # v1.26: 默认论坛板块 / 官方聊天室 / 权限开关

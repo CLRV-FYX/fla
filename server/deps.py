@@ -60,3 +60,15 @@ def user_public(u):
         "created_at": u["created_at"],
         "last_login_at": u["last_login_at"],
     }
+
+
+def user_card(uid):
+    """社区/聊天里显示的用户小卡(带认证徽章字段). v1.27: 从 social.py 提到这里共用"""
+    r = db.q1("SELECT id,username,nickname,avatar,role,is_teacher,cert_title,cert_icon,cert_color "
+              "FROM users WHERE id=?", (uid,))
+    if not r:
+        return {"id": 0, "username": "?", "nickname": "已注销用户", "avatar": "", "role": "user",
+                "is_teacher": False, "cert_title": "", "cert_icon": "", "cert_color": ""}
+    return {"id": r["id"], "username": r["username"], "nickname": r["nickname"] or r["username"],
+            "avatar": r["avatar"], "role": r["role"], "is_teacher": bool(r["is_teacher"]),
+            "cert_title": r["cert_title"], "cert_icon": r["cert_icon"], "cert_color": r["cert_color"]}

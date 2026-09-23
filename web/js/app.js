@@ -10,13 +10,39 @@ let pollT = null;
 
 const ACCEPT = '.ppt,.pptx,.pps,.ppsx,.pot,.potx,.doc,.docx,.dot,.dotx,.rtf,.xls,.xlsx,.csv,.txt,.odt,.ods,.odp,.wps,.et,.dps,.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.svg,.mp3,.wav,.ogg,.m4a,.aac,.flac,.mp4,.webm,.mkv,.mov,.m4v';
 
-document.addEventListener('DOMContentLoaded', async () => {
+async function initApp() {
   window.addEventListener('hashchange', route);
   if (API.token) {
-    try { App.user = await API.get('/api/auth/me'); } catch (e) { /* token 失效 */ }
+    try {
+      App.user = await API.get('/api/auth/me');
+    } catch (e) {
+      API.setToken('');
+      App.user = null;
+    }
   }
+  if (window.Chat && App.user) Chat.startBadge();   /* v1.27: 全局聊天未读角标 */
+  /* v1.27: 顶栏滚动后收紧(加阴影), 用 passive 监听 + rAF 合并, 不卡滚动 */
+  let stickRaf = 0;
+  const onScroll = () => {
+    if (stickRaf) return;
+    stickRaf = requestAnimationFrame(() => {
+      stickRaf = 0;
+      const t = document.querySelector('.topbar');
+      if (!t) return;
+      const want = (window.scrollY || document.documentElement.scrollTop || 0) > 6;
+      /* 每次路由都会重画顶栏, 所以状态以元素自身为准, 不用外部缓存 */
+      if (t.classList.contains('stuck') !== want) t.classList.toggle('stuck', want);
+    });
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
   route();
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
 
 function runCleanup() {
   if (_cleanup) { try { _cleanup(); } catch (e) { } _cleanup = null; }
@@ -26,18 +52,30 @@ App.runCleanup = runCleanup;
 
 function route() {
   runCleanup();
-  const path = (location.hash || '#/library').replace(/^#\//, '').split('?')[0];
+  const rawHash = location.hash || '';
+  const path = rawHash.replace(/^#\/?/, '').split('?')[0];
   const parts = path.split('/').filter(Boolean);
+  if (parts[0] === 'remote') {
+    if (window.Remote) return window.Remote.view();
+  }
   if (!App.user) {
+    if (parts[0] === 'login') return viewLogin();
     if (parts[0] === 'register') return viewRegister();
-    return viewLogin();
+    if (parts[0] === 'qr-approve') {
+      try { sessionStorage.setItem('fla_after_login', location.hash); } catch (e) { }
+      return viewLogin();
+    }
+    // 未登录时访问根路径或官网，展示官方门户
+    return viewHome();
   }
   if (parts[0] === 'login' || parts[0] === 'register') { location.hash = '#/library'; return; }
+  if (parts[0] === 'home') return viewHome();
   refreshAnnBadge();   /* v1.26: 公告未读红点 */
+  if (window.Chat) Chat.refreshBadge();   /* v1.27: 聊天未读角标 */
   if (!parts.length || parts[0] === 'library') return viewLibrary();
   if (parts[0] === 'profile') return viewProfile();
   if (parts[0] === 'forum') return viewForum(parts[1] ? parseInt(parts[1], 10) : 0);
-  if (parts[0] === 'chat') return viewChat();
+  if (parts[0] === 'chat') return Chat.view();   /* v1.27: 微信级聊天(web/js/chat.js) */
   if (parts[0] === 'qr-approve') return viewQrApprove();
   if (parts[0] === 'admin') {
     if (App.user.role !== 'admin') { toast('需要管理员权限', 'err'); location.hash = '#/library'; return; }
@@ -81,68 +119,235 @@ function hexA(hex, a) {
   return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
 }
 
-/* v1.26: 认证证书卡(个人中心) — 站长(铂金极光) + 教师(管理员自定义颜色/图标) */
+/* ================================================================
+ * v1.27 认证证书 — 站长(铂金极光) / 教师(黄金·白银·青铜·定制)
+ * 比 v1.26 更"nb"的地方:
+ *   1. 鼠标跟随 3D 倾斜 + 分层视差(奖章浮得比证书高)
+ *   2. 全息箔层: 随倾斜角度流动变色(真证书上的那种彩虹膜)
+ *   3. 雕刻底纹(guilloché) + 旋转光束 + 极光 + 星芒 + 扫光
+ *   4. 正式证书要素: 等级条 / 编号 / 签发日期 / 授权范围 / 校验码 /
+ *      二维码(扫码即校验串) / 骑缝章 / 绶带
+ *   5. 「查看大图」全屏展示, 「打印证书」用打印样式只印证书(可存 PDF)
+ * 校验码由 id + 角色 + 称号 + 签发日 FNV-1a 哈希得出, 同一账号永远一致。
+ * ================================================================ */
+function certCode(u) {
+  const raw = 'FLA|' + (u.id || 0) + '|' + (u.role || '') + '|' + (u.is_teacher ? 1 : 0) + '|' +
+    (u.cert_title || '') + '|' + String(u.created_at || '').slice(0, 10);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < raw.length; i++) { h ^= raw.charCodeAt(i); h = (h * 0x01000193) >>> 0; }
+  const s36 = (h.toString(36).toUpperCase() + '000000').slice(0, 6);
+  return s36.slice(0, 3) + '-' + s36.slice(3);
+}
+
+/* 颜色 → 等级名(铂金/黄金/白银/青铜/定制) */
+function certTier(u) {
+  if (u.role === 'admin') return { k: 'platinum', zh: '铂金', en: 'PLATINUM AURORA' };
+  const c = (u.cert_color || '#f0d488').toLowerCase();
+  const m = /^#([0-9a-f]{6})$/.exec(c);
+  if (!m) return { k: 'custom', zh: '定制', en: 'CUSTOM EDITION' };
+  const n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 510, sat = mx ? (mx - mn) / mx : 0;
+  if (sat < .16) return l > .62 ? { k: 'silver', zh: '白银', en: 'SILVER EDITION' } : { k: 'graphite', zh: '墨金', en: 'GRAPHITE EDITION' };
+  if (r > g && g > b) return l > .58 ? { k: 'gold', zh: '黄金', en: 'GOLD EDITION' } : { k: 'bronze', zh: '青铜', en: 'BRONZE EDITION' };
+  if (b > r) return { k: 'sapphire', zh: '蓝宝', en: 'SAPPHIRE EDITION' };
+  if (g > r) return { k: 'emerald', zh: '翡翠', en: 'EMERALD EDITION' };
+  return { k: 'custom', zh: '定制', en: 'CUSTOM EDITION' };
+}
+
 function certCardHTML(u) {
-  const no = 'FLA-' + ('000' + (u.id || 0)).slice(-4);
-  const spark = (l, t, d, s) => '<i class="cc-spark" style="left:' + l + '%;top:' + t + '%;animation-delay:' + d + 's;font-size:' + s + 'px">✦</i>';
+  const no = 'FLA-' + ('0000' + (u.id || 0)).slice(-4);
+  const code = certCode(u);
+  const tier = certTier(u);
+  const since = String(u.created_at || '').slice(0, 10) || '—';
+  const spark = (l, t, d, sz) => '<i class="cc-spark" style="left:' + l + '%;top:' + t + '%;animation-delay:' + d + 's;font-size:' + sz + 'px">✦</i>';
   const sparks = spark(9, 18, 0, 13) + spark(88, 13, 1.1, 10) + spark(80, 62, 2.2, 14) + spark(13, 68, .6, 10) +
-    spark(51, 6, 1.7, 9) + spark(30, 88, 2.8, 12) + spark(92, 84, .3, 11);
+    spark(51, 6, 1.7, 9) + spark(30, 88, 2.8, 12) + spark(92, 84, .3, 11) + spark(66, 33, 1.4, 8);
   let h = '';
-  /* 站长认证 — 最高级: 皇冠 + 铂金极光 + 三重光环 */
+
+  /* ---------- 站长: 铂金极光(最高级) ---------- */
   if (u.role === 'admin') {
-    h += '<div class="cert-card owner-card">' +
+    h += '<div class="cert-card tier-platinum" data-cert="owner" data-no="' + no + '" data-code="' + code + '"' +
+      ' data-title="站长" data-en="FLA · SITE OWNER" data-since="' + since + '" data-tier="' + tier.en + '">' +
+      '<i class="cc-guilloche"></i><i class="cc-aurora"></i><i class="cc-beam"></i><i class="cc-holo"></i>' +
+      '<i class="cc-sheen"></i>' + sparks +
       '<i class="cc-corner tl"></i><i class="cc-corner tr"></i><i class="cc-corner bl"></i><i class="cc-corner br"></i>' +
-      '<i class="cc-sheen"></i><i class="cc-aurora"></i>' + sparks +
-      '<div class="cc-medal">' + UI.icon('crown', 44) + '<i class="cc-ring r1"></i><i class="cc-ring r2"></i><i class="cc-ring r3"></i></div>' +
+      '<i class="cc-ribbon"></i>' +
+      '<div class="cc-inner">' +
+      '<div class="cc-tier">' + UI.icon('gem', 12) + '<span>' + tier.en + ' · ' + tier.zh + '级</span></div>' +
+      '<div class="cc-medal">' + UI.icon('crown', 46) +
+      '<i class="cc-ring r1"></i><i class="cc-ring r2"></i><i class="cc-ring r3"></i><i class="cc-halo"></i></div>' +
       '<div class="cc-title">站长</div>' +
       '<div class="cc-sub">FLA · SITE OWNER</div>' +
-      '<div class="cc-meta"><span>NO. ' + no + '</span><i class="cc-dot"></i><span>站点创始人 · 最高权限</span></div>' +
-      '<div class="cc-seal"><b>FLA</b><span>站长</span></div>' +
+      '<div class="cc-rows">' +
+      '<div><span>证书编号</span><b>NO. ' + no + '</b></div>' +
+      '<div><span>签发日期</span><b>' + since + '</b></div>' +
+      '<div><span>授权范围</span><b>站点创始人 · 最高权限</b></div>' +
+      '<div><span>校验码</span><b>' + code + '</b></div>' +
+      '</div>' +
+      '<div class="cc-foot"><div class="cc-qr"></div>' +
+      '<div class="cc-sign"><b>FLA 官方签发</b><em>扫码核验 · ' + code + '</em></div>' +
+      '<div class="cc-seal"><b>FLA</b><span>站长</span></div></div>' +
+      '</div>' +
+      '<div class="cc-acts"><button type="button" data-ca="zoom">' + UI.icon('maximize', 13) + ' 查看大图</button>' +
+      '<button type="button" data-ca="print">' + UI.icon('download', 13) + ' 打印 / 存 PDF</button></div>' +
       '</div>';
   }
-  /* 教师认证 — 管理员可自定义图标与颜色(默认金) */
+
+  /* ---------- 教师: 图标与颜色由管理员自定义 ---------- */
   if (u.is_teacher) {
     const icon = CERT_ICON_LIST.includes(u.cert_icon) ? u.cert_icon : 'medal';
     const color = /^#[0-9a-fA-F]{6}$/.test(u.cert_color || '') ? u.cert_color : '#f0d488';
-    h += '<div class="cert-card" style="--cc:' + color + ';--cc-soft:' + hexA(color, .55) + ';--cc-faint:' + hexA(color, .16) + ';--cc-line:' + hexA(color, .34) + '">' +
+    const title = u.cert_title || '认证教师';
+    h += '<div class="cert-card tier-' + tier.k + '" data-cert="teacher" data-no="' + no + '" data-code="' + code + '"' +
+      ' data-title="' + UI.esc(title) + '" data-en="FLA · CERTIFIED EDUCATOR" data-since="' + since + '"' +
+      ' data-tier="' + tier.en + '"' +
+      ' style="--cc:' + color + ';--cc-soft:' + hexA(color, .55) + ';--cc-faint:' + hexA(color, .16) +
+      ';--cc-line:' + hexA(color, .34) + '">' +
+      '<i class="cc-guilloche"></i><i class="cc-holo"></i><i class="cc-sheen"></i>' + sparks +
       '<i class="cc-corner tl"></i><i class="cc-corner tr"></i><i class="cc-corner bl"></i><i class="cc-corner br"></i>' +
-      '<i class="cc-sheen"></i>' + sparks +
-      '<div class="cc-medal">' + UI.icon(icon, 46) + '<i class="cc-ring r1"></i><i class="cc-ring r2"></i></div>' +
-      '<div class="cc-title">' + UI.esc(u.cert_title || '认证教师') + '</div>' +
+      '<div class="cc-inner">' +
+      '<div class="cc-tier">' + UI.icon('medal', 12) + '<span>' + tier.en + ' · ' + tier.zh + '级</span></div>' +
+      '<div class="cc-medal">' + UI.icon(icon, 48) +
+      '<i class="cc-ring r1"></i><i class="cc-ring r2"></i><i class="cc-halo"></i></div>' +
+      '<div class="cc-title">' + UI.esc(title) + '</div>' +
       '<div class="cc-sub">FLA · CERTIFIED EDUCATOR</div>' +
-      '<div class="cc-meta"><span>NO. ' + no + '</span><i class="cc-dot"></i><span>官方认证教师</span></div>' +
-      '<div class="cc-seal"><b>FLA</b><span>已认证</span></div>' +
+      '<div class="cc-rows">' +
+      '<div><span>证书编号</span><b>NO. ' + no + '</b></div>' +
+      '<div><span>签发日期</span><b>' + since + '</b></div>' +
+      '<div><span>持证人</span><b>' + UI.esc(u.nickname || u.username || '') + '</b></div>' +
+      '<div><span>校验码</span><b>' + code + '</b></div>' +
+      '</div>' +
+      '<div class="cc-foot"><div class="cc-qr"></div>' +
+      '<div class="cc-sign"><b>FLA 官方认证</b><em>扫码核验 · ' + code + '</em></div>' +
+      '<div class="cc-seal"><b>FLA</b><span>已认证</span></div></div>' +
+      '</div>' +
+      '<div class="cc-acts"><button type="button" data-ca="zoom">' + UI.icon('maximize', 13) + ' 查看大图</button>' +
+      '<button type="button" data-ca="print">' + UI.icon('download', 13) + ' 打印 / 存 PDF</button></div>' +
       '</div>';
   }
+
+  /* ---------- 未认证占位 ---------- */
   if (!u.is_teacher && u.role !== 'admin') {
     h += '<div class="cert-card pending">' +
       '<div class="cc-medal">' + UI.icon('lock', 28) + '</div>' +
       '<div class="cc-title">教师认证</div>' +
       '<div class="cc-sub">FLA · CERTIFIED EDUCATOR</div>' +
-      '<p class="cc-note">未完成教师认证（不影响任何功能使用，认证后展示专属称号）</p>' +
+      '<p class="cc-note">未完成教师认证（不影响任何功能使用，认证后展示专属称号与证书）</p>' +
       '</div>';
   }
   return h;
 }
 
+/* 证书交互: 3D 倾斜 + 视差 + 全息 + 二维码 + 大图 + 打印 */
+function bindCertCards(root) {
+  const cards = $$('.cert-card:not(.pending)', root || document);
+  cards.forEach(card => {
+    /* --- 鼠标跟随倾斜(只用 transform, 不触发重排) --- */
+    let raf = 0;
+    const move = e => {
+      const r = card.getBoundingClientRect();
+      const px = (e.clientX - r.left) / (r.width || 1), py = (e.clientY - r.top) / (r.height || 1);
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        card.style.setProperty('--rx', ((0.5 - py) * 11).toFixed(2) + 'deg');
+        card.style.setProperty('--ry', ((px - 0.5) * 14).toFixed(2) + 'deg');
+        card.style.setProperty('--mx', (px * 100).toFixed(1) + '%');
+        card.style.setProperty('--my', (py * 100).toFixed(1) + '%');
+      });
+    };
+    card.addEventListener('pointermove', move);
+    card.addEventListener('pointerleave', () => {
+      card.style.setProperty('--rx', '0deg'); card.style.setProperty('--ry', '0deg');
+      card.style.setProperty('--mx', '50%'); card.style.setProperty('--my', '50%');
+    });
+    /* --- 二维码(内置矢量 SVG 组件, 瞬间呈现) --- */
+    const qr = $('.cc-qr', card);
+    if (qr && !qr.dataset.done) {
+      qr.dataset.done = '1';
+      const txt = 'FLA CERTIFICATE\n' +
+        'NO. ' + card.dataset.no + '\n' +
+        card.dataset.title + ' / ' + card.dataset.en + '\n' +
+        'TIER ' + card.dataset.tier + '\n' +
+        'SINCE ' + card.dataset.since + '\n' +
+        'VERIFY ' + card.dataset.code + '\n' +
+        location.origin;
+      try {
+        if (UI && UI.renderQR) {
+          UI.renderQR(qr, txt, 62);
+        } else if (window.QRCode) {
+          qr.innerHTML = '';
+          new window.QRCode(qr, { text: txt, width: 62, height: 62, correctLevel: 'M' });
+        }
+        const img = qr.querySelector('canvas, img, svg');
+        if (img) { img.style.width = '62px'; img.style.height = '62px'; img.style.borderRadius = '6px'; }
+      } catch (e) { qr.innerHTML = '<em class="cc-qr-fail">' + card.dataset.code + '</em>'; }
+    }
+    /* --- 大图 / 打印 --- */
+    $$('.cc-acts button', card).forEach(b => b.onclick = ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      const act = b.dataset.ca;
+      if (act === 'zoom') certZoom(card);
+      else if (act === 'print') certPrint(card);
+    });
+  });
+}
+
+function certZoom(card) {
+  const ov = document.createElement('div');
+  ov.className = 'cc-zoom';
+  const clone = card.cloneNode(true);
+  clone.classList.add('cc-big');
+  clone.querySelectorAll('.cc-acts').forEach(x => x.remove());
+  ov.innerHTML = '<button class="cc-zoom-x" type="button">' + UI.icon('close', 20) + '</button>';
+  ov.appendChild(clone);
+  document.body.appendChild(ov);
+  requestAnimationFrame(() => ov.classList.add('on'));
+  bindCertCards(ov);
+  const close = () => { ov.classList.remove('on'); setTimeout(() => ov.remove(), 280); };
+  ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('.cc-zoom-x')) close(); });
+  const onKey = e => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } };
+  document.addEventListener('keydown', onKey);
+}
+
+function certPrint(card) {
+  const ov = document.createElement('div');
+  ov.className = 'cc-print';
+  const clone = card.cloneNode(true);
+  clone.querySelectorAll('.cc-acts').forEach(x => x.remove());
+  ov.appendChild(clone);
+  document.body.appendChild(ov);
+  bindCertCards(ov);
+  const done = () => { setTimeout(() => ov.remove(), 400); };
+  window.addEventListener('afterprint', done, { once: true });
+  setTimeout(() => {
+    window.print();
+    setTimeout(done, 1500);      /* 某些浏览器不触发 afterprint */
+  }, 260);
+}
+window.certCardHTML = certCardHTML;
+window.bindCertCards = bindCertCards;
+
 function bindLogout() {
   const b = $('#logout');
-  if (b) b.onclick = () => { API.setToken(''); App.user = null; location.hash = '#/login'; };
+  if (b) b.onclick = () => { API.setToken(''); App.user = null; location.hash = '#/home'; };
 }
 window.bindLogout = bindLogout;
 
 function shell(content, active) {
   const u = App.user;
   return '<div class="topbar">' +
-    '<div class="brand">' + UI.icon('board', 26) + '<span>FLA</span></div>' +
+    '<a class="brand" href="#/home" title="返回官网首页">' + UI.icon('board', 26) + '<span>FLA</span></a>' +
     '<nav class="nav">' +
     '<a class="' + (active === 'library' ? 'on' : '') + '" href="#/library">我的课件</a>' +
     '<a class="' + (active === 'forum' ? 'on' : '') + '" href="#/forum">' + UI.icon('forum', 15) + ' 论坛</a>' +
-    '<a class="' + (active === 'chat' ? 'on' : '') + '" href="#/chat">' + UI.icon('chat', 15) + ' 聊天</a>' +
+    '<a class="' + (active === 'chat' ? 'on' : '') + '" href="#/chat">' + UI.icon('chat', 15) +
+    ' 聊天<i class="nav-badge hidden" id="chat-badge"></i></a>' +
     '<a class="' + (active === 'profile' ? 'on' : '') + '" href="#/profile">个人中心</a>' +
     (u.role === 'admin' ? '<a class="' + (active === 'admin' ? 'on' : '') + '" href="#/admin">管理后台</a>' : '') +
     '</nav>' +
     '<div class="top-right">' + certHTML(u) +
+    '<a class="btn sm ghost" href="/api/desktop/download" title="下载 Windows 客户端 (单 EXE)">' + UI.icon('download', 14) + ' 客户端</a>' +
     '<button class="icon-btn" id="top-ann" title="公告"><i class="ann-dot hidden" id="ann-dot"></i>' + UI.icon('horn', 18) + '</button>' +
     '<button class="icon-btn" id="top-qr" title="扫码登录其他设备">' + UI.icon('qr', 18) + '</button>' +
     '<span class="uchip">' + avatarHTML(u, 32) + '<b>' + UI.esc(u.nickname) + '</b></span>' +
@@ -150,10 +355,154 @@ function shell(content, active) {
     '</div></div><div class="page">' + content + '</div>';
 }
 
+/* ---------- 官方门户 / 官网主页 ---------- */
+function viewHome() {
+  document.title = 'FLA · 现代化多媒体互动教学系统';
+  const u = App.user;
+  const navUserSection = u
+    ? '<a href="#/library" class="btn primary sm home-nav-dl">' + UI.icon('board', 14) + ' <span>进入控制台</span></a>'
+    : '<a href="#/login" class="home-link">登录</a>' +
+      '<a href="#/register" class="home-link">注册</a>' +
+      '<a href="/api/desktop/download" class="btn primary sm home-nav-dl">' + UI.icon('download', 14) + ' <span>下载客户端</span></a>';
+
+  const heroActions = u
+    ? '<a href="/api/desktop/download" class="btn primary lg home-btn-dl">' +
+        UI.icon('download', 18) +
+        '<span><strong>立即下载 Windows 客户端</strong><small>单文件 EXE · 免安装 · 启动自动更新</small></span>' +
+      '</a>' +
+      '<a href="#/library" class="btn lg home-btn-portal">' + UI.icon('board', 16) + ' 进入我的课件</a>' +
+      '<a href="#/remote" class="btn soft lg home-btn-reg">' + UI.icon('qr', 15) + ' 手机扫码遥控</a>'
+    : '<a href="/api/desktop/download" class="btn primary lg home-btn-dl">' +
+        UI.icon('download', 18) +
+        '<span><strong>立即下载 Windows 客户端</strong><small>单文件 EXE · 免安装 · 启动自动更新</small></span>' +
+      '</a>' +
+      '<a href="#/login" class="btn lg home-btn-portal">' + UI.icon('external', 16) + ' 登录网页控制台</a>' +
+      '<a href="#/register" class="btn soft lg home-btn-reg">注册新账号</a>' +
+      '<a href="#/remote" class="btn soft lg home-btn-reg">' + UI.icon('qr', 15) + ' 手机遥控</a>';
+
+  $('#app').innerHTML =
+    '<div class="home-portal">' +
+      '<header class="home-nav">' +
+        '<div class="home-nav-inner">' +
+          '<a href="#/home" class="home-brand">' +
+            '<div class="home-logo">' + UI.icon('board', 22) + '</div>' +
+            '<div class="home-title-box">' +
+              '<span class="home-title">FLA</span>' +
+              '<span class="home-badge">智慧互动教学系统</span>' +
+            '</div>' +
+          '</a>' +
+          '<div class="home-nav-links">' +
+            '<a href="#features" class="home-link" id="nav-features-link">功能特性</a>' +
+            '<a href="#/remote" class="home-link">手机遥控</a>' +
+            navUserSection +
+          '</div>' +
+        '</div>' +
+      '</header>' +
+
+      '<main class="home-main">' +
+        '<section class="home-hero">' +
+          '<div class="home-hero-badge"><span class="home-pulse"></span> 全新 v1.28.0 课堂互动套件正式发布</div>' +
+          '<h1 class="home-hero-title">现代化多媒体教学终端<br>专为高效课堂与授课而生</h1>' +
+          '<p class="home-hero-desc">无缝打通云端课件库、纯净在线预览、希沃白板5智能拦截、PPT随页板书联动与手机多维无线遥控。<br>单文件免安装，支持服务端检测原地静默升级。</p>' +
+          '<div class="home-hero-actions">' + heroActions + '</div>' +
+          '<div class="home-hero-meta">' +
+            '<span>' + UI.icon('check', 14) + ' 免登录直接下载</span>' +
+            '<span>' + UI.icon('check', 14) + ' 希沃白板5自动拦截压制</span>' +
+            '<span>' + UI.icon('check', 14) + ' 画布随 PPT 翻页严格同步</span>' +
+            '<span>' + UI.icon('check', 14) + ' 手机无线扫码投屏与遥控</span>' +
+          '</div>' +
+        '</section>' +
+
+        '<section class="home-section" id="features">' +
+          '<div class="home-sec-head">' +
+            '<h2>核心特性</h2>' +
+            '<p>聚焦教学授课核心需求，剔除臃肿与干扰，提供极简、顺畅的软硬件协同体验</p>' +
+          '</div>' +
+          '<div class="home-grid">' +
+            '<div class="home-card">' +
+              '<div class="home-card-icon">' + UI.icon('lock', 22) + '</div>' +
+              '<h3>希沃白板5 智能静默拦截</h3>' +
+              '<p>毫秒级检测并抑制希沃白板5强制注入的多余浮动工具栏与广告干扰，替代为 FLA 极简专业工具条与专属防伪水印。</p>' +
+            '</div>' +
+            '<div class="home-card">' +
+              '<div class="home-card-icon">' + UI.icon('board', 22) + '</div>' +
+              '<h3>板书笔迹与幻灯片翻页严格联动</h3>' +
+              '<p>深度挂接 Office COM 接口，精准捕捉放映页码。板书随翻页按页独立隔离保存，翻页前进后退永不错位。</p>' +
+            '</div>' +
+            '<div class="home-card">' +
+              '<div class="home-card-icon">' + UI.icon('qr', 22) + '</div>' +
+              '<h3>手机扫码无线遥控与投屏</h3>' +
+              '<p>无需安装任何 App，教师手机扫码即可成为掌上遥控器。支持激光笔触控板、幻灯片步进、全屏黑屏与课堂白板。</p>' +
+            '</div>' +
+            '<div class="home-card">' +
+              '<div class="home-card-icon">' + UI.icon('eye', 22) + '</div>' +
+              '<h3>轻量纯净的 Office 在线预览</h3>' +
+              '<p>去除所有冗余编辑栏，专心呈现课件预览。同时支持在网页端一键直连调起本地系统默认 PowerPoint / WPS 原生演示。</p>' +
+            '</div>' +
+            '<div class="home-card">' +
+              '<div class="home-card-icon">' + UI.icon('refresh', 22) + '</div>' +
+              '<h3>单 EXE 运行与原地静默更新</h3>' +
+              '<p>纯净轻量单文件设计，双击直接运行。每次启动自动比对服务端版本并原地静默替换，彻底告别手动去官网重新下载。</p>' +
+            '</div>' +
+            '<div class="home-card">' +
+              '<div class="home-card-icon">' + UI.icon('users', 22) + '</div>' +
+              '<h3>微信级群组交流与课件互动</h3>' +
+              '<p>内置微信级课堂交流、课件点对点分享、@提醒、随机抽人点名与倒计时闹钟，一站式赋能智慧互动课堂。</p>' +
+            '</div>' +
+          '</div>' +
+        '</section>' +
+
+        '<section class="home-download-banner">' +
+          '<div class="home-dl-box">' +
+            '<div class="home-dl-left">' +
+              '<h2>立即体验 Windows 桌面端</h2>' +
+              '<p>轻量无捆绑 · 专为多媒体教室与多功能一体机定制优化 · 极低资源占用</p>' +
+              '<div class="home-dl-tags">' +
+                '<span class="home-dl-tag">Windows 10 / 11 兼容</span>' +
+                '<span class="home-dl-tag">Microsoft Office / WPS 自动识别</span>' +
+                '<span class="home-dl-tag">支持本地 8307 网页直接唤起</span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="home-dl-right">' +
+              '<a href="/api/desktop/download" class="btn primary lg home-btn-dl-pulse">' +
+                UI.icon('download', 20) + ' 免费免登录直接下载 (FLA.exe)' +
+              '</a>' +
+              '<a href="/api/desktop/version" target="_blank" class="home-ver-link">查看服务端版本更新日志 (JSON)</a>' +
+            '</div>' +
+          '</div>' +
+        '</section>' +
+      '</main>' +
+
+      '<footer class="home-footer">' +
+        '<div class="home-footer-inner">' +
+          '<div class="home-footer-left">' +
+            '<div class="home-footer-brand">' + UI.icon('board', 18) + ' FLA 智慧教学互动系统</div>' +
+            '<p>© ' + new Date().getFullYear() + ' FLA Project. 保留所有权利 · 专为教育教学优化</p>' +
+          '</div>' +
+          '<div class="home-footer-links">' +
+            '<a href="#/login">用户登录</a>' +
+            '<a href="#/register">注册账号</a>' +
+            '<a href="#/remote">手机遥控</a>' +
+            '<a href="/api/desktop/download">客户端下载</a>' +
+          '</div>' +
+        '</div>' +
+      '</footer>' +
+    '</div>';
+
+  const fLink = $('#nav-features-link');
+  if (fLink) {
+    fLink.onclick = e => {
+      e.preventDefault();
+      const sec = $('#features');
+      if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+    };
+  }
+}
+
 /* ---------- 登录 / 注册 ---------- */
 function viewLogin() {
   document.title = '登录 - FLA';
-  const regLink = '<p class="auth-foot">还没有账号？<a href="#/register">使用邀请码注册</a></p>';
+  const regLink = '<p class="auth-foot">还没有账号？<a href="#/register">使用邀请码注册</a></p><p class="auth-extra-links"><a href="#/home">返回官网首页</a> · <a href="/api/desktop/download">下载 Windows 客户端</a></p>';
   $('#app').innerHTML =
     '<div class="auth-bg"><div class="auth-card">' +
     '<div class="auth-logo">' + UI.icon('board', 36) + '</div>' +
@@ -179,33 +528,52 @@ function viewLogin() {
       afterLoginGo();
     } catch (err) { toast(err.message, 'err'); }
   };
-  /* v1.26: 扫码登录 — 显示二维码 + 轮询授权状态 */
-  const switchTab = qr => {
-    $('#lt-pw').classList.toggle('on', !qr);
-    $('#lt-qr').classList.toggle('on', qr);
-    $('#f').classList.toggle('hidden', qr);
-    $('#qrbox').classList.toggle('hidden', !qr);
-    if (qr) startQrLogin(); else stopQrLogin();
-  };
-  $('#lt-pw').onclick = () => switchTab(false);
-  $('#lt-qr').onclick = () => switchTab(true);
-
   let qrTimers = [];
   function stopQrLogin() { qrTimers.forEach(t => clearInterval(t) || clearTimeout(t)); qrTimers = []; }
   async function startQrLogin() {
     stopQrLogin();
-    try { await loadScript('/lib/qrcode/qrcode.min.js'); } catch (e) { toast('二维码组件加载失败', 'err'); return; }
     const holder = $('#qr-holder');
+    if (!holder) return;
     holder.innerHTML = '<div class="qr-spin"></div>';
+
     let ticket = '';
     const refresh = async () => {
       try {
-        const r = await API.post('/api/auth/qr/ticket');
+        const r = await API.post('/api/auth/qr/ticket', {});
         ticket = r.ticket;
-        const url = location.origin + '/#/qr-approve?ticket=' + encodeURIComponent(ticket);
+        const url = r.url || (location.origin + '/#/qr-approve?ticket=' + encodeURIComponent(ticket));
         holder.innerHTML = '';
-        new window.QRCode(holder, { text: url, width: 190, height: 190, correctLevel: window.QRCode.CorrectLevel.M });
-      } catch (e) { toast(e.message, 'err'); }
+        if (r.qr_svg && r.qr_svg.trim().startsWith('<svg')) {
+          // 服务端 Python 原生矢量 SVG (零依赖 · 瞬间呈现)
+          holder.innerHTML = r.qr_svg;
+          const svg = holder.querySelector('svg');
+          if (svg) {
+            svg.setAttribute('width', '190');
+            svg.setAttribute('height', '190');
+            svg.style.width = '190px';
+            svg.style.height = '190px';
+            svg.style.display = 'block';
+            svg.style.margin = '0 auto';
+          }
+        } else if (UI && typeof UI.renderQR === 'function') {
+          UI.renderQR(holder, url, 190);
+        } else if (typeof window.QRCode === 'function') {
+          new window.QRCode(holder, {
+            text: url,
+            width: 190,
+            height: 190,
+            colorDark: '#0b0c0f',
+            colorLight: '#ffffff',
+            correctLevel: 'M'
+          });
+        }
+      } catch (e) {
+        console.error('[startQrLogin] refresh error:', e);
+        toast('获取扫码凭证失败: ' + e.message, 'err');
+        holder.innerHTML = '<div style="padding:18px 10px;text-align:center"><p class="qr-tip" style="color:var(--err)">获取二维码失败</p><button class="btn sm" style="margin-top:8px" id="qr-retry-btn">点击重试</button></div>';
+        const retry = holder.querySelector('#qr-retry-btn');
+        if (retry) retry.onclick = () => { holder.innerHTML = '<div class="qr-spin"></div>'; refresh(); };
+      }
     };
     refresh();
     qrTimers.push(setInterval(refresh, 110 * 1000));                       // 票据 150s, 110s 换新
@@ -225,13 +593,40 @@ function viewLogin() {
     }, 1500));
     App.setCleanup(stopQrLogin);
   }
+
+  /* v1.26: 扫码登录 — 显示二维码 + 轮询授权状态 (v1.27 修: 显式切换 display, 彻底防止双框重叠) */
+  const switchTab = qr => {
+    const pwTab = $('#lt-pw');
+    const qrTab = $('#lt-qr');
+    const f = $('#f');
+    const qb = $('#qrbox');
+    if (pwTab) pwTab.classList.toggle('on', !qr);
+    if (qrTab) qrTab.classList.toggle('on', qr);
+    if (f) {
+      f.classList.toggle('hidden', qr);
+      f.style.display = qr ? 'none' : 'block';
+    }
+    if (qb) {
+      qb.classList.toggle('hidden', !qr);
+      qb.style.display = qr ? 'grid' : 'none';
+    }
+    if (qr) startQrLogin(); else stopQrLogin();
+  };
+  if ($('#lt-pw')) $('#lt-pw').onclick = () => switchTab(false);
+  if ($('#lt-qr')) $('#lt-qr').onclick = () => switchTab(true);
+  switchTab(false);   /* 初始默认密码登录, 强制隐藏二维码框 */
 }
 
 /* 登录后跳转: 优先回到扫码授权前的页面 */
 function afterLoginGo() {
   let back = '';
   try { back = sessionStorage.getItem('fla_after_login') || ''; sessionStorage.removeItem('fla_after_login'); } catch (e) { }
-  location.hash = back || '#/library';
+  const target = back || '#/library';
+  if (location.hash === target) {
+    route();
+  } else {
+    location.hash = target;
+  }
 }
 
 async function viewRegister() {
@@ -254,6 +649,7 @@ async function viewRegister() {
     '<label>确认密码<input name="password2" type="password" minlength="6" required></label>' +
     '<button class="btn primary block" type="submit">注 册</button></form>' +
     '<p class="auth-foot">已有账号？<a href="#/login">返回登录</a></p>' +
+    '<p class="auth-extra-links"><a href="#/home">返回官网首页</a> · <a href="/api/desktop/download">下载 Windows 客户端</a></p>' +
     '</div></div>';
   $('#f').onsubmit = async e => {
     e.preventDefault();
@@ -284,13 +680,17 @@ function kindBadge(f) {
 function cardHTML(f) {
   const st = f.status === 'converting' ? '<span class="st converting">转换中…</span>'
     : f.status === 'failed' ? '<span class="st failed">转换失败</span>' : '';
+  const isOffice = f.kind === 'office';
   return '<div class="file-card" data-id="' + f.id + '">' +
     '<div class="fc-top">' + kindBadge(f) + st + '</div>' +
     '<div class="fc-name" title="' + UI.esc(f.name) + '">' + UI.esc(f.name) + '</div>' +
     '<div class="fc-meta">' + (f.kind === 'board' ? '无限画布' : UI.fmtSize(f.size)) + ' · ' + UI.fmtDate(f.created_at) +
     (f.kind !== 'board' && f.pages ? ' · ' + f.pages + ' 页' : '') + '</div>' +
     '<div class="act">' +
-    '<button data-a="open" title="打开">' + UI.icon('board', 16) + ' 打开</button>' +
+    (isOffice
+      ? '<button data-a="open" title="在线纯净预览">' + UI.icon('eye', 15) + ' 预览</button>' +
+        '<button data-a="local" class="btn-local" title="直接调用本地 PowerPoint/WPS">' + UI.icon('external', 15) + ' 本地打开</button>'
+      : '<button data-a="open" title="打开">' + UI.icon('board', 16) + ' 打开</button>') +
     (f.kind === 'board' ? '' : '<button data-a="dl" title="下载">' + UI.icon('download', 16) + '</button>') +
     (f.kind === 'board' ? '' : '<button data-a="link" title="复制公开直链">' + UI.icon('link', 16) + '</button>') +
     (f.status === 'failed' ? '<button data-a="retry" title="重试转换">' + UI.icon('refresh', 16) + '</button>' : '') +
@@ -366,6 +766,7 @@ async function refreshList() {
         e.stopPropagation();
         const a = b.dataset.a;
         if (a === 'open') openFile(f);
+        if (a === 'local') openLocalFile(f);
         if (a === 'dl') window.open('/api/files/' + f.id + '/download?token=' + API.token, '_blank');
         if (a === 'link') {
           API.get('/api/files/' + f.id + '/share-link').then(r => {
@@ -444,6 +845,7 @@ async function viewProfile() {
     '<button class="btn" id="savepw">修改密码</button></div>' +
     '</div>', 'profile');
   bindLogout();
+  bindCertCards();   /* v1.27: 证书 3D 倾斜 / 二维码 / 大图 / 打印 */
 
   $('#avbtn').onclick = () => $('#avin').click();
   $('#avin').onchange = async e => {
@@ -474,12 +876,80 @@ async function viewProfile() {
 }
 
 
-/* v1.23: 打开课件 = 直接进入放映(白板仍进编辑器) */
+/* v1.23 / v1.28: 打开课件 = Office 进入纯净预览 (白板进编辑器) */
 function openFile(f) {
   if (f.kind === 'board') { location.hash = '#/view/' + f.id; return; }
   const ext = ((f.name || '').split('.').pop() || '').toLowerCase();
   const ms = f.kind === 'office' && /^(ppt|pptx|doc|docx|xls|xlsx)$/.test(ext);
-  window.open('/present.html?fid=' + f.id + '&token=' + encodeURIComponent(API.token) + (ms ? '&track=ms' : ''), '_blank');
+  if (ms) {
+    location.hash = '#/view/' + f.id;
+    return;
+  }
+  window.open('/present.html?fid=' + f.id + '&token=' + encodeURIComponent(API.token), '_blank');
+}
+
+/* v1.28: 网页端直接调用本地 PowerPoint / WPS (通过 127.0.0.1:8307 桥接与 fla:// 协议) */
+async function openLocalFile(f) {
+  toast('正在唤醒本地 PowerPoint / WPS…');
+  let directUrl = location.origin + '/api/files/' + f.id + '/download?token=' + encodeURIComponent(API.token);
+  try {
+    const share = await API.get('/api/files/' + f.id + '/share-link');
+    if (share && share.direct) directUrl = share.direct;
+  } catch (e) {}
+
+  // 1. 尝试直接请求本地 FLA 桌面服务 (127.0.0.1:8307)
+  try {
+    const res = await fetch('http://127.0.0.1:8307/api/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fid: f.id,
+        name: f.name,
+        url: directUrl,
+        token: API.token
+      })
+    });
+    const d = await res.json();
+    if (d && d.ok) {
+      toast(d.msg || '已成功调起本地应用！');
+      return;
+    }
+  } catch (err) {
+    // 2. 本地端口未就绪，使用 fla:// 自定义协议唤起
+    window.location.href = 'fla://open?fid=' + f.id + '&name=' + encodeURIComponent(f.name) + '&url=' + encodeURIComponent(directUrl);
+
+    // 弹出友好提示与桌面客户端下载
+    setTimeout(() => {
+      UI.modal({
+        title: '调用本地应用 (PowerPoint / WPS)',
+        html: '<div style="line-height:1.6;font-size:13.5px;color:#334155;">' +
+          '<p>浏览器已向操作系统发送 <code>fla://</code> 唤起协议。</p>' +
+          '<p style="margin-top:8px;">如果未自动调起播放器，通常是因为尚未运行 <b>FLA 桌面助手</b>。</p>' +
+          '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; margin:12px 0; font-size:13px; color:#475569;">' +
+            '<b>FLA 桌面助手专属功能：</b><br>' +
+            '• 自动检测系统默认 Office 软件打开课件<br>' +
+            '• 拦截希沃白板5自动弹出的覆盖工具条并替换为 FLA 工具条<br>' +
+            '• 右下角附带极简微透明 FLA 水印<br>' +
+            '• 画布与板书随 PPT 幻灯片翻页严格同步移动<br>' +
+            '• 支持手机扫码投屏双向遥控' +
+          '</div>' +
+          '<div style="display:flex; gap:10px; margin-top:14px;">' +
+            '<button class="btn primary" id="dlDesktopBtn">' + UI.icon('download', 16) + ' 下载 FLA 桌面客户端 (EXE)</button>' +
+            '<button class="btn" id="dlPptBtn">' + UI.icon('file', 16) + ' 仅下载此课件文件</button>' +
+          '</div>' +
+        '</div>',
+        onMount: (body, close) => {
+          body.querySelector('#dlDesktopBtn').onclick = () => {
+            window.open('/api/tools/download-desktop', '_blank');
+          };
+          body.querySelector('#dlPptBtn').onclick = () => {
+            window.open('/api/files/' + f.id + '/download?token=' + API.token, '_blank');
+            close();
+          };
+        }
+      });
+    }, 1200);
+  }
 }
 
 /* v1.23: 站点背景(管理后台→系统设置) */
@@ -501,10 +971,22 @@ function openFile(f) {
 
 function loadScript(src) {
   return new Promise((res, rej) => {
-    if (document.querySelector('script[data-fla="' + src + '"]')) return res();
+    if (src.includes('qrcode') && window.QRCode) return res();
+    if (src.includes('jsqr') && window.jsQR) return res();
+    const cleanSrc = src.split('?')[0];
+    const existing = document.querySelector('script[src*="' + cleanSrc + '"]') || document.querySelector('script[data-fla="' + cleanSrc + '"]');
+    if (existing) {
+      if (existing.getAttribute('data-loaded') === '1' || (src.includes('qrcode') && window.QRCode) || (src.includes('jsqr') && window.jsQR)) {
+        return res();
+      }
+      existing.addEventListener('load', () => { existing.setAttribute('data-loaded', '1'); res(); });
+      existing.addEventListener('error', () => rej(new Error('组件加载失败')));
+      return;
+    }
     const s = document.createElement('script');
-    s.src = src; s.setAttribute('data-fla', src);
-    s.onload = () => res(); s.onerror = () => rej(new Error('组件加载失败'));
+    s.src = src; s.setAttribute('data-fla', cleanSrc);
+    s.onload = () => { s.setAttribute('data-loaded', '1'); res(); };
+    s.onerror = () => rej(new Error('组件加载失败'));
     document.head.appendChild(s);
   });
 }
@@ -532,7 +1014,8 @@ async function openAnnPanel() {
     (a.content ? '<div class="ann-body">' + UI.esc(a.content).replace(/\n/g, '<br>') + '</div>' : '') +
     '<div class="ann-time">' + UI.fmtDate(a.created_at) + '</div></div>'
   ).join('') : '<div class="empty">暂无公告</div>';
-  const m = UI.modal({ title: UI.icon('horn', 18) + ' 公告', body: '<div class="ann-list">' + items + '</div>' });
+  const m = UI.modal({ title: UI.icon('horn', 18) + ' 公告', titleHTML: true,
+    body: '<div class="ann-list">' + items + '</div>' });
   const unread = r.items.filter(a => !a.read).map(a => a.id);
   if (unread.length) API.post('/api/announcements/read', { ids: unread }).then(refreshAnnBadge).catch(() => { });
   refreshAnnBadge();
@@ -540,7 +1023,7 @@ async function openAnnPanel() {
 
 /* ---------- 扫码(登录其他设备) ---------- */
 async function openScanModal() {
-  const m = UI.modal({ title: UI.icon('qr', 18) + ' 扫码登录其他设备',
+  const m = UI.modal({ title: UI.icon('qr', 18) + ' 扫码登录其他设备', titleHTML: true,
     body: '<div class="scan-box"><video id="scan-v" playsinline muted></video>' +
     '<div class="scan-tip" id="scan-tip">正在启动相机…</div></div>' +
     '<div class="scan-manual"><span>相机不可用？手动输入票据:</span>' +
@@ -634,7 +1117,8 @@ async function renderForumList() {
   try { boards = (await API.get('/api/forum/boards')).items; } catch (e) { toast(e.message, 'err'); return; }
   const th = App.forum.board ? (await API.get('/api/forum/threads?board=' + App.forum.board).catch(() => null)) : null;
   const threads = th ? th.items : [];
-  const boardName = id => { const b = boards.find(x => x.id === id); return b ? b.name : '全站'; };
+  /* v1.27 安全修复: 板块名是后台可改的文本, 拼进 innerHTML 前必须转义 */
+  const boardName = id => { const b = boards.find(x => x.id === id); return b ? UI.esc(b.name) : '全站'; };
   box.innerHTML =
     '<div class="lib-head"><h2>论坛</h2><div class="lib-actions">' +
     '<select id="fb-sel" class="inp" style="width:auto;margin-top:0">' +
@@ -789,135 +1273,16 @@ function forumBoardsAdmin(boards) {
   };
 }
 
-/* ---------- 聊天 ---------- */
-App.chat = { room: 0, lastId: 0, timer: 0, msgs: {} };
-
-async function viewChat() {
-  document.title = '聊天 - FLA';
-  $('#app').innerHTML = shell(
-    '<div class="chat-wrap"><aside class="chat-side" id="chat-side"></aside><main class="chat-main" id="chat-main"><div class="empty" style="padding-top:120px">选择或加入一个群组开始聊天</div></main></div>',
-    'chat');
-  bindLogout();
-  const stop = () => { clearInterval(App.chat.timer); App.chat.timer = 0; };
-  App.setCleanup(stop);
-  await loadChatRooms();
-  if (App.chat.room) openRoom(App.chat.room);
-}
-
-async function loadChatRooms() {
-  let r;
-  try { r = await API.get('/api/chat/rooms'); } catch (e) { toast(e.message, 'err'); return; }
-  const admin = App.user.role === 'admin';
-  $('#chat-side').innerHTML =
-    '<div class="chat-side-head"><b>群组</b>' +
-    (r.allow_create ? '<button class="btn xs" id="cr-new" title="创建群组">' + UI.icon('plus', 13) + '</button>' : '') +
-    '</div>' +
-    r.items.map(rm =>
-      '<button class="chat-room' + (App.chat.room === rm.id ? ' on' : '') + '" data-id="' + rm.id + '">' +
-      '<span class="cr-name">' + (rm.official ? '<i class="cr-official">官方</i>' : '') + UI.esc(rm.name) + '</span>' +
-      '<span class="cr-sub">' + rm.messages + ' 条 · ' + rm.members + ' 人</span>' +
-      (rm.last ? '<span class="cr-last">' + UI.esc(rm.last.content.slice(0, 20)) + '</span>' : '') +
-      (admin && !rm.official ? '<span class="cr-del" data-del="' + rm.id + '" title="解散">✕</span>' : '') +
-      '</button>').join('') || '<div class="empty">暂无群组</div>';
-  $$('.chat-room', $('#chat-side')).forEach(b => b.onclick = e => {
-    if (e.target.dataset.del) return;
-    openRoom(+b.dataset.id);
-  });
-  $$('.cr-del', $('#chat-side')).forEach(d => d.onclick = async e => {
-    e.stopPropagation();
-    if (!confirm('解散该群组?')) return;
-    try {
-      await API.del('/api/chat/rooms/' + d.dataset.del);
-      if (App.chat.room === +d.dataset.del) { App.chat.room = 0; $('#chat-main').innerHTML = '<div class="empty" style="padding-top:120px">选择或加入一个群组开始聊天</div>'; }
-      loadChatRooms();
-    } catch (err) { toast(err.message, 'err'); }
-  });
-  const nb = $('#cr-new');
-  if (nb) nb.onclick = () => {
-    const m = UI.modal({ title: '创建群组', body: '<label>群组名<input id="nr-name" maxlength="30"></label>' });
-    m.foot.innerHTML = '<button class="btn" id="nr-c">取消</button><button class="btn primary" id="nr-ok">创建</button>';
-    m.foot.querySelector('#nr-c').onclick = m.close;
-    m.foot.querySelector('#nr-ok').onclick = async () => {
-      try {
-        const r2 = await API.post('/api/chat/rooms', { name: $('#nr-name').value });
-        m.close(); loadChatRooms(); openRoom(r2.id);
-      } catch (e2) { toast(e2.message, 'err'); }
-    };
-  };
-}
-
-async function openRoom(rid) {
-  App.chat.room = rid;
-  App.chat.lastId = 0;
-  $$('.chat-room').forEach(b => b.classList.toggle('on', +b.dataset.id === rid));
-  const main = $('#chat-main');
-  main.innerHTML =
-    '<div class="chat-msgs" id="chat-msgs"></div>' +
-    '<div class="chat-input"><input id="chat-inp" maxlength="500" placeholder="发送消息… (Enter)">' +
-    '<button class="btn primary" id="chat-send">' + UI.icon('send', 15) + '</button></div>';
-  try { await API.post('/api/chat/rooms/' + rid + '/join', {}); } catch (e) { }
-  await pollRoom(true);
-  clearInterval(App.chat.timer);
-  App.chat.timer = setInterval(() => pollRoom(false), 2500);
-  const inp = $('#chat-inp');
-  const send = async () => {
-    const c = inp.value.trim();
-    if (!c) return;
-    inp.value = '';
-    try { await API.post('/api/chat/rooms/' + rid + '/messages', { content: c }); pollRoom(false); }
-    catch (e) { toast(e.message, 'err'); }
-  };
-  inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); send(); } };
-  $('#chat-send').onclick = send;
-  inp.focus();
-}
-
-async function pollRoom(full) {
-  const rid = App.chat.room;
-  if (!rid || !$('#chat-msgs')) return;
-  let r;
-  try {
-    r = await API.get('/api/chat/rooms/' + rid + '/messages?after=' + (full ? 0 : App.chat.lastId));
-  } catch (e) { return; }
-  const box = $('#chat-msgs');
-  const admin = App.user.role === 'admin';
-  const renderMsg = m => {
-    if (m.deleted) return '<div class="chat-msg deleted"><span class="cm-del">消息已删除</span></div>';
-    const mine = m.uid === App.user.id;
-    return '<div class="chat-msg' + (mine ? ' mine' : '') + '" data-id="' + m.id + '">' +
-      (mine ? '' : '<span class="cm-av">' + avatarHTML(m.author, 28) + '</span>') +
-      '<div class="cm-body">' +
-      (mine ? '' : '<div class="cm-name">' + UI.esc(m.author.nickname) + certHTML(m.author) + '</div>') +
-      '<div class="cm-text">' + UI.esc(m.content) + '</div>' +
-      '<div class="cm-meta">' + (m.created_at || '').slice(11, 16) + (m.edited ? ' · 已编辑' + (m.edited_by_admin ? '(管理员)' : '') : '') +
-      ((mine || admin) ? ' · <a data-op="edit">编辑</a> <a data-op="del">删除</a>' : '') +
-      '</div></div></div>';
-  };
-  if (full) { box.innerHTML = r.items.map(renderMsg).join('') || '<div class="cm-empty">还没有消息, 说点什么吧</div>'; App.chat.msgs = {}; }
-  else if (r.items.length) box.insertAdjacentHTML('beforeend', r.items.map(renderMsg).join(''));
-  r.items.forEach(m => { App.chat.msgs[m.id] = m; });   /* v1.26 修: 缓存全部消息, 编辑旧消息不再丢原文 */
-  if (r.items.length) {
-    App.chat.lastId = r.items[r.items.length - 1].id;
-    box.scrollTop = box.scrollHeight;
-    $$('[data-op]', box).forEach(a => a.onclick = async () => {
-      const mid = +a.closest('.chat-msg').dataset.id;
-      if (a.dataset.op === 'del') {
-        if (!confirm('删除这条消息?')) return;
-        try { await API.del('/api/chat/messages/' + mid); pollRoom(true); } catch (e) { toast(e.message, 'err'); }
-      } else {
-        const msg = App.chat.msgs[mid] || r.items.find(x => x.id === mid);
-        const m = UI.modal({ title: '编辑消息', body: '<textarea id="em-txt" rows="3" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit">' + UI.esc(msg ? msg.content : '') + '</textarea>' });
-        m.foot.innerHTML = '<button class="btn" id="em-cancel">取消</button> <button class="btn primary" id="em-ok">保存</button>';
-        m.foot.querySelector('#em-cancel').onclick = m.close;
-        m.foot.querySelector('#em-ok').onclick = async () => {
-          const v = m.body.querySelector('#em-txt').value.trim();
-          if (!v) return;
-          try { await API.patch('/api/chat/messages/' + mid, { content: v }); m.close(); pollRoom(true); } catch (e) { toast(e.message, 'err'); }
-        };
-      }
-    });
-  }
-}
+/* ---------- 聊天 ----------
+ * v1.27: 聊天整体迁到 web/js/chat.js(window.Chat), 做到微信级:
+ *   私聊/群聊/官方大厅 · 未读角标与免打扰小红点 · 置顶 · 已读回执 ·
+ *   正在输入 · 引用回复 · 表情回应 · @提醒 · 图片/文件/语音消息 ·
+ *   群资料抽屉(改名/公告/群昵称/邀请/移出/转让/退群/解散) · 聊天记录搜索 ·
+ *   向上翻页加载历史 · 拖拽与粘贴发图 · 桌面通知
+ * 路由 #/chat → Chat.view(); 其它页面通过 Chat.refreshBadge() 维护导航角标,
+ * 需要私聊某人时调用 Chat.openDM(uid)。
+ */
+window.openChatDM = function (uid) { if (window.Chat) Chat.openDM(uid); };
 
 /* ---------- 顶栏公告/扫码 绑定(事件委托, 跨视图重渲染存活) ---------- */
 document.addEventListener('click', e => {
