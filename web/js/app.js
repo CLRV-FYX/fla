@@ -54,6 +54,9 @@ function route() {
   runCleanup();
   const path = (location.hash || '#/library').replace(/^#\//, '').split('?')[0];
   const parts = path.split('/').filter(Boolean);
+  if (parts[0] === 'remote') {
+    if (window.Remote) return window.Remote.view();
+  }
   if (!App.user) {
     if (parts[0] === 'register') return viewRegister();
     if (parts[0] === 'qr-approve') {
@@ -527,13 +530,17 @@ function kindBadge(f) {
 function cardHTML(f) {
   const st = f.status === 'converting' ? '<span class="st converting">转换中…</span>'
     : f.status === 'failed' ? '<span class="st failed">转换失败</span>' : '';
+  const isOffice = f.kind === 'office';
   return '<div class="file-card" data-id="' + f.id + '">' +
     '<div class="fc-top">' + kindBadge(f) + st + '</div>' +
     '<div class="fc-name" title="' + UI.esc(f.name) + '">' + UI.esc(f.name) + '</div>' +
     '<div class="fc-meta">' + (f.kind === 'board' ? '无限画布' : UI.fmtSize(f.size)) + ' · ' + UI.fmtDate(f.created_at) +
     (f.kind !== 'board' && f.pages ? ' · ' + f.pages + ' 页' : '') + '</div>' +
     '<div class="act">' +
-    '<button data-a="open" title="打开">' + UI.icon('board', 16) + ' 打开</button>' +
+    (isOffice
+      ? '<button data-a="open" title="在线纯净预览">' + UI.icon('eye', 15) + ' 预览</button>' +
+        '<button data-a="local" class="btn-local" title="直接调用本地 PowerPoint/WPS">' + UI.icon('external', 15) + ' 本地打开</button>'
+      : '<button data-a="open" title="打开">' + UI.icon('board', 16) + ' 打开</button>') +
     (f.kind === 'board' ? '' : '<button data-a="dl" title="下载">' + UI.icon('download', 16) + '</button>') +
     (f.kind === 'board' ? '' : '<button data-a="link" title="复制公开直链">' + UI.icon('link', 16) + '</button>') +
     (f.status === 'failed' ? '<button data-a="retry" title="重试转换">' + UI.icon('refresh', 16) + '</button>' : '') +
@@ -609,6 +616,7 @@ async function refreshList() {
         e.stopPropagation();
         const a = b.dataset.a;
         if (a === 'open') openFile(f);
+        if (a === 'local') openLocalFile(f);
         if (a === 'dl') window.open('/api/files/' + f.id + '/download?token=' + API.token, '_blank');
         if (a === 'link') {
           API.get('/api/files/' + f.id + '/share-link').then(r => {
@@ -718,12 +726,80 @@ async function viewProfile() {
 }
 
 
-/* v1.23: 打开课件 = 直接进入放映(白板仍进编辑器) */
+/* v1.23 / v1.28: 打开课件 = Office 进入纯净预览 (白板进编辑器) */
 function openFile(f) {
   if (f.kind === 'board') { location.hash = '#/view/' + f.id; return; }
   const ext = ((f.name || '').split('.').pop() || '').toLowerCase();
   const ms = f.kind === 'office' && /^(ppt|pptx|doc|docx|xls|xlsx)$/.test(ext);
-  window.open('/present.html?fid=' + f.id + '&token=' + encodeURIComponent(API.token) + (ms ? '&track=ms' : ''), '_blank');
+  if (ms) {
+    location.hash = '#/view/' + f.id;
+    return;
+  }
+  window.open('/present.html?fid=' + f.id + '&token=' + encodeURIComponent(API.token), '_blank');
+}
+
+/* v1.28: 网页端直接调用本地 PowerPoint / WPS (通过 127.0.0.1:8307 桥接与 fla:// 协议) */
+async function openLocalFile(f) {
+  toast('正在唤醒本地 PowerPoint / WPS…');
+  let directUrl = location.origin + '/api/files/' + f.id + '/download?token=' + encodeURIComponent(API.token);
+  try {
+    const share = await API.get('/api/files/' + f.id + '/share-link');
+    if (share && share.direct) directUrl = share.direct;
+  } catch (e) {}
+
+  // 1. 尝试直接请求本地 FLA 桌面服务 (127.0.0.1:8307)
+  try {
+    const res = await fetch('http://127.0.0.1:8307/api/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fid: f.id,
+        name: f.name,
+        url: directUrl,
+        token: API.token
+      })
+    });
+    const d = await res.json();
+    if (d && d.ok) {
+      toast(d.msg || '已成功调起本地应用！');
+      return;
+    }
+  } catch (err) {
+    // 2. 本地端口未就绪，使用 fla:// 自定义协议唤起
+    window.location.href = 'fla://open?fid=' + f.id + '&name=' + encodeURIComponent(f.name) + '&url=' + encodeURIComponent(directUrl);
+
+    // 弹出友好提示与桌面客户端下载
+    setTimeout(() => {
+      UI.modal({
+        title: '调用本地应用 (PowerPoint / WPS)',
+        html: '<div style="line-height:1.6;font-size:13.5px;color:#334155;">' +
+          '<p>浏览器已向操作系统发送 <code>fla://</code> 唤起协议。</p>' +
+          '<p style="margin-top:8px;">如果未自动调起播放器，通常是因为尚未运行 <b>FLA 桌面助手</b>。</p>' +
+          '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; margin:12px 0; font-size:13px; color:#475569;">' +
+            '<b>FLA 桌面助手专属功能：</b><br>' +
+            '• 自动检测系统默认 Office 软件打开课件<br>' +
+            '• 拦截希沃白板5自动弹出的覆盖工具条并替换为 FLA 工具条<br>' +
+            '• 右下角附带极简微透明 FLA 水印<br>' +
+            '• 画布与板书随 PPT 幻灯片翻页严格同步移动<br>' +
+            '• 支持手机扫码投屏双向遥控' +
+          '</div>' +
+          '<div style="display:flex; gap:10px; margin-top:14px;">' +
+            '<button class="btn primary" id="dlDesktopBtn">' + UI.icon('download', 16) + ' 下载 FLA 桌面客户端 (EXE)</button>' +
+            '<button class="btn" id="dlPptBtn">' + UI.icon('file', 16) + ' 仅下载此课件文件</button>' +
+          '</div>' +
+        '</div>',
+        onMount: (body, close) => {
+          body.querySelector('#dlDesktopBtn').onclick = () => {
+            window.open('/api/tools/download-desktop', '_blank');
+          };
+          body.querySelector('#dlPptBtn').onclick = () => {
+            window.open('/api/files/' + f.id + '/download?token=' + API.token, '_blank');
+            close();
+          };
+        }
+      });
+    }, 1200);
+  }
 }
 
 /* v1.23: 站点背景(管理后台→系统设置) */

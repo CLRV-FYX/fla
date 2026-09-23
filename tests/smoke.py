@@ -1122,13 +1122,48 @@ gen_conf
                               capture_output=True, text=True, cwd=str(root))
     check("前端 JavaScript 脚本编译零语法错误", node_chk.returncode == 0, node_chk.stderr)
 
+    # === 5f. 手机投屏遥控与桌面助手打包 (v1.28) ============================
+    print("\n== 5f. 手机投屏遥控与桌面助手打包 (v1.28) =========================")
+    rm_cr = c.post("/api/remote/create", json={"title": "语文课件", "fid": 1, "page": 1, "total": 12})
+    check("创建手机投屏遥控会话", rm_cr.status_code == 200 and "session_id" in rm_cr.json(), "")
+    sid = rm_cr.json().get("session_id")
+    code = rm_cr.json().get("code")
+
+    rm_info = c.get(f"/api/remote/{sid}/info?code={code}")
+    check("查询手机遥控会话信息", rm_info.status_code == 200 and rm_info.json().get("title") == "语文课件", "")
+
+    rm_st = c.post(f"/api/remote/{sid}/state", json={"page": 3, "total": 12, "black": False})
+    check("同步遥控放映状态", rm_st.status_code == 200 and rm_st.json().get("ok") is True, "")
+
+    rm_act = c.post(f"/api/remote/{sid}/action", json={"action": "stepNext", "data": {"step": 1}})
+    check("手机发送步进/翻页指令", rm_act.status_code == 200 and rm_act.json().get("ok") is True, "")
+
+    rm_poll = c.get(f"/api/remote/{sid}/poll?after=0")
+    check("轮询遥控指令队列", rm_poll.status_code == 200 and len(rm_poll.json().get("events", [])) >= 1, "")
+
+    dl_desk = c.get("/api/tools/download-desktop")
+    check("GET /api/tools/download-desktop 打包桌面端 ZIP",
+          dl_desk.status_code == 200 and "application/zip" in dl_desk.headers.get("content-type", "") and len(dl_desk.content) > 1000, "")
+
+    desk_dir = root / "desktop"
+    check("桌面端模块完整性 (main/seewo/com/overlay/server/build)",
+          (desk_dir / "main.py").exists() and
+          (desk_dir / "seewo_interceptor.py").exists() and
+          (desk_dir / "ppt_controller.py").exists() and
+          (desk_dir / "overlay_window.py").exists() and
+          (desk_dir / "local_server.py").exists() and
+          (desk_dir / "build_exe.py").exists() and
+          (desk_dir / "run.bat").exists() and
+          (desk_dir / "build.bat").exists() and
+          (desk_dir / "setup_protocol.bat").exists(), "")
+
     sim_node = subprocess.run([
         "node", "-e",
         'const fs = require("fs"); const vm = require("vm");\n'
         'const els = {}; function el(id) { return els[id] || (els[id] = { id, innerHTML: "", style: {}, classList: { add(){}, remove(){}, contains(){return false}, toggle(){} }, appendChild(){}, querySelector(s){ return el(s.replace(/^#/,"")); }, querySelectorAll(){ return []; } }); }\n'
         'const ctx = { window: {}, document: { title: "", readyState: "complete", documentElement: { scrollTop: 0, tagName: "html", style: {} }, head: { appendChild(){} }, body: { style: {}, appendChild(){} }, createElement(t){ return el("e_"+Math.random()); }, getElementById: el, querySelector(s){ return el(s.replace(/^#/,"")); }, querySelectorAll(){ return []; }, addEventListener(){} }, location: { hash: "", origin: "https://t.clrv.top" }, localStorage: { getItem(){return null}, setItem(){}, removeItem(){} }, sessionStorage: { getItem(){return null}, setItem(){}, removeItem(){} }, navigator: { userAgent: "Node" }, fetch(){ return Promise.resolve({ ok: true, json(){ return Promise.resolve({}); } }); }, console, setTimeout, clearTimeout, setInterval, clearInterval };\n'
         'ctx.window = ctx; ctx.globalThis = ctx; ctx.window.addEventListener = ()=>{};\n'
-        '["lib/qrcode/qrcode.min.js", "js/api.js", "js/ui.js", "js/app.js", "js/admin.js", "js/chat.js", "js/msstage.js", "js/viewer.js"].forEach(p => vm.runInNewContext(fs.readFileSync("web/" + p, "utf8"), ctx));\n'
+        '["lib/qrcode/qrcode.min.js", "js/api.js", "js/ui.js", "js/app.js", "js/admin.js", "js/chat.js", "js/remote.js", "js/msstage.js", "js/viewer.js"].forEach(p => vm.runInNewContext(fs.readFileSync("web/" + p, "utf8"), ctx));\n'
         'if (!els["app"] || !els["app"].innerHTML || els["app"].innerHTML.includes("加载中…")) process.exit(1);\n'
     ], capture_output=True, text=True, cwd=str(root))
     check("前端全脚本顺序加载并初始化渲染正常 (脱离加载中卡死)", sim_node.returncode == 0, sim_node.stderr)

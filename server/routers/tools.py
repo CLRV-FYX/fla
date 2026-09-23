@@ -1,10 +1,13 @@
 """课堂工具辅助接口: 名单解析 (Excel / CSV / TXT)."""
 import csv
 import io
+import os
+from pathlib import Path
 import xml.etree.ElementTree as ET
 import zipfile
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 
@@ -150,3 +153,23 @@ async def parse_roster(file: UploadFile = File(...)):
             deduped.append(n)
 
     return {"ok": True, "count": len(deduped), "names": deduped}
+
+
+@router.get("/download-desktop")
+def download_desktop():
+    """打包桌面客户端供教师或管理员直接下载使用."""
+    desktop_dir = Path(__file__).resolve().parent.parent.parent / "desktop"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(desktop_dir):
+            for file in files:
+                p = Path(root) / file
+                rel = p.relative_to(desktop_dir)
+                zf.write(p, f"FLA-Desktop/{rel}")
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=FLA-Desktop-Client.zip"},
+    )
+
