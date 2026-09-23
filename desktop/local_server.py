@@ -174,6 +174,15 @@ def register_windows_protocol():
         logger.debug(f"注册协议关联跳过: {e}")
 
 
+def start_server_in_background(port: int = LOCAL_PORT) -> ThreadingHTTPServer:
+    server = ThreadingHTTPServer(("127.0.0.1", port), BridgeHandler)
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    logger.info(f"FLA 桌面桥接服务已在后台启动: http://127.0.0.1:{port}")
+    register_windows_protocol()
+    return server
+
+
 def start_server(port: int = LOCAL_PORT):
     server = ThreadingHTTPServer(("127.0.0.1", port), BridgeHandler)
     logger.info(f"FLA 桌面桥接服务已启动: http://127.0.0.1:{port}")

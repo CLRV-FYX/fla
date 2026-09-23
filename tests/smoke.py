@@ -1145,17 +1145,35 @@ gen_conf
     check("GET /api/tools/download-desktop 打包桌面端 ZIP",
           dl_desk.status_code == 200 and "application/zip" in dl_desk.headers.get("content-type", "") and len(dl_desk.content) > 1000, "")
 
+    # v1.28 免登录桌面端分发与自动更新接口
+    ver_resp = c.get("/api/desktop/version")
+    check("GET /api/desktop/version 免登录版本检测接口",
+          ver_resp.status_code == 200 and ver_resp.json().get("version") == "1.28.0" and "/api/desktop/download" in ver_resp.json().get("download_url", "") and len(ver_resp.json().get("changelog", [])) >= 3, ver_resp.text)
+
+    dl_exe = c.get("/api/desktop/download")
+    check("GET /api/desktop/download 免登录直连下载 Windows 单文件 EXE",
+          dl_exe.status_code == 200 and "FLA.exe" in dl_exe.headers.get("content-disposition", "") and len(dl_exe.content) > 1000, "")
+
     desk_dir = root / "desktop"
-    check("桌面端模块完整性 (main/seewo/com/overlay/server/build)",
+    check("桌面端模块完整性 (main/seewo/com/overlay/server/build/ui/updater)",
           (desk_dir / "main.py").exists() and
           (desk_dir / "seewo_interceptor.py").exists() and
           (desk_dir / "ppt_controller.py").exists() and
           (desk_dir / "overlay_window.py").exists() and
           (desk_dir / "local_server.py").exists() and
+          (desk_dir / "auto_updater.py").exists() and
+          (desk_dir / "ui.py").exists() and
+          (desk_dir / "package_exe.py").exists() and
+          (desk_dir / "dist" / "FLA.exe").exists() and
           (desk_dir / "build_exe.py").exists() and
           (desk_dir / "run.bat").exists() and
           (desk_dir / "build.bat").exists() and
           (desk_dir / "setup_protocol.bat").exists(), "")
+
+    # 客户端版本比较算法与自更新逻辑
+    from desktop.auto_updater import is_newer_version
+    check("版本比对算法 (1.29.0 > 1.28.0)", is_newer_version("1.29.0", "1.28.0") is True, "")
+    check("版本比对算法 (1.28.0 不大于 1.28.0)", is_newer_version("1.28.0", "1.28.0") is False, "")
 
     sim_node = subprocess.run([
         "node", "-e",
@@ -1165,8 +1183,9 @@ gen_conf
         'ctx.window = ctx; ctx.globalThis = ctx; ctx.window.addEventListener = ()=>{};\n'
         '["lib/qrcode/qrcode.min.js", "js/api.js", "js/ui.js", "js/app.js", "js/admin.js", "js/chat.js", "js/remote.js", "js/msstage.js", "js/viewer.js"].forEach(p => vm.runInNewContext(fs.readFileSync("web/" + p, "utf8"), ctx));\n'
         'if (!els["app"] || !els["app"].innerHTML || els["app"].innerHTML.includes("加载中…")) process.exit(1);\n'
+        'if (!els["app"].innerHTML.includes("home-portal") || !els["app"].innerHTML.includes("/api/desktop/download")) process.exit(2);\n'
     ], capture_output=True, text=True, cwd=str(root))
-    check("前端全脚本顺序加载并初始化渲染正常 (脱离加载中卡死)", sim_node.returncode == 0, sim_node.stderr)
+    check("未登录访问默认展示官网门户而非直接跳登录", sim_node.returncode == 0, sim_node.stderr)
 
     return finish()
 

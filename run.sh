@@ -149,11 +149,21 @@ case "${1:-help}" in
     ;;
   pull)
     echo ">> 同步最新代码 (分支 arena/01a0add0-fla) ..."
-    if [ -d .git ]; then
-      git fetch origin arena/01a0add0-fla && git reset --hard origin/arena/01a0add0-fla
-    elif command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
-      echo "  (非 git 仓库，通过官方归档包更新代码)"
-      curl -sL https://github.com/CLRV-FYX/fla/archive/refs/heads/arena/01a0add0-fla.tar.gz | tar -xz --strip-components=1
+    UPDATED=0
+    if [ -d .git ] && command -v git >/dev/null 2>&1; then
+      if git fetch origin arena/01a0add0-fla 2>/dev/null && git reset --hard origin/arena/01a0add0-fla 2>/dev/null; then
+        UPDATED=1
+      elif git fetch https://github.com/CLRV-FYX/fla.git arena/01a0add0-fla 2>/dev/null && git reset --hard FETCH_HEAD 2>/dev/null; then
+        UPDATED=1
+      fi
+    fi
+    if [ "$UPDATED" = "0" ]; then
+      if command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
+        echo "  (通过官方代码包快速同步代码)"
+        curl -sL https://github.com/CLRV-FYX/fla/archive/refs/heads/arena/01a0add0-fla.tar.gz | tar -xz --strip-components=1 && UPDATED=1
+      elif command -v wget >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
+        wget -qO- https://github.com/CLRV-FYX/fla/archive/refs/heads/arena/01a0add0-fla.tar.gz | tar -xz --strip-components=1 && UPDATED=1
+      fi
     fi
     # 重新 exec 本脚本，防止 bash 内存缓存/文件偏移导致未执行新版指令
     exec bash "$0" apply-update
@@ -162,7 +172,10 @@ case "${1:-help}" in
     echo ">> 清理旧中间层容器 (释放 8306 端口归还给 fla 容器) ..."
     docker rm -f nginx 2>/dev/null || true
     echo ">> 重建并拉起 fla 容器 ($PORT->$PORT) ..."
-    $DC $DCP -f "$CF" up -d --remove-orphans --force-recreate
+    if [ -n "$DC" ] && [ -f "$CF" ]; then
+      $DC $DCP -f "$CF" up -d --remove-orphans --force-recreate
+    fi
+    systemctl restart fla 2>/dev/null || true
     echo ">> 等待服务健康检查 ..."
     OK=0
     for i in $(seq 1 20); do
@@ -179,7 +192,7 @@ case "${1:-help}" in
     fi
     echo ""
     echo "── 容器状态 ──"
-    docker ps -a --filter name=fla --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+    docker ps -a --filter name=fla --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true
     echo ""
     echo "✔ 更新完成！"
     ;;

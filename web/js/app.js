@@ -52,20 +52,24 @@ App.runCleanup = runCleanup;
 
 function route() {
   runCleanup();
-  const path = (location.hash || '#/library').replace(/^#\//, '').split('?')[0];
+  const rawHash = location.hash || '';
+  const path = rawHash.replace(/^#\/?/, '').split('?')[0];
   const parts = path.split('/').filter(Boolean);
   if (parts[0] === 'remote') {
     if (window.Remote) return window.Remote.view();
   }
   if (!App.user) {
+    if (parts[0] === 'login') return viewLogin();
     if (parts[0] === 'register') return viewRegister();
     if (parts[0] === 'qr-approve') {
       try { sessionStorage.setItem('fla_after_login', location.hash); } catch (e) { }
       return viewLogin();
     }
-    return viewLogin();
+    // 未登录时访问根路径或官网，展示官方门户
+    return viewHome();
   }
   if (parts[0] === 'login' || parts[0] === 'register') { location.hash = '#/library'; return; }
+  if (parts[0] === 'home') return viewHome();
   refreshAnnBadge();   /* v1.26: 公告未读红点 */
   if (window.Chat) Chat.refreshBadge();   /* v1.27: 聊天未读角标 */
   if (!parts.length || parts[0] === 'library') return viewLibrary();
@@ -326,14 +330,14 @@ window.bindCertCards = bindCertCards;
 
 function bindLogout() {
   const b = $('#logout');
-  if (b) b.onclick = () => { API.setToken(''); App.user = null; location.hash = '#/login'; };
+  if (b) b.onclick = () => { API.setToken(''); App.user = null; location.hash = '#/home'; };
 }
 window.bindLogout = bindLogout;
 
 function shell(content, active) {
   const u = App.user;
   return '<div class="topbar">' +
-    '<div class="brand">' + UI.icon('board', 26) + '<span>FLA</span></div>' +
+    '<a class="brand" href="#/home" title="返回官网首页">' + UI.icon('board', 26) + '<span>FLA</span></a>' +
     '<nav class="nav">' +
     '<a class="' + (active === 'library' ? 'on' : '') + '" href="#/library">我的课件</a>' +
     '<a class="' + (active === 'forum' ? 'on' : '') + '" href="#/forum">' + UI.icon('forum', 15) + ' 论坛</a>' +
@@ -343,6 +347,7 @@ function shell(content, active) {
     (u.role === 'admin' ? '<a class="' + (active === 'admin' ? 'on' : '') + '" href="#/admin">管理后台</a>' : '') +
     '</nav>' +
     '<div class="top-right">' + certHTML(u) +
+    '<a class="btn sm ghost" href="/api/desktop/download" title="下载 Windows 客户端 (单 EXE)">' + UI.icon('download', 14) + ' 客户端</a>' +
     '<button class="icon-btn" id="top-ann" title="公告"><i class="ann-dot hidden" id="ann-dot"></i>' + UI.icon('horn', 18) + '</button>' +
     '<button class="icon-btn" id="top-qr" title="扫码登录其他设备">' + UI.icon('qr', 18) + '</button>' +
     '<span class="uchip">' + avatarHTML(u, 32) + '<b>' + UI.esc(u.nickname) + '</b></span>' +
@@ -350,10 +355,154 @@ function shell(content, active) {
     '</div></div><div class="page">' + content + '</div>';
 }
 
+/* ---------- 官方门户 / 官网主页 ---------- */
+function viewHome() {
+  document.title = 'FLA · 现代化多媒体互动教学系统';
+  const u = App.user;
+  const navUserSection = u
+    ? '<a href="#/library" class="btn primary sm home-nav-dl">' + UI.icon('board', 14) + ' <span>进入控制台</span></a>'
+    : '<a href="#/login" class="home-link">登录</a>' +
+      '<a href="#/register" class="home-link">注册</a>' +
+      '<a href="/api/desktop/download" class="btn primary sm home-nav-dl">' + UI.icon('download', 14) + ' <span>下载客户端</span></a>';
+
+  const heroActions = u
+    ? '<a href="/api/desktop/download" class="btn primary lg home-btn-dl">' +
+        UI.icon('download', 18) +
+        '<span><strong>立即下载 Windows 客户端</strong><small>单文件 EXE · 免安装 · 启动自动更新</small></span>' +
+      '</a>' +
+      '<a href="#/library" class="btn lg home-btn-portal">' + UI.icon('board', 16) + ' 进入我的课件</a>' +
+      '<a href="#/remote" class="btn soft lg home-btn-reg">' + UI.icon('qr', 15) + ' 手机扫码遥控</a>'
+    : '<a href="/api/desktop/download" class="btn primary lg home-btn-dl">' +
+        UI.icon('download', 18) +
+        '<span><strong>立即下载 Windows 客户端</strong><small>单文件 EXE · 免安装 · 启动自动更新</small></span>' +
+      '</a>' +
+      '<a href="#/login" class="btn lg home-btn-portal">' + UI.icon('external', 16) + ' 登录网页控制台</a>' +
+      '<a href="#/register" class="btn soft lg home-btn-reg">注册新账号</a>' +
+      '<a href="#/remote" class="btn soft lg home-btn-reg">' + UI.icon('qr', 15) + ' 手机遥控</a>';
+
+  $('#app').innerHTML =
+    '<div class="home-portal">' +
+      '<header class="home-nav">' +
+        '<div class="home-nav-inner">' +
+          '<a href="#/home" class="home-brand">' +
+            '<div class="home-logo">' + UI.icon('board', 22) + '</div>' +
+            '<div class="home-title-box">' +
+              '<span class="home-title">FLA</span>' +
+              '<span class="home-badge">智慧互动教学系统</span>' +
+            '</div>' +
+          '</a>' +
+          '<div class="home-nav-links">' +
+            '<a href="#features" class="home-link" id="nav-features-link">功能特性</a>' +
+            '<a href="#/remote" class="home-link">手机遥控</a>' +
+            navUserSection +
+          '</div>' +
+        '</div>' +
+      '</header>' +
+
+      '<main class="home-main">' +
+        '<section class="home-hero">' +
+          '<div class="home-hero-badge"><span class="home-pulse"></span> 全新 v1.28.0 课堂互动套件正式发布</div>' +
+          '<h1 class="home-hero-title">现代化多媒体教学终端<br>专为高效课堂与授课而生</h1>' +
+          '<p class="home-hero-desc">无缝打通云端课件库、纯净在线预览、希沃白板5智能拦截、PPT随页板书联动与手机多维无线遥控。<br>单文件免安装，支持服务端检测原地静默升级。</p>' +
+          '<div class="home-hero-actions">' + heroActions + '</div>' +
+          '<div class="home-hero-meta">' +
+            '<span>' + UI.icon('check', 14) + ' 免登录直接下载</span>' +
+            '<span>' + UI.icon('check', 14) + ' 希沃白板5自动拦截压制</span>' +
+            '<span>' + UI.icon('check', 14) + ' 画布随 PPT 翻页严格同步</span>' +
+            '<span>' + UI.icon('check', 14) + ' 手机无线扫码投屏与遥控</span>' +
+          '</div>' +
+        '</section>' +
+
+        '<section class="home-section" id="features">' +
+          '<div class="home-sec-head">' +
+            '<h2>核心特性</h2>' +
+            '<p>聚焦教学授课核心需求，剔除臃肿与干扰，提供极简、顺畅的软硬件协同体验</p>' +
+          '</div>' +
+          '<div class="home-grid">' +
+            '<div class="home-card">' +
+              '<div class="home-card-icon">' + UI.icon('lock', 22) + '</div>' +
+              '<h3>希沃白板5 智能静默拦截</h3>' +
+              '<p>毫秒级检测并抑制希沃白板5强制注入的多余浮动工具栏与广告干扰，替代为 FLA 极简专业工具条与专属防伪水印。</p>' +
+            '</div>' +
+            '<div class="home-card">' +
+              '<div class="home-card-icon">' + UI.icon('board', 22) + '</div>' +
+              '<h3>板书笔迹与幻灯片翻页严格联动</h3>' +
+              '<p>深度挂接 Office COM 接口，精准捕捉放映页码。板书随翻页按页独立隔离保存，翻页前进后退永不错位。</p>' +
+            '</div>' +
+            '<div class="home-card">' +
+              '<div class="home-card-icon">' + UI.icon('qr', 22) + '</div>' +
+              '<h3>手机扫码无线遥控与投屏</h3>' +
+              '<p>无需安装任何 App，教师手机扫码即可成为掌上遥控器。支持激光笔触控板、幻灯片步进、全屏黑屏与课堂白板。</p>' +
+            '</div>' +
+            '<div class="home-card">' +
+              '<div class="home-card-icon">' + UI.icon('eye', 22) + '</div>' +
+              '<h3>轻量纯净的 Office 在线预览</h3>' +
+              '<p>去除所有冗余编辑栏，专心呈现课件预览。同时支持在网页端一键直连调起本地系统默认 PowerPoint / WPS 原生演示。</p>' +
+            '</div>' +
+            '<div class="home-card">' +
+              '<div class="home-card-icon">' + UI.icon('refresh', 22) + '</div>' +
+              '<h3>单 EXE 运行与原地静默更新</h3>' +
+              '<p>纯净轻量单文件设计，双击直接运行。每次启动自动比对服务端版本并原地静默替换，彻底告别手动去官网重新下载。</p>' +
+            '</div>' +
+            '<div class="home-card">' +
+              '<div class="home-card-icon">' + UI.icon('users', 22) + '</div>' +
+              '<h3>微信级群组交流与课件互动</h3>' +
+              '<p>内置微信级课堂交流、课件点对点分享、@提醒、随机抽人点名与倒计时闹钟，一站式赋能智慧互动课堂。</p>' +
+            '</div>' +
+          '</div>' +
+        '</section>' +
+
+        '<section class="home-download-banner">' +
+          '<div class="home-dl-box">' +
+            '<div class="home-dl-left">' +
+              '<h2>立即体验 Windows 桌面端</h2>' +
+              '<p>轻量无捆绑 · 专为多媒体教室与多功能一体机定制优化 · 极低资源占用</p>' +
+              '<div class="home-dl-tags">' +
+                '<span class="home-dl-tag">Windows 10 / 11 兼容</span>' +
+                '<span class="home-dl-tag">Microsoft Office / WPS 自动识别</span>' +
+                '<span class="home-dl-tag">支持本地 8307 网页直接唤起</span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="home-dl-right">' +
+              '<a href="/api/desktop/download" class="btn primary lg home-btn-dl-pulse">' +
+                UI.icon('download', 20) + ' 免费免登录直接下载 (FLA.exe)' +
+              '</a>' +
+              '<a href="/api/desktop/version" target="_blank" class="home-ver-link">查看服务端版本更新日志 (JSON)</a>' +
+            '</div>' +
+          '</div>' +
+        '</section>' +
+      '</main>' +
+
+      '<footer class="home-footer">' +
+        '<div class="home-footer-inner">' +
+          '<div class="home-footer-left">' +
+            '<div class="home-footer-brand">' + UI.icon('board', 18) + ' FLA 智慧教学互动系统</div>' +
+            '<p>© ' + new Date().getFullYear() + ' FLA Project. 保留所有权利 · 专为教育教学优化</p>' +
+          '</div>' +
+          '<div class="home-footer-links">' +
+            '<a href="#/login">用户登录</a>' +
+            '<a href="#/register">注册账号</a>' +
+            '<a href="#/remote">手机遥控</a>' +
+            '<a href="/api/desktop/download">客户端下载</a>' +
+          '</div>' +
+        '</div>' +
+      '</footer>' +
+    '</div>';
+
+  const fLink = $('#nav-features-link');
+  if (fLink) {
+    fLink.onclick = e => {
+      e.preventDefault();
+      const sec = $('#features');
+      if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+    };
+  }
+}
+
 /* ---------- 登录 / 注册 ---------- */
 function viewLogin() {
   document.title = '登录 - FLA';
-  const regLink = '<p class="auth-foot">还没有账号？<a href="#/register">使用邀请码注册</a></p>';
+  const regLink = '<p class="auth-foot">还没有账号？<a href="#/register">使用邀请码注册</a></p><p class="auth-extra-links"><a href="#/home">返回官网首页</a> · <a href="/api/desktop/download">下载 Windows 客户端</a></p>';
   $('#app').innerHTML =
     '<div class="auth-bg"><div class="auth-card">' +
     '<div class="auth-logo">' + UI.icon('board', 36) + '</div>' +
@@ -500,6 +649,7 @@ async function viewRegister() {
     '<label>确认密码<input name="password2" type="password" minlength="6" required></label>' +
     '<button class="btn primary block" type="submit">注 册</button></form>' +
     '<p class="auth-foot">已有账号？<a href="#/login">返回登录</a></p>' +
+    '<p class="auth-extra-links"><a href="#/home">返回官网首页</a> · <a href="/api/desktop/download">下载 Windows 客户端</a></p>' +
     '</div></div>';
   $('#f').onsubmit = async e => {
     e.preventDefault();

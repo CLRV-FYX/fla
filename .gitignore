@@ -18,8 +18,10 @@ data/
 deploy/.env
 *.log
 node_modules/
-dist/
+/dist/
 build/
+!desktop/dist/
+!desktop/dist/FLA.exe
 
 # ---- 编辑器 / 系统 ----
 .DS_Store
