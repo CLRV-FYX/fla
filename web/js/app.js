@@ -888,17 +888,26 @@ function openFile(f) {
   window.open('/present.html?fid=' + f.id + '&token=' + encodeURIComponent(API.token), '_blank');
 }
 
-/* v1.28: 网页端直接调用本地 PowerPoint / WPS (通过 127.0.0.1:8307 桥接与 fla:// 协议) */
+/* v1.28: 网页端直接调用本地 PowerPoint / WPS (通过 127.0.0.1:8307 桥接与系统 Office 唤起) */
 async function openLocalFile(f) {
-  toast('正在唤醒本地 PowerPoint / WPS…');
+  toast('正在尝试调用本地 PowerPoint / WPS…');
   let directUrl = location.origin + '/api/files/' + f.id + '/download?token=' + encodeURIComponent(API.token);
   try {
     const share = await API.get('/api/files/' + f.id + '/share-link');
     if (share && share.direct) directUrl = share.direct;
   } catch (e) {}
 
+  const ext = ((f.name || '').split('.').pop() || '').toLowerCase();
+  const isPpt = /^(ppt|pptx|pps|ppsx|dps)$/.test(ext);
+  const isDoc = /^(doc|docx|rtf|wps)$/.test(ext);
+  const isXls = /^(xls|xlsx|csv|et)$/.test(ext);
+  const officeScheme = isPpt ? 'ms-powerpoint:ofe|u|' : isDoc ? 'ms-word:ofe|u|' : isXls ? 'ms-excel:ofe|u|' : '';
+
   // 1. 尝试直接请求本地 FLA 桌面服务 (127.0.0.1:8307)
+  let bridgeSuccess = false;
   try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 1500);
     const res = await fetch('http://127.0.0.1:8307/api/open', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -907,48 +916,56 @@ async function openLocalFile(f) {
         name: f.name,
         url: directUrl,
         token: API.token
-      })
+      }),
+      signal: ctrl.signal
     });
+    clearTimeout(tid);
     const d = await res.json();
     if (d && d.ok) {
-      toast(d.msg || '已成功调起本地应用！');
+      toast(d.msg || '已成功调起本地应用播放！');
+      bridgeSuccess = true;
       return;
     }
-  } catch (err) {
-    // 2. 本地端口未就绪，使用 fla:// 自定义协议唤起
-    window.location.href = 'fla://open?fid=' + f.id + '&name=' + encodeURIComponent(f.name) + '&url=' + encodeURIComponent(directUrl);
+  } catch (err) {}
 
-    // 弹出友好提示与桌面客户端下载
-    setTimeout(() => {
-      UI.modal({
-        title: '调用本地应用 (PowerPoint / WPS)',
-        html: '<div style="line-height:1.6;font-size:13.5px;color:#334155;">' +
-          '<p>浏览器已向操作系统发送 <code>fla://</code> 唤起协议。</p>' +
-          '<p style="margin-top:8px;">如果未自动调起播放器，通常是因为尚未运行 <b>FLA 桌面助手</b>。</p>' +
-          '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; margin:12px 0; font-size:13px; color:#475569;">' +
-            '<b>FLA 桌面助手专属功能：</b><br>' +
-            '• 自动检测系统默认 Office 软件打开课件<br>' +
-            '• 拦截希沃白板5自动弹出的覆盖工具条并替换为 FLA 工具条<br>' +
-            '• 右下角附带极简微透明 FLA 水印<br>' +
-            '• 画布与板书随 PPT 幻灯片翻页严格同步移动<br>' +
-            '• 支持手机扫码投屏双向遥控' +
-          '</div>' +
-          '<div style="display:flex; gap:10px; margin-top:14px;">' +
-            '<button class="btn primary" id="dlDesktopBtn">' + UI.icon('download', 16) + ' 下载 FLA 桌面客户端 (EXE)</button>' +
-            '<button class="btn" id="dlPptBtn">' + UI.icon('file', 16) + ' 仅下载此课件文件</button>' +
-          '</div>' +
-        '</div>',
-        onMount: (body, close) => {
-          body.querySelector('#dlDesktopBtn').onclick = () => {
-            window.open('/api/tools/download-desktop', '_blank');
-          };
-          body.querySelector('#dlPptBtn').onclick = () => {
-            window.open('/api/files/' + f.id + '/download?token=' + API.token, '_blank');
-            close();
-          };
-        }
-      });
-    }, 1200);
+  // 2. 本地 8307 未启动：触发课件直连下载，并尝试 Office 协议直接唤起
+  if (!bridgeSuccess) {
+    const dlUrl = '/api/files/' + f.id + '/download?token=' + encodeURIComponent(API.token);
+    
+    // 尝试微软 Office 原生 URL Scheme 唤起
+    if (officeScheme && directUrl.startsWith('http')) {
+      try {
+        window.location.href = officeScheme + encodeURI(directUrl);
+      } catch (e) {}
+    }
+
+    // 自动触发文件下载以便双击打开
+    try {
+      const a = document.createElement('a');
+      a.href = dlUrl;
+      a.download = f.name || 'presentation.pptx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) {}
+
+    // 弹出清晰指引弹窗
+    UI.modal({
+      title: '调用本地应用 (PowerPoint / WPS)',
+      body: '<div style="line-height:1.65;font-size:14px;color:#334155;">' +
+        '<p style="margin-bottom:8px;">已为您开始下载课件 <b>《' + UI.esc(f.name) + '》</b>。</p>' +
+        '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;margin:12px 0;font-size:13px;color:#475569;">' +
+          '<b>💡 两种本地打开方式：</b><br>' +
+          '1. <b>直接运行：</b>点击浏览器下方刚下载的文件，即可直接使用系统默认 PowerPoint 或 WPS 播放；<br>' +
+          '2. <b>FLA 课堂助手：</b>运行单文件客户端，支持希沃白板5工具栏自动拦截压制、板书画布随 PPT 翻页严格同步及手机投屏遥控。' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;margin-top:16px;">' +
+          '<a href="/api/desktop/download" class="btn primary" style="text-decoration:none;">' + UI.icon('download', 15) + ' 下载 FLA 客户端 (Windows 单 EXE)</a>' +
+          '<a href="' + dlUrl + '" class="btn" style="text-decoration:none;">' + UI.icon('file', 15) + ' 重新下载课件</a>' +
+        '</div>' +
+      '</div>',
+      width: '480px'
+    });
   }
 }
 

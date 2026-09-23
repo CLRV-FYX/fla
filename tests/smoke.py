@@ -748,7 +748,7 @@ def run(c):
     r = c.get("/js/msstage.js")
     check("msstage.js 已发布", r.status_code == 200 and "MSStage" in r.text, r.status_code)
     r = c.get("/js/viewer.js")
-    check("viewer.js 委托 MSStage", r.status_code == 200 and "MSStage.mount" in r.text, r.status_code)
+    check("viewer.js 纯净原生微软嵌入预览 (无白框干扰)", r.status_code == 200 and ("pure-ms-view" in r.text or "MSStage" in r.text), r.status_code)
     r = c.get("/js/present.js")
     check("present.js 委托 MSStage", r.status_code == 200 and "MSStage.mount" in r.text, r.status_code)
     r = c.get("/style.css")
@@ -1142,8 +1142,8 @@ gen_conf
     check("轮询遥控指令队列", rm_poll.status_code == 200 and len(rm_poll.json().get("events", [])) >= 1, "")
 
     dl_desk = c.get("/api/tools/download-desktop")
-    check("GET /api/tools/download-desktop 打包桌面端 ZIP",
-          dl_desk.status_code == 200 and "application/zip" in dl_desk.headers.get("content-type", "") and len(dl_desk.content) > 1000, "")
+    check("GET /api/tools/download-desktop 下载桌面客户端 (EXE/ZIP)",
+          dl_desk.status_code == 200 and len(dl_desk.content) > 1000, "")
 
     # v1.28 免登录桌面端分发与自动更新接口
     ver_resp = c.get("/api/desktop/version")
@@ -1155,7 +1155,7 @@ gen_conf
           dl_exe.status_code == 200 and "FLA.exe" in dl_exe.headers.get("content-disposition", "") and len(dl_exe.content) > 1000, "")
 
     desk_dir = root / "desktop"
-    check("桌面端模块完整性 (main/seewo/com/overlay/server/build/ui/updater)",
+    check("桌面端模块完整性 (main/seewo/com/overlay/server/build/ui/updater/csharp)",
           (desk_dir / "main.py").exists() and
           (desk_dir / "seewo_interceptor.py").exists() and
           (desk_dir / "ppt_controller.py").exists() and
@@ -1163,6 +1163,7 @@ gen_conf
           (desk_dir / "local_server.py").exists() and
           (desk_dir / "auto_updater.py").exists() and
           (desk_dir / "ui.py").exists() and
+          (desk_dir / "FLA_Client.cs").exists() and
           (desk_dir / "package_exe.py").exists() and
           (desk_dir / "dist" / "FLA.exe").exists() and
           (desk_dir / "build_exe.py").exists() and

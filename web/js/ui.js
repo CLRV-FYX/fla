@@ -129,13 +129,17 @@ var qrcode=(function(){var E=function(c,x){var g=236,l=17,n=c,s=P[x],t=null,r=0,
       '<div class="m-body"></div>' +
       (opts.footer === false ? '' : '<div class="m-foot"></div>') + '</div>';
     const body = ov.querySelector('.m-body');
-    if (typeof opts.body === 'string') body.innerHTML = opts.body;
-    else if (opts.body) body.appendChild(opts.body);
+    const bContent = opts.body != null ? opts.body : opts.html;
+    if (typeof bContent === 'string') body.innerHTML = bContent;
+    else if (bContent) body.appendChild(bContent);
     const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
     const onKey = e => { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     ov.querySelector('.m-x').onclick = close;
     ov.onmousedown = e => { if (e.target === ov && opts.dismiss !== false) close(); };
+    if (typeof opts.onMount === 'function') {
+      try { opts.onMount(body, close); } catch (e) { }
+    }
     document.body.appendChild(ov);
     return { el: ov, close, body, foot: ov.querySelector('.m-foot') };
   }

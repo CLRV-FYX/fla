@@ -209,20 +209,9 @@
     if (isPreview) wrap.classList.add('ms-stage-preview');
 
     /* ---------------- 顶栏 ---------------- */
-    var top = el('div', 'ms-top');
-    if (isPreview) {
-      top.innerHTML =
-        '<button class="ms-tb" data-a="exit" title="返回课件库">' + icon('back', 17) + ' 返回</button>' +
-        '<span class="ms-title" id="msTitle"></span>' +
-        '<span class="ms-sep"></span>' +
-        '<button class="ms-tb" data-a="prev" title="上一页">' + icon('chevL', 18) + '</button>' +
-        '<button class="ms-page" id="msPage" title="当前页码">1 / 1</button>' +
-        '<button class="ms-tb" data-a="next" title="下一页">' + icon('chevR', 18) + '</button>' +
-        '<span class="ms-sep"></span>' +
-        '<button class="ms-tb ms-tb-action" data-a="newboard" title="新建白板">' + icon('board', 16) + ' 新建白板</button>' +
-        '<button class="ms-tb" data-a="cast" title="手机投屏与远程授课遥控">' + icon('cast', 16) + ' 手机遥控</button>' +
-        '<button class="ms-tb" data-a="full" title="全屏 (F)">' + icon('full', 17) + '</button>';
-    } else {
+    var top = null;
+    if (!isPreview) {
+      top = el('div', 'ms-top');
       top.innerHTML =
         '<button class="ms-tb" data-a="exit" title="退出 (Esc)">' + icon('back', 17) + '</button>' +
         '<span class="ms-title" id="msTitle"></span>' +
@@ -240,8 +229,8 @@
         '<button class="ms-tb" data-a="time" id="msTime" title="点击归零">00:00</button>' +
         '<button class="ms-tb" data-a="settings" title="工具栏个性化定制">' + icon('settings', 17) + '</button>' +
         '<button class="ms-tb" data-a="full" title="全屏 (F)">' + icon('full', 17) + '</button>';
+      wrap.appendChild(top);
     }
-    wrap.appendChild(top);
 
     /* ---------------- 左侧工具条 ---------------- */
     var barL = el('nav', 'ms-pill ms-pill-l');

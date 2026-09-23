@@ -157,8 +157,18 @@ async def parse_roster(file: UploadFile = File(...)):
 
 @router.get("/download-desktop")
 def download_desktop():
-    """打包桌面客户端供教师或管理员直接下载使用."""
+    """提供桌面客户端供教师或管理员直接下载使用 (优先返回单文件可执行程序 FLA.exe)."""
     desktop_dir = Path(__file__).resolve().parent.parent.parent / "desktop"
+    exe_path = desktop_dir / "dist" / "FLA.exe"
+    if exe_path.exists() and exe_path.stat().st_size > 0:
+        from fastapi.responses import FileResponse
+        return FileResponse(
+            path=str(exe_path),
+            filename="FLA.exe",
+            media_type="application/vnd.microsoft.portable-executable",
+            headers={"Cache-Control": "no-cache, must-revalidate"},
+        )
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(desktop_dir):

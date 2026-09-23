@@ -121,31 +121,34 @@
     if (app) app.innerHTML = '<div class="v-msgscreen"><div class="v-msgbox">' + html + '</div></div>';
   }
 
-  /* ---------- v1.19 微软嵌入视图: Office 文档零静态渲染 ---------- */
-  /* ---------- v1.27 微软嵌入视图 → 委托 MSStage (web/js/msstage.js) ----------
-   * 老大难修复: 微软 Office 在线视图是【跨域 iframe】, 父页面既读不到它当前在第
-   * 几页, 也没法命令它翻页 → 以前板书画布永远停在第 1 页, 与画面脱节。
-   * MSStage 改由【我方】掌握页码: 翻页 = 换 iframe.src 的定位参数(wdStartOn /
-   * wdSlideId), 双 iframe 乒乓 + 预载下一页, 交叉淡入; 画布坐标绑定幻灯区域
-   * (按真实宽高比 letterbox, 可手动微调并存到服务器)。浏览页与放映页共用同一
-   * 套舞台与同一份批注数据(pid: m0/m1… 幻灯片, x0… 附加板书页, bb0… 板中板)。 */
+  /* ---------- 原生微软在线嵌入预览: 100% 原生嵌入，不加任何顶栏白框或叠加层 ---------- */
   async function msViewer() {
     const app = document.getElementById('app');
-    if (!window.MSStage) {
-      screenMsg('<p class="err-t">查看组件未载入，请强制刷新 (Ctrl+F5)</p>' +
-        '<button class="btn" onclick="location.reload()">重新加载</button>');
-      return;
-    }
-    app.innerHTML = '';
+    screenMsg('<div class="spin"></div><p>正在载入微软原生在线预览…</p>');
     try {
-      V.msStage = await window.MSStage.mount({
-        fid: V.id, token: API.token, meta: V.meta, mode: 'view', mount: app,
-        onExit: () => { location.hash = '#/library'; },
-      });
-      if (window.App && App.setCleanup) App.setCleanup(() => destroy());
+      const ms = await API.get('/api/files/' + V.id + '/ms-view');
+      const url = ms.url1 || ms.url_tpl || ('https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(ms.direct));
+      app.innerHTML =
+        '<div class="pure-ms-view">' +
+          '<iframe src="' + UI.esc(url) + '" allowfullscreen="true" frameborder="0"></iframe>' +
+        '</div>';
+
+      const onKey = e => {
+        if (e.key === 'Escape') {
+          window.removeEventListener('keydown', onKey);
+          location.hash = '#/library';
+        }
+      };
+      window.addEventListener('keydown', onKey);
+      if (window.App && App.setCleanup) {
+        App.setCleanup(() => {
+          window.removeEventListener('keydown', onKey);
+          destroy();
+        });
+      }
     } catch (e) {
       screenMsg('<p class="err-t">' + UI.esc(e.message) + '</p>' +
-        '<button class="btn" onclick="location.reload()">重试</button>');
+        '<button class="btn" onclick="location.hash=\'#/library\'">返回</button>');
     }
   }
 
