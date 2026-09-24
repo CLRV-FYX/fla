@@ -154,36 +154,62 @@
    * (wdStartOn / wdSlideId), 双 iframe 乒乓 + 预载下一页, 交叉淡入不闪黑屏;
    * 画布坐标绑定幻灯区域(按真实宽高比 letterbox, 可手动微调并保存到服务器)。
    * 同步模式: deep 我方驱动 / follow 微软自翻(板书用 ‹ › 对齐), 顶栏可切。 */
+  function fallbackLocalPresent() {
+    S.msMode = false;
+    document.body.innerHTML = '<div id="pboot">正在加载本地高保真放映引擎…</div>';
+    document.body.style.cssText = 'margin:0;background:#15181d;color:#fff;overflow:hidden;';
+    return openPdf().then(function (numPages) {
+      if (!S.pages.length || (S.pages.every(function (q) { return q.t === 'pdf'; }) && S.pages.length !== numPages)) {
+        S.pages = [];
+        for (var i = 0; i < numPages; i++) S.pages.push({ t: 'pdf', n: i, pid: 'p' + i });
+      }
+      return prefetchImgs();
+    }).then(function () {
+      buildUI();
+      showPage(0);
+    }).catch(function (e) {
+      msFail(e.message || '本地放映引擎启动失败');
+    });
+  }
+
   function msTrack() {
     S.msMode = true;   /* 原生 UI/键盘不再叠加(修 Esc 关标签页) */
-    if (!window.MSStage) return msFail('放映组件未载入, 请强制刷新 (Ctrl+F5)');
+    if (!window.MSStage) {
+      fallbackLocalPresent();
+      return;
+    }
     document.body.innerHTML = '';
     document.body.style.cssText = 'margin:0;overflow:hidden;background:#000';
     window.MSStage.mount({
       fid: FID, token: TOKEN, meta: S.meta, mode: 'present',
       mount: document.body, onExit: exitPresent
-    }).catch(function (e) { msFail((e && e.message) || '微软放映载入失败'); });
+    }).catch(function (e) {
+      console.warn('MSStage mount failed, falling back to local presentation:', e);
+      fallbackLocalPresent();
+    });
   }
   function msFail(msg) {
     document.body.innerHTML = '';
-    document.body.style.cssText = 'margin:0;background:#0b0d10;color:#e8eaef;' +
+    document.body.style.cssText = 'margin:0;background:#121316;color:#e8eaef;' +
       'font:500 15px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;' +
       'display:grid;place-items:center;padding:28px;text-align:center';
     var d = el('div', '', 'max-width:560px');
-    d.innerHTML = '<div style="font-size:40px;line-height:1;margin-bottom:14px">⚠️</div>' +
-      '<b style="font-size:17px">放映没能开始</b>' +
-      '<p style="margin:10px 0 18px;color:rgba(255,255,255,.62)">' +
+    d.innerHTML = '<div style="font-size:40px;line-height:1;margin-bottom:14px">💡</div>' +
+      '<b style="font-size:18px">放映引擎提示</b>' +
+      '<p style="margin:10px 0 18px;color:rgba(255,255,255,.65)">' +
       String(msg).replace(/[<>&]/g, '') + '</p>' +
-      '<button id="msRetry" style="padding:10px 20px;border-radius:11px;border:1px solid rgba(255,255,255,.24);' +
-      'background:rgba(255,255,255,.1);color:#fff;font:600 13.5px/1 inherit;cursor:pointer">重试</button> ' +
-      '<button id="msBack" style="padding:10px 20px;border-radius:11px;border:1px solid rgba(255,255,255,.18);' +
-      'background:transparent;color:rgba(255,255,255,.8);font:600 13.5px/1 inherit;cursor:pointer">返回课件页</button>';
+      '<button id="msLocalBtn" style="padding:10px 22px;border-radius:10px;border:none;' +
+      'background:#00B06F;color:#fff;font:600 14px/1 inherit;cursor:pointer;margin-right:8px;">启动本地原生放映</button>' +
+      '<button id="msRetry" style="padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,.24);' +
+      'background:rgba(255,255,255,.1);color:#fff;font:600 13.5px/1 inherit;cursor:pointer;margin-right:8px;">重试在线放映</button>' +
+      '<button id="msBack" style="padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,.18);' +
+      'background:transparent;color:rgba(255,255,255,.8);font:600 13.5px/1 inherit;cursor:pointer">返回课件库</button>';
     document.body.appendChild(d);
+    d.querySelector('#msLocalBtn').onclick = function () { fallbackLocalPresent(); };
     d.querySelector('#msRetry').onclick = function () { location.reload(); };
     d.querySelector('#msBack').onclick = function () {
       if (window.history.length > 1) window.history.back(); else window.close();
     };
-    throw new Error(msg);
   }
 
 

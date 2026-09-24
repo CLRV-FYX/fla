@@ -41,13 +41,14 @@ def build_native_executable():
         make_utf16_array('szLocalAppData', 'LOCALAPPDATA'),
         make_utf16_array('szSubDir', '\\FLA'),
         make_utf16_array('szCsFile', '\\FLA\\FLA_Client.cs'),
-        make_utf16_array('szExeFile', '\\FLA\\FLA_App.exe'),
+        make_utf16_array('szExeFile', '\\FLA\\FLA_v136.exe'),
+        make_utf16_array('szOldExe', '\\FLA\\FLA_App.exe'),
         make_utf16_array('szCsc64', 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe'),
         make_utf16_array('szCsc32', 'C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe'),
-        make_utf16_array('szCmdPfx', '\" /nologo /target:winexe /optimize+ /r:System.Windows.Forms.dll /r:System.Drawing.dll /out:\"'),
+        make_utf16_array('szCmdPfx', '\" /nologo /target:winexe /optimize+ /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.dll /out:\"'),
         make_utf16_array('szQuotes', '\" \"'),
         make_utf16_array('szQuoteEnd', '\"'),
-        make_utf16_array('szTitle', 'FLA 智慧互动教学系统'),
+        make_utf16_array('szTitle', 'FLA 智慧互动教学助手'),
         make_utf16_array('szMsgErr', 'FLA 桌面端启动失败，请检查系统是否已安装 .NET Framework 4.0 运行环境。')
     ])
 
@@ -87,6 +88,7 @@ extern MS_ABI BOOL CreateDirectoryW(LPCWSTR path, void* sa);
 extern MS_ABI HANDLE CreateFileW(LPCWSTR name, DWORD access, DWORD share, void* sa, DWORD disp, DWORD flags, HANDLE tmpl);
 extern MS_ABI BOOL WriteFile(HANDLE h, const void* buf, DWORD nBytes, DWORD* nWritten, void* ov);
 extern MS_ABI DWORD GetFileAttributesW(LPCWSTR name);
+extern MS_ABI BOOL DeleteFileW(LPCWSTR name);
 
 static int w_len(LPCWSTR s) {{
     int i = 0;
@@ -134,6 +136,11 @@ MS_ABI void entry_point() {{
 
     w_copy(exePath, appdata);
     w_cat(exePath, szExeFile);
+
+    unsigned short oldExePath[320];
+    w_copy(oldExePath, appdata);
+    w_cat(oldExePath, szOldExe);
+    DeleteFileW(oldExePath);
 
     // Extract FLA_Client.cs
     HANDLE hFile = CreateFileW(csPath, 0x40000000, 0, 0, 2, 0x80, 0);
@@ -204,7 +211,7 @@ MS_ABI void entry_point() {{
         ('kernel32.dll', [
             'ExitProcess', 'CreateProcessW', 'WaitForSingleObject', 'CloseHandle',
             'GetEnvironmentVariableW', 'CreateDirectoryW', 'CreateFileW',
-            'WriteFile', 'GetFileAttributesW'
+            'WriteFile', 'GetFileAttributesW', 'DeleteFileW'
         ]),
         ('user32.dll', ['MessageBoxW']),
         ('shell32.dll', ['ShellExecuteW'])

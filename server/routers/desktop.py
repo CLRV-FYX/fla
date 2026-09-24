@@ -11,7 +11,7 @@ from server.desktop_dist import ensure_desktop_exe
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
 
-CURRENT_VERSION = "1.35.0"
+CURRENT_VERSION = "1.36.0"
 CHANGELOG = [
     "桌面端重写升级：全面超越希沃白板5",
     "边缘吸附磨砂玻璃悬浮助手与全能教学工具条",

@@ -18,7 +18,7 @@ import urllib.request
 
 logger = logging.getLogger("fla.desktop.updater")
 
-CURRENT_VERSION = "1.35.0"
+CURRENT_VERSION = "1.36.0"
 DEFAULT_SERVER = "http://127.0.0.1:8306"
 
 

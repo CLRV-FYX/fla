@@ -897,9 +897,9 @@ function openFile(f) {
   window.open('/present.html?fid=' + f.id + '&token=' + encodeURIComponent(API.token), '_blank');
 }
 
-/* v1.28: 网页端直接调用本地 PowerPoint / WPS (通过 127.0.0.1:8307 桥接与系统 Office 唤起) */
+/* v1.28: 网页端调用本地放映 (支持 127.0.0.1:8307 桥接与本地原生放映引擎) */
 async function openLocalFile(f) {
-  toast('正在尝试调用本地 PowerPoint / WPS…');
+  toast('正在尝试调用本地放映…');
   let directUrl = location.origin + '/api/files/' + f.id + '/download?token=' + encodeURIComponent(API.token);
   try {
     const share = await API.get('/api/files/' + f.id + '/share-link');
@@ -916,7 +916,7 @@ async function openLocalFile(f) {
   let bridgeSuccess = false;
   try {
     const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 1500);
+    const tid = setTimeout(() => ctrl.abort(), 1200);
     const res = await fetch('http://127.0.0.1:8307/api/open', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -931,13 +931,13 @@ async function openLocalFile(f) {
     clearTimeout(tid);
     const d = await res.json();
     if (d && d.ok) {
-      toast(d.msg || '已成功调起本地应用播放！');
+      toast(d.msg || '已成功调起本地桌面客户端放映！');
       bridgeSuccess = true;
       return;
     }
   } catch (err) {}
 
-  // 2. 本地 8307 未启动：触发课件直连下载，并尝试 Office 协议直接唤起
+  // 2. 本地 8307 客户端未启动：提供直接本地原生放映或下载打开
   if (!bridgeSuccess) {
     const dlUrl = '/api/files/' + f.id + '/download?token=' + encodeURIComponent(API.token);
     
@@ -948,33 +948,31 @@ async function openLocalFile(f) {
       } catch (e) {}
     }
 
-    // 自动触发文件下载以便双击打开
-    try {
-      const a = document.createElement('a');
-      a.href = dlUrl;
-      a.download = f.name || 'presentation.pptx';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch (e) {}
-
     // 弹出清晰指引弹窗
     UI.modal({
-      title: '调用本地应用 (PowerPoint / WPS)',
-      body: '<div style="line-height:1.65;font-size:14px;color:#334155;">' +
-        '<p style="margin-bottom:8px;">已为您开始下载课件 <b>《' + UI.esc(f.name) + '》</b>。</p>' +
+      title: '本地放映方式选择',
+      body: '<div style="line-height:1.65;font-size:14px;color:#27272a;">' +
+        '<p style="margin-bottom:8px;">课件 <b>《' + UI.esc(f.name) + '》</b> 支持以下本地播放方式：</p>' +
         '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;margin:12px 0;font-size:13px;color:#475569;">' +
-          '<b>💡 两种本地打开方式：</b><br>' +
-          '1. <b>直接运行：</b>点击浏览器下方刚下载的文件，即可直接使用系统默认 PowerPoint 或 WPS 播放；<br>' +
-          '2. <b>FLA 课堂助手：</b>运行单文件客户端，支持希沃白板5工具栏自动拦截压制、板书画布随 PPT 翻页严格同步及手机投屏遥控。' +
+          '<b>💡 推荐放映途径：</b><br>' +
+          '1. <b>本地引擎放映：</b>无需安装任何 Office 软件，直接在浏览器中全屏放映并保留画笔、计时、抽选功能；<br>' +
+          '2. <b>FLA 原生桌面客户端：</b>专为多媒体教室研发，自带云存储与投屏功能，启动零延迟。' +
         '</div>' +
-        '<div style="display:flex;gap:10px;margin-top:16px;">' +
-          '<a href="/api/desktop/download" class="btn primary" style="text-decoration:none;">' + UI.icon('download', 15) + ' 下载 FLA 客户端 (Windows 单 EXE)</a>' +
-          '<a href="' + dlUrl + '" class="btn" style="text-decoration:none;">' + UI.icon('file', 15) + ' 重新下载课件</a>' +
+        '<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">' +
+          '<button class="btn primary" id="modalLocalPresent" style="text-decoration:none;">' + UI.icon('play', 15) + ' 启动本地引擎放映</button>' +
+          '<a href="' + dlUrl + '" class="btn" style="text-decoration:none;">' + UI.icon('download', 15) + ' 下载课件到本地</a>' +
+          '<a href="/api/desktop/download" class="btn" style="text-decoration:none;">' + UI.icon('external', 15) + ' 下载桌面客户端</a>' +
         '</div>' +
       '</div>',
-      width: '480px'
+      width: '500px'
     });
+
+    const lpBtn = document.getElementById('modalLocalPresent');
+    if (lpBtn) {
+      lpBtn.onclick = () => {
+        window.open('/present.html?fid=' + f.id + '&token=' + encodeURIComponent(API.token) + '&track=local', '_blank');
+      };
+    }
   }
 }
 

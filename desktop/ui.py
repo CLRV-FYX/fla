@@ -30,32 +30,32 @@ HTML_TEMPLATE = f"""<!DOCTYPE html>
     * {{ box-sizing: border-box; margin: 0; padding: 0; user-select: none; }}
     body {{
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-      background: #0f172a;
+      background: #121316;
       color: #f8fafc;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-    }}
-    .header {{
+    }
+    .header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 18px 24px;
       border-bottom: 1px solid rgba(255,255,255,0.08);
-      background: rgba(15, 23, 42, 0.85);
+      background: rgba(18, 19, 22, 0.88);
       backdrop-filter: blur(12px);
-    }}
-    .logo-group {{
+    }
+    .logo-group {
       display: flex;
       align-items: center;
       gap: 12px;
-    }}
-    .logo-badge {{
+    }
+    .logo-badge {
       width: 36px;
       height: 36px;
       border-radius: 10px;
-      background: linear-gradient(135deg, #0284c7, #2563eb);
+      background: linear-gradient(135deg, #059669, #00B06F);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -165,7 +165,7 @@ HTML_TEMPLATE = f"""<!DOCTYPE html>
     .footer-bar {{
       padding: 16px 24px;
       border-top: 1px solid rgba(255,255,255,0.08);
-      background: #0f172a;
+      background: #18191d;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -184,11 +184,11 @@ HTML_TEMPLATE = f"""<!DOCTYPE html>
       text-decoration: none;
     }}
     .btn-primary {{
-      background: #0284c7;
+      background: #00B06F;
       color: #fff;
     }}
     .btn-primary:hover {{
-      background: #0369a1;
+      background: #00965e;
     }}
     .btn-secondary {{
       background: rgba(255,255,255,0.08);
@@ -379,7 +379,7 @@ class ModernDesktopUI:
         root.title(f"FLA 课堂助手 v{CURRENT_VERSION}")
         root.geometry("620x460")
         root.resizable(False, False)
-        root.configure(bg="#0f172a")
+        root.configure(bg="#121316")
 
         # 现代字体
         font_title = ("Segoe UI", 13, "bold")
@@ -389,41 +389,41 @@ class ModernDesktopUI:
         font_btn = ("Segoe UI", 9, "bold")
 
         # Header
-        header = tk.Frame(root, bg="#0f172a", height=60)
+        header = tk.Frame(root, bg="#121316", height=60)
         header.pack(fill="x", padx=20, pady=(16, 10))
 
-        title_lbl = tk.Label(header, text=f"FLA 课堂助手  v{CURRENT_VERSION}", font=font_title, fg="#f8fafc", bg="#0f172a")
+        title_lbl = tk.Label(header, text=f"FLA 课堂助手  v{CURRENT_VERSION}", font=font_title, fg="#f8fafc", bg="#121316")
         title_lbl.pack(anchor="w")
-        sub_lbl = tk.Label(header, text="现代化多媒体互动教学终端 · 希沃白板5拦截与同步", font=font_sub, fg="#94a3b8", bg="#0f172a")
+        sub_lbl = tk.Label(header, text="现代化多媒体互动教学终端 · 希沃白板5拦截与同步", font=font_sub, fg="#94a3b8", bg="#121316")
         sub_lbl.pack(anchor="w", pady=(2, 0))
 
         # Status cards
-        body = tk.Frame(root, bg="#0f172a")
+        body = tk.Frame(root, bg="#121316")
         body.pack(fill="both", expand=True, padx=20, pady=5)
 
         cards_data = [
-            ("🛡️  希沃白板5 拦截器", "自动抑制白板翻页笔劫持，挂载 FLA 原生悬浮工具条", "已启用", "#10b981"),
-            ("📊  PPT 幻灯片与板书联动", "画布严格与幻灯片页面绑定，翻页自动隔离笔迹", "COM 监听", "#0284c7"),
-            ("🔌  本地 Office 唤起服务", "网页端一键启动 PPT/WPS 原生演示 (127.0.0.1:8307)", "监听中", "#10b981"),
+            ("🛡️  希沃白板5 拦截器", "自动抑制白板翻页笔劫持，挂载 FLA 原生悬浮工具条", "已启用", "#00B06F"),
+            ("📊  PPT 幻灯片与板书联动", "画布严格与幻灯片页面绑定，翻页自动隔离笔迹", "COM 监听", "#00B06F"),
+            ("🔌  本地 Office 唤起服务", "网页端一键启动 PPT/WPS 原生演示 (127.0.0.1:8307)", "监听中", "#00B06F"),
         ]
 
         for title, desc, tag, tag_color in cards_data:
-            card = tk.Frame(body, bg="#1e293b", highlightbackground="#334155", highlightthickness=1)
+            card = tk.Frame(body, bg="#18191d", highlightbackground="#272830", highlightthickness=1)
             card.pack(fill="x", pady=5, ipady=8, ipadx=10)
 
-            c_left = tk.Frame(card, bg="#1e293b")
+            c_left = tk.Frame(card, bg="#18191d")
             c_left.pack(side="left", fill="both", expand=True, padx=10)
-            tk.Label(c_left, text=title, font=font_card_h, fg="#f1f5f9", bg="#1e293b").pack(anchor="w")
-            tk.Label(c_left, text=desc, font=font_card_p, fg="#64748b", bg="#1e293b").pack(anchor="w", pady=(2, 0))
+            tk.Label(c_left, text=title, font=font_card_h, fg="#f1f5f9", bg="#18191d").pack(anchor="w")
+            tk.Label(c_left, text=desc, font=font_card_p, fg="#94a3b8", bg="#18191d").pack(anchor="w", pady=(2, 0))
 
-            c_right = tk.Frame(card, bg="#1e293b")
+            c_right = tk.Frame(card, bg="#18191d")
             c_right.pack(side="right", padx=10)
-            tk.Label(c_right, text=tag, font=("Segoe UI", 8, "bold"), fg=tag_color, bg="#0f172a", padx=8, pady=3).pack()
+            tk.Label(c_right, text=tag, font=("Segoe UI", 8, "bold"), fg=tag_color, bg="#121316", padx=8, pady=3).pack()
 
         # Update card
-        update_card = tk.Frame(body, bg="#172554", highlightbackground="#1e40af", highlightthickness=1)
+        update_card = tk.Frame(body, bg="#064e3b", highlightbackground="#059669", highlightthickness=1)
         update_card.pack(fill="x", pady=8, ipady=6, ipadx=10)
-        up_lbl = tk.Label(update_card, text=f"自动更新检测：当前已是最新版本 (v{CURRENT_VERSION})", font=font_card_p, fg="#93c5fd", bg="#172554")
+        up_lbl = tk.Label(update_card, text=f"自动更新检测：当前已是最新版本 (v{CURRENT_VERSION})", font=font_card_p, fg="#a7f3d0", bg="#064e3b")
         up_lbl.pack(side="left", padx=10)
 
         def do_check_update():
@@ -437,11 +437,11 @@ class ModernDesktopUI:
                     up_lbl.config(text=f"已是最新版本 (v{CURRENT_VERSION})")
             threading.Thread(target=_check, daemon=True).start()
 
-        up_btn = tk.Button(update_card, text="检查更新", font=font_sub, bg="#1e40af", fg="#ffffff", activebackground="#2563eb", activeforeground="#ffffff", relief="flat", padx=8, pady=2, command=do_check_update)
+        up_btn = tk.Button(update_card, text="检查更新", font=font_sub, bg="#059669", fg="#ffffff", activebackground="#00B06F", activeforeground="#ffffff", relief="flat", padx=8, pady=2, command=do_check_update)
         up_btn.pack(side="right", padx=10)
 
         # Footer
-        footer = tk.Frame(root, bg="#0f172a", height=50)
+        footer = tk.Frame(root, bg="#121316", height=50)
         footer.pack(fill="x", side="bottom", padx=20, pady=16)
 
         def open_browser():
@@ -450,7 +450,7 @@ class ModernDesktopUI:
         def minimize():
             root.iconify()
 
-        btn_web = tk.Button(footer, text="打开 FLA 网页控制台", font=font_btn, bg="#334155", fg="#f8fafc", activebackground="#475569", activeforeground="#ffffff", relief="flat", padx=14, pady=6, command=open_browser)
+        btn_web = tk.Button(footer, text="打开 FLA 网页控制台", font=font_btn, bg="#272830", fg="#f8fafc", activebackground="#3f3f46", activeforeground="#ffffff", relief="flat", padx=14, pady=6, command=open_browser)
         btn_web.pack(side="left")
 
         btn_min = tk.Button(footer, text="最小化到托盘", font=font_btn, bg="#0284c7", fg="#ffffff", activebackground="#0369a1", activeforeground="#ffffff", relief="flat", padx=14, pady=6, command=minimize)

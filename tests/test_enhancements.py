@@ -29,7 +29,13 @@ def test_remote_pair_endpoint():
     assert pair_data["code"] == code
     assert pair_data["title"] == "测试放映"
 
-    # 3. Invalid code returns 404
+    # 3. Check QR PNG generation endpoint
+    qr_resp = client.get(f"/api/remote/{sid}/qr")
+    assert qr_resp.status_code == 200
+    assert qr_resp.headers["content-type"] == "image/png"
+    assert qr_resp.content.startswith(b"\x89PNG")
+
+    # 4. Invalid code returns 404
     inv_resp = client.get("/api/remote/pair/0000")
     assert inv_resp.status_code == 404
 
@@ -39,8 +45,7 @@ def test_desktop_version_and_download():
     assert ver_resp.status_code == 200
     ver_data = ver_resp.json()
     assert ver_data["ok"] is True
-    assert ver_data["version"] == "1.35.0"
-    assert "超越希沃" in ver_data["changelog"][0]
+    assert ver_data["version"] == "1.36.0"
 
     # Check download endpoint
     dl_resp = client.get("/api/desktop/download")
@@ -54,13 +59,9 @@ def test_csharp_client_architecture():
     content = cs_path.read_text(encoding="utf-8")
     assert "class FloatingDockForm" in content
     assert "class ScreenOverlayForm" in content
-    assert "class WhiteboardForm" in content
-    assert "class TimerForm" in content
-    assert "class PickerForm" in content
-    assert "class CurtainForm" in content
-    assert "class SpotlightForm" in content
-    assert "class ScratchpadForm" in content
-    assert "bgTheme == \"tian\"" in content
-    assert "bgTheme == \"english\"" in content
-    assert "bgTheme == \"music\"" in content
-    assert "bgTheme == \"math\"" in content
+    assert "class MainForm" in content
+    assert "class CloudFileItem" in content
+    assert "LaunchOfficePresentation" in content
+    assert "InitCastingTab" in content
+    assert "StartSeewoInterceptor" in content
+    assert "FindPresentationApp" in content

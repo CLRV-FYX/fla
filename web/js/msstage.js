@@ -187,6 +187,17 @@
         return r.json();
       });
     }
+    function jpost(u, data) {
+      return fetch(u, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.token },
+        body: JSON.stringify(data || {})
+      }).then(function (r) {
+        if (r.status === 401) throw new Error('登录已过期, 请重新登录');
+        if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || '请求失败'); }).catch(function () { throw new Error('请求失败 (' + r.status + ')'); });
+        return r.json();
+      });
+    }
 
     /* ---------------- DOM 骨架 ---------------- */
     var host = opts.mount || document.body;
@@ -787,7 +798,7 @@
         '<div class="fla-sm-body" style="align-items:center; text-align:center;">' +
           '<div id="flaCastQrCode" style="width:190px; height:190px; background:#fff; padding:6px; border-radius:8px; border:1px solid #e2e8f0; margin:6px auto;"></div>' +
           '<div style="font-size:13px; color:#64748b; margin-top:6px;">微信或浏览器扫码，或在手机端输入配对码：</div>' +
-          '<div id="flaCastPin" style="font-size:28px; font-weight:700; letter-spacing:4px; color:#2563eb; font-family:ui-monospace, monospace; margin:4px 0;">----</div>' +
+          '<div id="flaCastPin" style="font-size:28px; font-weight:700; letter-spacing:4px; color:#00B06F; font-family:ui-monospace, monospace; margin:4px 0;">----</div>' +
           '<div id="flaCastStatus" style="font-size:12.5px; color:#10b981; font-weight:600; display:flex; align-items:center; justify-content:center; gap:6px;">' +
             '<span class="fla-timer-min-dot"></span> 等待手机连接…' +
           '</div>' +
@@ -812,7 +823,7 @@
         renderCastModalData();
         return;
       }
-      API.post('/api/remote/create', {
+      jpost('/api/remote/create', {
         title: (S.meta && S.meta.name) || '课堂放映',
         fid: S.fid,
         page: S.page,
@@ -831,18 +842,29 @@
     function renderCastModalData() {
       if (!castModal || !remoteSession) return;
       var pinEl = castModal.querySelector('#flaCastPin');
-      if (pinEl) pinEl.textContent = remoteSession.code;
+      if (pinEl) pinEl.textContent = remoteSession.code || '----';
 
       var qrContainer = castModal.querySelector('#flaCastQrCode');
-      if (qrContainer && window.QRCode) {
+      if (qrContainer) {
         qrContainer.innerHTML = '';
-        var fullUrl = location.origin + remoteSession.remote_url;
-        new QRCode(qrContainer, {
-          text: fullUrl,
-          width: 176,
-          height: 176,
-          correctLevel: QRCode.CorrectLevel.M
-        });
+        var fullUrl = location.origin + (remoteSession.remote_url || ('/#/remote?sid=' + remoteSession.session_id + '&code=' + remoteSession.code));
+        if (window.UI && typeof window.UI.renderQR === 'function') {
+          window.UI.renderQR(qrContainer, fullUrl, 176);
+        } else if (typeof window.renderQrSvgFallback === 'function') {
+          window.renderQrSvgFallback(qrContainer, fullUrl, 176);
+        } else if (window.QRCode) {
+          try {
+            new window.QRCode(qrContainer, {
+              text: fullUrl,
+              width: 176,
+              height: 176
+            });
+          } catch (e) {
+            qrContainer.textContent = fullUrl;
+          }
+        } else {
+          qrContainer.innerHTML = '<div style="padding:10px;font-size:12px;color:#00B06F;word-break:break-all;">' + fullUrl + '</div>';
+        }
       }
     }
 
@@ -877,15 +899,15 @@
       if (msg.type === 'action') {
         var act = msg.action;
         var d = msg.data || {};
-        if (act === 'next') canvasNextPage();
-        else if (act === 'prev') canvasPrevPage();
+        if (act === 'next') goPage(S.page + 1);
+        else if (act === 'prev') goPage(S.page - 1);
         else if (act === 'stepNext') stepNext();
         else if (act === 'stepPrev') stepPrev();
         else if (act === 'goto' && d.page) goPage(d.page);
         else if (act === 'black') blk.classList.toggle('hidden');
         else if (act === 'clear') clearPage();
         else if (act === 'whiteboard') {
-          API.post('/api/files/board', {}).then(function (f) {
+          jpost('/api/files/board', {}).then(function (f) {
             if (f && f.id) location.hash = '#/view/' + f.id;
           });
         }
@@ -912,7 +934,7 @@
       if (remoteWs && remoteWs.readyState === WebSocket.OPEN) {
         remoteWs.send(JSON.stringify({ type: 'state', state: state }));
       } else {
-        API.post('/api/remote/' + remoteSession.session_id + '/state', state).catch(function () {});
+        jpost('/api/remote/' + remoteSession.session_id + '/state', state).catch(function () {});
       }
     }
 
@@ -921,7 +943,7 @@
       var lastIdx = 0;
       remotePollTimer = setInterval(function () {
         if (!remoteSession) return;
-        API.get('/api/remote/' + remoteSession.session_id + '/poll?after=' + lastIdx).then(function (res) {
+        jget('/api/remote/' + remoteSession.session_id + '/poll?after=' + lastIdx).then(function (res) {
           if (res && res.events) {
             res.events.forEach(function (evt) {
               lastIdx++;
@@ -1004,7 +1026,7 @@
             '<div style="display:flex; justify-content:space-between; align-items:center;">' +
               '<span style="font-size:12px; font-weight:600; color:#0f172a;">学生名单 (支持 Excel / CSV 表格)</span>' +
               '<input type="file" id="pkFileInput" accept=".xlsx,.csv,.txt" style="display:none;">' +
-              '<button class="fla-tpill" id="pkUploadBtn" style="background:#2563eb; color:#fff; border-color:#2563eb;">导入表格</button>' +
+              '<button class="fla-tpill" id="pkUploadBtn" style="background:#00B06F; color:#fff; border-color:#00B06F;">导入表格</button>' +
             '</div>' +
             '<textarea class="fla-pk-textarea" id="pkRosterText" placeholder="每行一个学生姓名，如：&#10;张明&#10;李华&#10;王强">' + PK.roster.join('\n') + '</textarea>' +
             '<div style="display:flex; justify-content:flex-end; gap:6px;">' +
@@ -1023,7 +1045,7 @@
               '</div>' +
             '</div>' +
             '<label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px; font-weight:500;">' +
-              '<input type="checkbox" id="pkNoRepeatChk"' + (PK.noRepeat ? ' checked' : '') + ' style="accent-color:#2563eb;"> 不重复' +
+              '<input type="checkbox" id="pkNoRepeatChk"' + (PK.noRepeat ? ' checked' : '') + ' style="accent-color:#00B06F;"> 不重复' +
             '</label>' +
           '</div>' +
           '<div class="fla-pk-stage" id="pkStage">' +
@@ -1052,7 +1074,7 @@
               '</div>' +
             '</div>' +
             '<label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px; font-weight:500;">' +
-              '<input type="checkbox" id="pkNumNoRepeatChk"' + (PK.numNoRepeat ? ' checked' : '') + ' style="accent-color:#2563eb;"> 不重复' +
+              '<input type="checkbox" id="pkNumNoRepeatChk"' + (PK.numNoRepeat ? ' checked' : '') + ' style="accent-color:#00B06F;"> 不重复' +
             '</label>' +
           '</div>' +
           '<div class="fla-pk-stage" id="pkNumStage">' +
@@ -2242,7 +2264,8 @@
             '<span class="ms-thumb-cap">第 ' + n + ' 页</span>';
           c.onclick = function () {
             showSlide(n);
-            toast('课件已切换到第 ' + n + ' 页 (画布板书保持独立)');
+            goPage(n);
+            toast('已切换到第 ' + n + ' 页');
           };
           list.appendChild(c);
         })(i);
@@ -2488,7 +2511,7 @@
       switch (a) {
         case 'exit': doExit(); break;
         case 'newboard':
-          API.post('/api/files/board', {}).then(function (f) {
+          jpost('/api/files/board', {}).then(function (f) {
             if (f && f.id) location.hash = '#/view/' + f.id;
           }).catch(function (err) { toast('新建白板失败: ' + err.message); });
           break;
@@ -2576,14 +2599,14 @@
           var inp = body.querySelector('input');
           inp.focus(); inp.select();
           inp.onkeydown = function (ev) {
-            if (ev.key === 'Enter') { goCanvasPage(+inp.value || 1); close(); }
+            if (ev.key === 'Enter') { goPage(+inp.value || 1); close(); }
           };
           var g = body.querySelector('#msGotoGrid');
           for (var i = 1; i <= total(); i++) {
             (function (n) {
               var b = el('button', 'ms-goto-n' + (n === S.page ? ' on' : ''));
               b.textContent = n;
-              b.onclick = function () { goCanvasPage(n); close(); };
+              b.onclick = function () { goPage(n); close(); };
               g.appendChild(b);
             })(i);
           }

@@ -125,8 +125,7 @@
   async function msViewer() {
     const app = document.getElementById('app');
     if (!window.MSStage) {
-      screenMsg('<p class="err-t">查看组件未载入，请强制刷新 (Ctrl+F5)</p>' +
-        '<button class="btn" onclick="location.reload()">重新加载</button>');
+      await fallbackLocalViewer();
       return;
     }
     app.innerHTML = '';
@@ -137,8 +136,20 @@
       });
       if (window.App && App.setCleanup) App.setCleanup(() => destroy());
     } catch (e) {
-      screenMsg('<p class="err-t">' + UI.esc(e.message) + '</p>' +
-        '<button class="btn" onclick="location.hash=\'#/library\'">返回</button>');
+      console.warn('微软在线预览挂载失败，自动降级至本地原生引擎:', e);
+      await fallbackLocalViewer();
+    }
+  }
+
+  async function fallbackLocalViewer() {
+    try {
+      await initDoc();
+      if (V.destroyed || !V) return;
+      buildUI();
+      await showPage(0);
+    } catch (err) {
+      screenMsg('<p class="err-t">' + UI.esc(err.message || '课件预览加载失败') + '</p>' +
+        '<button class="btn" onclick="location.hash=\'#/library\'">返回课件库</button>');
     }
   }
 

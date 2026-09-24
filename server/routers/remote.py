@@ -13,7 +13,7 @@ import secrets
 import time
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/remote", tags=["remote"])
@@ -50,7 +50,7 @@ def cleanup_expired():
 
 
 @router.post("/create")
-def create_session(req: CreateSessionReq):
+def create_session(req: CreateSessionReq, request: Request):
     cleanup_expired()
     sid = secrets.token_hex(8)
     code = f"{secrets.randbelow(9000) + 1000}"  # 4位随机验证码
@@ -73,7 +73,29 @@ def create_session(req: CreateSessionReq):
         "session_id": sid,
         "code": code,
         "remote_url": f"/#/remote?sid={sid}&code={code}",
+        "qr_img_url": f"/api/remote/{sid}/qr",
     }
+
+
+@router.get("/{sid}/qr")
+@router.head("/{sid}/qr")
+def get_session_qr(sid: str, request: Request):
+    """返回该投屏会话的二维码直链 (PNG 图像格式，供桌面端与各类客户端原生直载渲染)."""
+    session = SESSIONS.get(sid)
+    if not session:
+        raise HTTPException(404, "遥控会话不存在")
+    import io
+    try:
+        import qrcode
+    except ImportError:
+        from ..vendor import qrcode
+
+    base_url = str(request.base_url).rstrip("/")
+    target_url = f"{base_url}/#/remote?sid={sid}&code={session['code']}"
+    img = qrcode.make(target_url)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
 
 
 @router.get("/pair/{code}")
