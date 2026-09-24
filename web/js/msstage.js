@@ -209,9 +209,19 @@
     if (isPreview) wrap.classList.add('ms-stage-preview');
 
     /* ---------------- 顶栏 ---------------- */
-    var top = null;
-    if (!isPreview) {
-      top = el('div', 'ms-top');
+    var top = el('div', 'ms-top');
+    if (isPreview) {
+      top.innerHTML =
+        '<button class="ms-tb" data-a="exit" title="返回课件库 (Esc)">' + icon('back', 17) + ' 返回</button>' +
+        '<span class="ms-title" id="msTitle"></span>' +
+        '<span class="ms-sep"></span>' +
+        '<button class="ms-tb" data-a="prev" title="上一页 (← / PageUp)">' + icon('chevL', 18) + '</button>' +
+        '<button class="ms-page" id="msPage" title="当前页码">1 / 1</button>' +
+        '<button class="ms-tb" data-a="next" title="下一页 (→ / PageDown)">' + icon('chevR', 18) + '</button>' +
+        '<span class="ms-sep"></span>' +
+        '<button class="ms-tb" data-a="film" title="缩略图导航 (G)">' + icon('film', 17) + '</button>' +
+        '<button class="ms-tb" data-a="full" title="全屏 (F)">' + icon('full', 17) + '</button>';
+    } else {
       top.innerHTML =
         '<button class="ms-tb" data-a="exit" title="退出 (Esc)">' + icon('back', 17) + '</button>' +
         '<span class="ms-title" id="msTitle"></span>' +
@@ -229,54 +239,60 @@
         '<button class="ms-tb" data-a="time" id="msTime" title="点击归零">00:00</button>' +
         '<button class="ms-tb" data-a="settings" title="工具栏个性化定制">' + icon('settings', 17) + '</button>' +
         '<button class="ms-tb" data-a="full" title="全屏 (F)">' + icon('full', 17) + '</button>';
-      wrap.appendChild(top);
+    }
+    wrap.appendChild(top);
+
+    /* ---------------- 左侧工具条 (预览模式不生成) ---------------- */
+    var barL = null;
+    if (!isPreview) {
+      barL = el('nav', 'ms-pill ms-pill-l');
+      TOOLS.forEach(function (t) {
+        var b = el('button', 'ms-vbtn' + (t[0] === 'cursor' ? ' on' : ''));
+        b.setAttribute('data-tool', t[0]); b.title = t[1]; b.innerHTML = icon(t[2], 20);
+        barL.appendChild(b);
+      });
+      barL.appendChild(el('i', 'ms-vsep'));
+      function vbtn(cls, act, title, ic) {
+        var b = el('button', 'ms-vbtn ' + (cls || ''));
+        b.setAttribute('data-a', act); b.title = title; b.innerHTML = ic;
+        barL.appendChild(b); return b;
+      }
+      vbtn('', 'undo', '撤销 (Ctrl+Z)', icon('undo', 20));
+      vbtn('', 'redo', '重做 (Ctrl+Y)', icon('redo', 20));
+      barL.appendChild(el('i', 'ms-vsep'));
+      vbtn('', 'pgprev', '画布上一页 (独立板书)', icon('chevL', 19));
+      vbtn('', 'addpage', '加一页板书(在末页之后)', icon('plusPage', 19));
+      vbtn('', 'pgnext', '画布下一页 (独立板书)', icon('chevR', 19));
+      wrap.appendChild(barL);
     }
 
-    /* ---------------- 左侧工具条 ---------------- */
-    var barL = el('nav', 'ms-pill ms-pill-l');
-    TOOLS.forEach(function (t) {
-      var b = el('button', 'ms-vbtn' + (t[0] === 'cursor' ? ' on' : ''));
-      b.setAttribute('data-tool', t[0]); b.title = t[1]; b.innerHTML = icon(t[2], 20);
-      barL.appendChild(b);
-    });
-    barL.appendChild(el('i', 'ms-vsep'));
-    function vbtn(cls, act, title, ic) {
-      var b = el('button', 'ms-vbtn ' + (cls || ''));
-      b.setAttribute('data-a', act); b.title = title; b.innerHTML = ic;
-      barL.appendChild(b); return b;
+    /* ---------------- 右侧工具条 (预览模式不生成) ---------------- */
+    var barR = null;
+    if (!isPreview) {
+      barR = el('nav', 'ms-pill ms-pill-r');
+      function rbtn(act, title, ic) {
+        var b = el('button', 'ms-vbtn');
+        b.setAttribute('data-a', act); b.title = title; b.innerHTML = ic;
+        barR.appendChild(b); return b;
+      }
+      rbtn('stepPrev', 'PPT 动画步退 / 上一步 (翻页笔穿透)', icon('stepPrev', 19));
+      rbtn('stepNext', 'PPT 动画步进 / 下一步 (翻页笔穿透)', icon('stepNext', 19));
+      rbtn('timer', '课堂计时器 (秒表 / 倒计时)', icon('timer', 20));
+      rbtn('picker', '随机抽选 (名单抽人 / 数字摇号)', icon('dice', 20));
+      rbtn('film', '缩略图导航 (G)', icon('film', 20));
+      rbtn('clear', '清空本页板书', icon('trash', 20));
+      rbtn('bnb', '板中板: 独立小黑板(可加页)', icon('board', 20));
+      rbtn('bg', '板书页底色: 白 / 黑板 / 绿黑板', '<span class="ms-dotbg"></span>');
+      rbtn('black', '黑屏 (B)', icon('square', 20));
+      rbtn('settings', '工具栏功能个性化设置', icon('settings', 20));
+      rbtn('local', '本地引擎(离线高保真渲染, 含动画)', icon('bolt', 20));
+      if (S.mode === 'view') {
+        rbtn('present', '全屏放映', icon('full', 20));
+        rbtn('refresh', '重新载入微软画面(卡住/空白时用)', icon('sync', 20));
+        rbtn('dl', '下载原文件', icon('down', 20));
+      }
+      wrap.appendChild(barR);
     }
-    vbtn('', 'undo', '撤销 (Ctrl+Z)', icon('undo', 20));
-    vbtn('', 'redo', '重做 (Ctrl+Y)', icon('redo', 20));
-    barL.appendChild(el('i', 'ms-vsep'));
-    vbtn('', 'pgprev', '画布上一页 (独立板书)', icon('chevL', 19));
-    vbtn('', 'addpage', '加一页板书(在末页之后)', icon('plusPage', 19));
-    vbtn('', 'pgnext', '画布下一页 (独立板书)', icon('chevR', 19));
-    wrap.appendChild(barL);
-
-    /* ---------------- 右侧工具条 ---------------- */
-    var barR = el('nav', 'ms-pill ms-pill-r');
-    function rbtn(act, title, ic) {
-      var b = el('button', 'ms-vbtn');
-      b.setAttribute('data-a', act); b.title = title; b.innerHTML = ic;
-      barR.appendChild(b); return b;
-    }
-    rbtn('stepPrev', 'PPT 动画步退 / 上一步 (翻页笔穿透)', icon('stepPrev', 19));
-    rbtn('stepNext', 'PPT 动画步进 / 下一步 (翻页笔穿透)', icon('stepNext', 19));
-    rbtn('timer', '课堂计时器 (秒表 / 倒计时)', icon('timer', 20));
-    rbtn('picker', '随机抽选 (名单抽人 / 数字摇号)', icon('dice', 20));
-    rbtn('film', '缩略图导航 (G)', icon('film', 20));
-    rbtn('clear', '清空本页板书', icon('trash', 20));
-    rbtn('bnb', '板中板: 独立小黑板(可加页)', icon('board', 20));
-    rbtn('bg', '板书页底色: 白 / 黑板 / 绿黑板', '<span class="ms-dotbg"></span>');
-    rbtn('black', '黑屏 (B)', icon('square', 20));
-    rbtn('settings', '工具栏功能个性化设置', icon('settings', 20));
-    rbtn('local', '本地引擎(离线高保真渲染, 含动画)', icon('bolt', 20));
-    if (S.mode === 'view') {
-      rbtn('present', '全屏放映', icon('full', 20));
-      rbtn('refresh', '重新载入微软画面(卡住/空白时用)', icon('sync', 20));
-      rbtn('dl', '下载原文件', icon('down', 20));
-    }
-    wrap.appendChild(barR);
 
     /* ---------------- 工具配置弹窗 ---------------- */
     var pop = el('div', 'ms-pop hidden');

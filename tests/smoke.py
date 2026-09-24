@@ -1165,7 +1165,8 @@ gen_conf
           (desk_dir / "ui.py").exists() and
           (desk_dir / "FLA_Client.cs").exists() and
           (desk_dir / "package_exe.py").exists() and
-          (desk_dir / "dist" / "FLA.exe").exists() and
+          (desk_dir / "bin" / "FLA.exe").exists() and
+          (root / "web" / "downloads" / "FLA.exe").exists() and
           (desk_dir / "build_exe.py").exists() and
           (desk_dir / "run.bat").exists() and
           (desk_dir / "build.bat").exists() and

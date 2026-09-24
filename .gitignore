@@ -29,3 +29,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+.agents/
+.claude/
+agent/
+skills-lock.json

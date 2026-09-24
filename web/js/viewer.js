@@ -121,31 +121,21 @@
     if (app) app.innerHTML = '<div class="v-msgscreen"><div class="v-msgbox">' + html + '</div></div>';
   }
 
-  /* ---------- 原生微软在线嵌入预览: 100% 原生嵌入，不加任何顶栏白框或叠加层 ---------- */
+  /* ---------- 微软嵌入预览模式: 委托 MSStage，只删工具栏，保留顶栏返回/翻页/全屏等核心操作 ---------- */
   async function msViewer() {
     const app = document.getElementById('app');
-    screenMsg('<div class="spin"></div><p>正在载入微软原生在线预览…</p>');
+    if (!window.MSStage) {
+      screenMsg('<p class="err-t">查看组件未载入，请强制刷新 (Ctrl+F5)</p>' +
+        '<button class="btn" onclick="location.reload()">重新加载</button>');
+      return;
+    }
+    app.innerHTML = '';
     try {
-      const ms = await API.get('/api/files/' + V.id + '/ms-view');
-      const url = ms.url1 || ms.url_tpl || ('https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(ms.direct));
-      app.innerHTML =
-        '<div class="pure-ms-view">' +
-          '<iframe src="' + UI.esc(url) + '" allowfullscreen="true" frameborder="0"></iframe>' +
-        '</div>';
-
-      const onKey = e => {
-        if (e.key === 'Escape') {
-          window.removeEventListener('keydown', onKey);
-          location.hash = '#/library';
-        }
-      };
-      window.addEventListener('keydown', onKey);
-      if (window.App && App.setCleanup) {
-        App.setCleanup(() => {
-          window.removeEventListener('keydown', onKey);
-          destroy();
-        });
-      }
+      V.msStage = await window.MSStage.mount({
+        fid: V.id, token: API.token, meta: V.meta, mode: 'view', mount: app,
+        onExit: () => { location.hash = '#/library'; },
+      });
+      if (window.App && App.setCleanup) App.setCleanup(() => destroy());
     } catch (e) {
       screenMsg('<p class="err-t">' + UI.esc(e.message) + '</p>' +
         '<button class="btn" onclick="location.hash=\'#/library\'">返回</button>');

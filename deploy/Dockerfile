@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server ./server
 COPY web ./web
+COPY desktop ./desktop
 
 ENV FLA_DATA_DIR=/data PORT=8306
 RUN mkdir -p /data

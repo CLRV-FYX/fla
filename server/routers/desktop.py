@@ -3,18 +3,13 @@
 """
 from __future__ import annotations
 
-import io
-import os
 from pathlib import Path
-import zipfile
+from fastapi import APIRouter
+from fastapi.responses import FileResponse
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from server.desktop_dist import ensure_desktop_exe
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
-
-DESKTOP_DIR = Path(__file__).resolve().parent.parent.parent / "desktop"
-EXE_PATH = DESKTOP_DIR / "dist" / "FLA.exe"
 
 CURRENT_VERSION = "1.28.0"
 CHANGELOG = [
@@ -29,7 +24,8 @@ CHANGELOG = [
 @router.get("/version")
 def get_desktop_version():
     """获取当前最新客户端版本信息及更新说明 (供客户端启动时自动比对自更新)."""
-    file_size = EXE_PATH.stat().st_size if EXE_PATH.exists() else 0
+    exe_path = ensure_desktop_exe()
+    file_size = exe_path.stat().st_size if exe_path.exists() else 0
     return {
         "ok": True,
         "version": CURRENT_VERSION,
@@ -44,35 +40,13 @@ def get_desktop_version():
 @router.get("/download")
 def download_desktop_exe():
     """免登录直接下载 Windows 桌面客户端单文件可执行程序 (FLA.exe)."""
-    # 若不存在，尝试自动构建生成
-    if not (EXE_PATH.exists() and EXE_PATH.stat().st_size > 0):
-        try:
-            from desktop.package_exe import package
-            package()
-        except Exception:
-            pass
-
-    # 若 dist/FLA.exe 存在直接返回
-    if EXE_PATH.exists() and EXE_PATH.stat().st_size > 0:
-        return FileResponse(
-            path=str(EXE_PATH),
-            filename="FLA.exe",
-            media_type="application/vnd.microsoft.portable-executable",
-            headers={"Cache-Control": "no-cache, must-revalidate"},
-        )
-
-    # 兜底：如果尚未生成则动态打包为 ZIP 格式
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for file in DESKTOP_DIR.glob("*.py"):
-            zf.write(file, f"desktop/{file.name}")
-        for file in DESKTOP_DIR.glob("*.bat"):
-            zf.write(file, f"desktop/{file.name}")
-        for file in DESKTOP_DIR.glob("*.md"):
-            zf.write(file, f"desktop/{file.name}")
-    buf.seek(0)
-    return StreamingResponse(
-        buf,
-        media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=FLA-Desktop.zip"},
+    exe_path = ensure_desktop_exe()
+    return FileResponse(
+        path=str(exe_path),
+        filename="FLA.exe",
+        media_type="application/vnd.microsoft.portable-executable",
+        headers={
+            "Content-Disposition": 'attachment; filename="FLA.exe"',
+            "Cache-Control": "no-cache, must-revalidate",
+        },
     )

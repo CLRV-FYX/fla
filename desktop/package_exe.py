@@ -115,6 +115,16 @@ def package():
         check=True
     )
 
+    # 同步分发至 desktop/bin 与 web/downloads 目录，保证 Docker 挂载及 Git 追踪完全可用
+    bin_dir = DESKTOP_DIR / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    bin_exe = bin_dir / "FLA.exe"
+    bin_exe.write_bytes(OUTPUT_EXE.read_bytes())
+
+    web_dl = DESKTOP_DIR.parent / "web" / "downloads"
+    web_dl.mkdir(parents=True, exist_ok=True)
+    (web_dl / "FLA.exe").write_bytes(OUTPUT_EXE.read_bytes())
+
     # 清理临时编译中间文件
     for p in (cmd_bin_path, launcher_s_path, obj_path):
         if p.exists():

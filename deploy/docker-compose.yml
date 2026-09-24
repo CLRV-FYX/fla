@@ -21,6 +21,7 @@ services:
       - fla-data:/data
       - ../web:/app/web
       - ../server:/app/server
+      - ../desktop:/app/desktop
     mem_limit: 1500m
     logging:
       driver: json-file
