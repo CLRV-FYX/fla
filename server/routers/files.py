@@ -408,6 +408,17 @@ def _anim_base(row):
     return db.DATA / "converted" / str(row["id"])
 
 
+@router.patch("/{fid}")
+def rename_file(fid: int, request: Request, body: dict):
+    """重命名课件/白板"""
+    _, row = _get_owned(fid, request)
+    new_name = str(body.get("name", "")).strip()
+    if not new_name:
+        raise HTTPException(400, "课件名称不能为空")
+    db.ex("UPDATE files SET orig_name=? WHERE id=?", (new_name, fid))
+    return {"ok": True, "name": new_name}
+
+
 @router.delete("/{fid}")
 def delete_file(fid: int, request: Request):
     _, row = _get_owned(fid, request)

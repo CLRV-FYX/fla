@@ -150,8 +150,8 @@ case "${1:-help}" in
     ;;
   pull)
     shift
-    TARGET_BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "arena/01a0d2bc-fla")}"
-    [ "$TARGET_BRANCH" = "HEAD" ] && TARGET_BRANCH="arena/01a0d2bc-fla"
+    TARGET_BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "arena/01a0d43a-fla")}"
+    [ "$TARGET_BRANCH" = "HEAD" ] && TARGET_BRANCH="arena/01a0d43a-fla"
     echo ">> 同步最新代码 (分支 $TARGET_BRANCH) ..."
     UPDATED=0
     if [ -d .git ] && command -v git >/dev/null 2>&1; then
@@ -202,8 +202,8 @@ case "${1:-help}" in
     ;;
   update)
     shift
-    TARGET_BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "arena/01a0d2bc-fla")}"
-    [ "$TARGET_BRANCH" = "HEAD" ] && TARGET_BRANCH="arena/01a0d2bc-fla"
+    TARGET_BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "arena/01a0d43a-fla")}"
+    [ "$TARGET_BRANCH" = "HEAD" ] && TARGET_BRANCH="arena/01a0d43a-fla"
     echo ">> 拉取最新代码 (分支 $TARGET_BRANCH) ..."
     if [ -d .git ]; then
       git fetch origin "$TARGET_BRANCH" && git reset --hard "origin/$TARGET_BRANCH"
