@@ -45,6 +45,15 @@
     var sid = params.sid || '';
     var code = params.code || '';
 
+    if (!sid && code) {
+      try {
+        var pairRes = await API.get('/api/remote/pair/' + encodeURIComponent(code));
+        if (pairRes && pairRes.session_id) {
+          sid = pairRes.session_id;
+        }
+      } catch (err) {}
+    }
+
     if (!sid) {
       renderPairView(app);
       return;
@@ -94,11 +103,15 @@
         btn.disabled = true;
         btn.textContent = '连接中…';
         try {
-          // 查找匹配的会话
-          location.hash = '#/remote?code=' + encodeURIComponent(c);
-          location.reload();
+          var pair = await API.get('/api/remote/pair/' + encodeURIComponent(c));
+          if (pair && pair.session_id) {
+            location.hash = '#/remote?sid=' + encodeURIComponent(pair.session_id) + '&code=' + encodeURIComponent(c);
+            viewRemote();
+            return;
+          }
+          throw new Error('未找到该会话');
         } catch (e) {
-          UI.toast('连接失败: ' + e.message, 'err');
+          UI.toast('配对码错误或会话已结束: ' + (e.message || ''), 'err');
           btn.disabled = false;
           btn.textContent = '连接电脑放映';
         }

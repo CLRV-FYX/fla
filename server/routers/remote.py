@@ -76,6 +76,23 @@ def create_session(req: CreateSessionReq):
     }
 
 
+@router.get("/pair/{code}")
+def find_session_by_code(code: str):
+    """通过 4 位配对码快速查找活跃的放映遥控会话 (供手机直接输入配对码连接)."""
+    cleanup_expired()
+    for sid, s in SESSIONS.items():
+        if s.get("code") == code.strip():
+            return {
+                "ok": True,
+                "session_id": sid,
+                "code": s.get("code"),
+                "title": s.get("title", "课堂放映"),
+                "page": s.get("page", 1),
+                "total": s.get("total", 1),
+            }
+    raise HTTPException(404, "未找到该配对码对应的放映会话，请确认大屏已开启遥控")
+
+
 @router.get("/{sid}/info")
 def get_session_info(sid: str, code: Optional[str] = Query(None)):
     session = SESSIONS.get(sid)

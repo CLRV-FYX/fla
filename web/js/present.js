@@ -106,9 +106,9 @@
     ]).then(function (rs) {
       S.meta = rs[0];
       if (S.meta.status && S.meta.status !== 'ready') return fail('文档尚未转换完成, 请稍后再试');
-      if (TRACK === 'ms' && S.meta.kind === 'office' &&
+      if (TRACK !== 'local' && S.meta.kind === 'office' &&
           /^(ppt|pptx|doc|docx|xls|xlsx)$/.test(S.meta.ext || '')) {
-        return msTrack();  // v1.18 微软放映轨道(透明伴飞层)
+        return msTrack();  // 默认使用微软官方高保真在线放映引擎(带板书画笔与互动工具)
       }
       S.manifest = rs[2] && rs[2].pages && rs[2].v >= 2 && rs[2].pages.length ? rs[2] : null;
       var ann = rs[1];

@@ -386,7 +386,8 @@ async function secAnns() {
     const a = list.find(x => x.id === aid);
     if (b.dataset.op === 'edit') return annEditor(a);
     if (b.dataset.op === 'del') {
-      if (!confirm('删除该公告?')) return;
+      const ok = await UI.confirm('确定删除该公告？');
+      if (!ok) return;
       try { await API.del('/api/admin/announcements/' + aid); secAnns(); } catch (e) { toast(e.message, 'err'); }
     } else {
       try { await API.patch('/api/admin/announcements/' + aid, { active: !a.active }); secAnns(); } catch (e) { toast(e.message, 'err'); }
@@ -466,7 +467,8 @@ async function secForum() {
     const op = b.dataset.op;
     try {
       if (op === 'bdel') {
-        if (!confirm('删除板块及其中所有帖子?')) return;
+        const ok = await UI.confirm('确定删除板块及其中所有帖子？删除后不可恢复');
+        if (!ok) return;
         await API.del('/api/admin/forum/boards/' + tr.dataset.id);
       } else if (op === 'rename') {
         const nm = prompt('新板块名:', '');
@@ -479,7 +481,8 @@ async function secForum() {
         const th2 = threads.find(x => x.id === +tr.dataset.id);
         await API.patch('/api/forum/threads/' + tr.dataset.id, { locked: !(th2 && th2.locked) });
       } else if (op === 'tdel') {
-        if (!confirm('删除该帖子?')) return;
+        const ok2 = await UI.confirm('确定删除该帖子？');
+        if (!ok2) return;
         await API.del('/api/forum/threads/' + tr.dataset.id);
       }
       secForum();
@@ -514,7 +517,8 @@ async function secChat() {
     } catch (e) { toast(e.message, 'err'); }
   };
   $$('#adm-main [data-op="del"]').forEach(b => b.onclick = async () => {
-    if (!confirm('解散该群组(消息一并删除)?')) return;
+    const ok = await UI.confirm('确定解散该群组(群内历史消息一并删除)？');
+    if (!ok) return;
     try { await API.del('/api/chat/rooms/' + b.closest('tr').dataset.id); secChat(); } catch (e) { toast(e.message, 'err'); }
   });
 }

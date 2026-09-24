@@ -3,6 +3,7 @@
 const $ = (s, el) => (el || document).querySelector(s);
 const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
 const toast = (m, t) => UI.toast(m, t);
+window.toast = toast;
 
 window.App = { user: null, setCleanup(fn) { App._cleanup = fn; } };
 let _cleanup = null;
@@ -689,8 +690,10 @@ function cardHTML(f) {
     '<div class="act">' +
     (isOffice
       ? '<button data-a="open" title="在线纯净预览">' + UI.icon('eye', 15) + ' 预览</button>' +
-        '<button data-a="local" class="btn-local" title="直接调用本地 PowerPoint/WPS">' + UI.icon('external', 15) + ' 本地打开</button>'
-      : '<button data-a="open" title="打开">' + UI.icon('board', 16) + ' 打开</button>') +
+        '<button data-a="present" class="btn-present" title="全屏教学放映 (画笔/计时/抽选)">' + UI.icon('play', 14) + ' 放映</button>' +
+        '<button data-a="local" class="btn-local" title="直接调用本地 PowerPoint/WPS">' + UI.icon('external', 14) + ' 本地打开</button>'
+      : '<button data-a="open" title="打开">' + UI.icon('board', 16) + ' 打开</button>' +
+        (f.kind !== 'board' ? '<button data-a="present" class="btn-present" title="全屏放映">' + UI.icon('play', 14) + ' 放映</button>' : '')) +
     (f.kind === 'board' ? '' : '<button data-a="dl" title="下载">' + UI.icon('download', 16) + '</button>') +
     (f.kind === 'board' ? '' : '<button data-a="link" title="复制公开直链">' + UI.icon('link', 16) + '</button>') +
     (f.status === 'failed' ? '<button data-a="retry" title="重试转换">' + UI.icon('refresh', 16) + '</button>' : '') +
@@ -766,6 +769,12 @@ async function refreshList() {
         e.stopPropagation();
         const a = b.dataset.a;
         if (a === 'open') openFile(f);
+        if (a === 'present') {
+          const ext = ((f.name || '').split('.').pop() || '').toLowerCase();
+          const ms = f.kind === 'office' && /^(ppt|pptx|doc|docx|xls|xlsx)$/.test(ext);
+          const trk = ms ? '&track=ms' : '';
+          window.open('/present.html?fid=' + f.id + '&token=' + encodeURIComponent(API.token) + trk, '_blank');
+        }
         if (a === 'local') openLocalFile(f);
         if (a === 'dl') window.open('/api/files/' + f.id + '/download?token=' + API.token, '_blank');
         if (a === 'link') {
@@ -1132,7 +1141,8 @@ async function renderForumList() {
   const admin = App.user.role === 'admin';
   let boards = [];
   try { boards = (await API.get('/api/forum/boards')).items; } catch (e) { toast(e.message, 'err'); return; }
-  const th = App.forum.board ? (await API.get('/api/forum/threads?board=' + App.forum.board).catch(() => null)) : null;
+  const thUrl = App.forum.board ? ('/api/forum/threads?board=' + App.forum.board) : '/api/forum/threads';
+  const th = await API.get(thUrl).catch(() => null);
   const threads = th ? th.items : [];
   /* v1.27 安全修复: 板块名是后台可改的文本, 拼进 innerHTML 前必须转义 */
   const boardName = id => { const b = boards.find(x => x.id === id); return b ? UI.esc(b.name) : '全站'; };
@@ -1223,7 +1233,8 @@ async function renderForumThread(tid) {
   $$('.ft-post .ft-post-ops button', box).forEach(b => b.onclick = async () => {
     const pid = +b.closest('.ft-post').dataset.id;
     if (b.dataset.op === 'del') {
-      if (!confirm('删除这条回复?')) return;
+      const ok = await UI.confirm('确定删除这条回复？');
+      if (!ok) return;
       try { await API.del('/api/forum/posts/' + pid); renderForumThread(tid); } catch (e) { toast(e.message, 'err'); }
     } else {
       const p = t.posts.find(x => x.id === pid);
@@ -1242,7 +1253,8 @@ async function renderForumThread(tid) {
   if (lockB) lockB.onclick = async () => { try { await API.patch('/api/forum/threads/' + tid, { locked: !t.locked }); renderForumThread(tid); } catch (e) { toast(e.message, 'err'); } };
   const delB = $('#ft-del');
   if (delB) delB.onclick = async () => {
-    if (!confirm('删除整个帖子(含所有回复)?')) return;
+    const ok = await UI.confirm('确定删除整个帖子(含所有回复)？删除后无法恢复');
+    if (!ok) return;
     try { await API.del('/api/forum/threads/' + tid); App.forum.thread = 0; renderForumList(); } catch (e) { toast(e.message, 'err'); }
   };
   const editB = $('#ft-edit');
@@ -1273,7 +1285,8 @@ function forumBoardsAdmin(boards) {
   $$('.board-row [data-op]', m.body).forEach(b => b.onclick = async () => {
     const row = b.closest('.board-row'), id = +row.dataset.id;
     if (b.dataset.op === 'del') {
-      if (!confirm('删除板块(含其中所有帖子)?')) return;
+      const ok = await UI.confirm('确定删除板块(含其中所有帖子)？');
+      if (!ok) return;
       try { await API.del('/api/admin/forum/boards/' + id); m.close(); renderForumList(); } catch (e) { toast(e.message, 'err'); }
     } else {
       try {

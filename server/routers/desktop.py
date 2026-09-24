@@ -11,11 +11,14 @@ from server.desktop_dist import ensure_desktop_exe
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
 
-CURRENT_VERSION = "1.28.0"
+CURRENT_VERSION = "1.35.0"
 CHANGELOG = [
-    "全新现代 Fluent 质感 UI，轻量高效",
+    "桌面端重写升级：全面超越希沃白板5",
+    "边缘吸附磨砂玻璃悬浮助手与全能教学工具条",
+    "7种专业学科背景白板（田字格/四线格/五线谱/坐标网格/护眼绿/黑板/白板）",
+    "全套课堂互动工具箱：倒计时秒表、随机点名抽选神器、四向遮挡幕布、聚光灯、草稿纸",
     "希沃白板5工具条智能拦截与自动保护",
-    "板书画布随 PPT 幻灯片翻页严格同步移动",
+    "板书画布随 PPT/WPS 幻灯片翻页严格同步移动与隔离存储",
     "手机无线扫码投屏与双向实时遥控",
     "客户端内置版本自动检测与原地静默更新",
 ]

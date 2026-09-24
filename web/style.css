@@ -703,16 +703,39 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 .m-foot { padding: 14px 20px; border-top: 0.5px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; background: var(--bg); border-bottom-left-radius: 18px; border-bottom-right-radius: 18px; }
 @keyframes fadein { from { opacity: 0; } }
 @keyframes pop { from { transform: scale(.96) translateY(6px); opacity: 0; } }
-#toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 400; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+#toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 400; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 .toast {
-  background: var(--grad-ink); color: #fff; padding: 11px 20px; font-size: 14px; opacity: 0;
-  transform: translateY(-8px); transition: all .28s var(--ease); border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(11,12,15,.3); max-width: 86vw;
+  background: rgba(28, 28, 30, 0.90);
+  color: #ffffff;
+  padding: 10px 18px;
+  font-size: 13.5px;
+  font-weight: 500;
+  opacity: 0;
+  transform: translateY(-10px) scale(0.96);
+  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  border-radius: 12px;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.12);
+  max-width: 90vw;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.toast.show { opacity: 1; transform: none; }
-.toast.err { background: var(--paper); color: var(--ink); border: 1.5px solid var(--ink); box-shadow: var(--shadow-md); }
-.toast.err::before { content: '✕ '; font-weight: 800; }
-.toast.warn { background: var(--paper); color: var(--ink); border: 1px solid var(--ink); }
+.toast.show { opacity: 1; transform: translateY(0) scale(1); }
+.toast.err {
+  background: rgba(239, 68, 68, 0.92);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 10px 30px rgba(239, 68, 68, 0.28);
+}
+.toast.warn {
+  background: rgba(245, 158, 11, 0.92);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 10px 30px rgba(245, 158, 11, 0.28);
+}
 
 /* ---------- 查看器 / 白板 ---------- */
 #viewer { position: fixed; inset: 0; z-index: 100; background: #e9e9e6; display: flex; flex-direction: column; }
@@ -1098,7 +1121,7 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 .wx {
   position: relative;                /* 窄屏时侧栏 absolute 定位的参照 */
   display: grid; grid-template-columns: 288px minmax(0, 1fr) 0;
-  gap: 14px; height: calc(100vh - 150px); min-height: 480px;
+  gap: 14px; height: calc(100vh - 96px); min-height: 520px;
   transition: grid-template-columns .34s var(--ease);
 }
 .wx.prof { grid-template-columns: 288px minmax(0, 1fr) 320px; }
@@ -1128,17 +1151,18 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 .wx-search input:focus { outline: none; }
 .wx-newbtn {
   width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 11px;
-  border: 1px solid var(--ink); background: var(--grad-ink); color: #fff; cursor: pointer;
-  transition: transform .18s var(--ease), box-shadow .18s;
+  border: 1px solid transparent; background: var(--brand); color: #fff; cursor: pointer;
+  transition: transform .14s var(--ease-out), background-color .14s var(--ease-out);
 }
-.wx-newbtn:hover { transform: translateY(-1px) rotate(90deg); box-shadow: 0 8px 20px rgba(11, 12, 15, .28); }
+.wx-newbtn:hover { background: var(--brand-hover); }
+.wx-newbtn:active { transform: scale(0.95); }
 .wx-filters { display: flex; gap: 4px; padding: 0 11px 9px; }
 .wx-filters button {
   flex: 1; padding: 5px 0; border: 1px solid transparent; border-radius: 9px; background: transparent;
   color: var(--mut); font: 600 11.5px inherit; cursor: pointer; transition: all .16s var(--ease);
 }
 .wx-filters button:hover { background: var(--soft); color: var(--ink); }
-.wx-filters button.on { background: var(--ink); color: #fff; }
+.wx-filters button.on { background: var(--brand); color: #fff; }
 .wx-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 8px; }
 .wx-list::-webkit-scrollbar, .wx-msgs::-webkit-scrollbar, .wx-pf-body::-webkit-scrollbar { width: 8px; }
 .wx-list::-webkit-scrollbar-thumb, .wx-msgs::-webkit-scrollbar-thumb, .wx-pf-body::-webkit-scrollbar-thumb {
@@ -1152,12 +1176,12 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 }
 .wx-item:hover { background: rgba(11, 12, 15, .05); }
 .wx-item:active { transform: scale(.985); }
-.wx-item.on { background: var(--grad-ink); box-shadow: 0 8px 22px rgba(11, 12, 15, .22); }
-.wx-item.on .wx-it-top b, .wx-item.on .wx-it-sub, .wx-item.on .wx-it-top em { color: #fff; }
-.wx-item.on .wx-it-sub { opacity: .78; }
-.wx-item.on .wx-tag { background: rgba(255, 255, 255, .22); color: #fff; }
+.wx-item.on { background: var(--brand-light); box-shadow: inset 3px 0 0 var(--brand); }
+.wx-item.on .wx-it-top b { color: var(--brand); }
+.wx-item.on .wx-it-sub { color: var(--ink2); opacity: .88; }
+.wx-item.on .wx-tag { background: var(--brand); color: #fff; }
 .wx-item.pinned { background: rgba(11, 12, 15, .035); }
-.wx-item.pinned.on { background: var(--grad-ink); }
+.wx-item.pinned.on { background: var(--brand-light); }
 .wx-av { position: relative; flex: none; }
 .wx-gav { width: 44px; height: 44px; border-radius: 13px; font-size: 17px; }
 .wx-badge {
@@ -1922,15 +1946,9 @@ label input:focus, label select:focus, label textarea:focus, .inp:focus {
 .files-grid > *:nth-child(n+7) { animation-delay: .26s; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(14px) scale(.985); } }
 .file-card { position: relative; overflow: hidden; }
-.file-card::after {
-  content: ""; position: absolute; top: -60%; bottom: -60%; left: -70%; width: 45%; pointer-events: none;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .5), transparent);
-  transform: skewX(-16deg); opacity: 0; transition: left .7s var(--ease), opacity .3s;
-}
-.file-card:hover::after { left: 130%; opacity: 1; }
 .file-card:active { transform: translateY(-1px) scale(.995); }
-.file-card .thumb, .file-card .fc-thumb, .file-card img { transition: transform .5s var(--ease); }
-.file-card:hover .thumb, .file-card:hover .fc-thumb { transform: scale(1.035); }
+.file-card .thumb, .file-card .fc-thumb, .file-card img { transition: transform .3s var(--ease); }
+.file-card:hover .thumb, .file-card:hover .fc-thumb { transform: scale(1.02); }
 
 /* --- 按钮: 按压反馈 (Emil Kowalski 设计原则: scale(0.97) + 160ms --ease-out) --- */
 .btn {
