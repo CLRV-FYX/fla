@@ -21,13 +21,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server ./server
 COPY web ./web
+COPY desktop ./desktop
 
-ENV FLA_DATA_DIR=/data
+ENV FLA_DATA_DIR=/data PORT=8306
 RUN mkdir -p /data
 VOLUME /data
-EXPOSE 8000
+EXPOSE 8306 8000
 
 HEALTHCHECK --interval=60s --timeout=10s --retries=5 \
-  CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=8)" || exit 1
+  CMD python -c "import urllib.request, os; p=os.environ.get('PORT', '8306'); urllib.request.urlopen(f'http://127.0.0.1:{p}/api/health', timeout=8)" || exit 1
 
-CMD ["uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# v1.27: 端口从环境变量 PORT 读取 (默认 8306)
+CMD ["sh", "-c", "exec uvicorn server.main:app --host 0.0.0.0 --port \"${PORT:-8306}\" --workers 1 --proxy-headers --forwarded-allow-ips '*'"]

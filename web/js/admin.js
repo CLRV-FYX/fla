@@ -133,7 +133,10 @@ function editUserModal(u) {
     '<label>认证颜色</label><div class="cert-color-pick" id="eucolors">' +
     CERT_COLOR_LIST.map(c => '<button type="button" class="ccp' + ((u.cert_color || '#f0d488') === c ? ' on' : '') + '" data-c="' + c + '" style="background:' + c + '"></button>').join('') +
     '<input type="color" id="eucolor-custom" value="' + (u.cert_color || '#f0d488') + '" title="自定义颜色">' +
-    '</div></div>' +
+    '</div>' +
+    /* v1.27: 改称号/图标/颜色时, 证书实时预览(所见即所得) */
+    '<label>证书预览</label><div class="eu-cert-preview" id="euprev"></div>' +
+    '</div>' +
     '<label class="switch-row"><span>聊天禁言（不能在聊天区发言）</span><input type="checkbox" id="euban"' + (u.chat_banned ? ' checked' : '') + '></label>' +
     '<label>空间配额 (MB)<input id="euquota" type="number" min="1" max="1000000" value="' + Math.round(u.quota_bytes / 1048576) + '">' +
     '<span class="muted">当前已用 ' + UI.fmtSize(u.used_bytes) + '</span></label></div>';
@@ -152,10 +155,26 @@ function editUserModal(u) {
   m.foot.querySelector('#eucancel').onclick = m.close;
   /* v1.26: 认证图标/颜色 选择器 */
   let certIcon = u.cert_icon || 'medal', certColor = u.cert_color || '#f0d488';
+  /* v1.27: 证书实时预览 — 用当前编辑中的值渲染真实证书卡 */
+  const paintPrev = () => {
+    const box = m.body.querySelector('#euprev');
+    if (!box || !window.certCardHTML) return;
+    box.innerHTML = certCardHTML({
+      id: u.id, username: u.username,
+      nickname: m.body.querySelector('#eunk').value || u.nickname,
+      role: m.body.querySelector('#eurole').value,
+      is_teacher: m.body.querySelector('#eucert').checked,
+      cert_title: m.body.querySelector('#eutitle').value,
+      cert_icon: certIcon, cert_color: certColor,
+      created_at: u.created_at,
+    });
+    if (window.bindCertCards) bindCertCards(box);
+  };
   $$('.cip', m.body).forEach(b => b.onclick = () => {
     certIcon = b.dataset.ic;
     $$('.cip', m.body).forEach(x => x.classList.remove('on'));
     b.classList.add('on');
+    paintPrev();
   });
   $$('.ccp', m.body).forEach(b => b.onclick = () => {
     certColor = b.dataset.c;
@@ -163,12 +182,18 @@ function editUserModal(u) {
     b.classList.add('on');
     $$('.cip', m.body).forEach(x => x.style.setProperty('--cc', certColor));
     m.body.querySelector('#eucolor-custom').value = certColor;
+    paintPrev();
   });
   m.body.querySelector('#eucolor-custom').oninput = e => {
     certColor = e.target.value;
     $$('.ccp', m.body).forEach(x => x.classList.remove('on'));
     $$('.cip', m.body).forEach(x => x.style.setProperty('--cc', certColor));
+    paintPrev();
   };
+  ['#eunk', '#eutitle'].forEach(sel => m.body.querySelector(sel).oninput = paintPrev);
+  m.body.querySelector('#eurole').onchange = paintPrev;
+  m.body.querySelector('#eucert').onchange = paintPrev;
+  paintPrev();
   m.foot.querySelector('#eusave').onclick = async () => {
     try {
       await API.put('/api/admin/users/' + u.id, {
@@ -311,6 +336,8 @@ async function secSettings() {
     '<label class="switch-row"><span>开放注册（注册始终需要邀请码）</span><input type="checkbox" id="sr"' + (s.registration_open ? ' checked' : '') + '></label>' +
     '<label>公开访问地址（域名，供微软在线放映抓取）<input id="spb" type="text" placeholder="例: http://t.fyx.best" value="' + UI.esc(s.public_base_url || '') + '"><p class="muted">微软 Office 放映要求域名+80/443 端口。填了它，即使用 IP 打开 FLA，直链也走此域名；留空则按当前浏览器地址生成</p></label>' +
     '<label>站点背景（登录页 / 前台 / 后台通用）<input id="sbg" type="text" placeholder="留空=默认; #1a2233; 或图片URL" value="' + UI.esc(s.site_bg || '') + '"><p class="muted">填 #颜色 或 http(s):// 图片链接；保存后刷新生效</p></label>' +
+    '<hr><h4>课件放映与白板</h4>' +
+    '<label class="switch-row"><span>放映时工具栏常驻显示（不自动收回，便于翻页与板书）</span><input type="checkbox" id="stb"' + (s.toolbar_keep ? ' checked' : '') + '><p class="muted">开启后全屏放映时底栏与顶栏始终显示，避免上课时找不到画笔或翻页键</p></label>' +
     '<hr><h4>社区权限</h4>' +
     '<label class="switch-row"><span>开启论坛</span><input type="checkbox" id="sforum"' + (s.forum_enabled ? ' checked' : '') + '></label>' +
     '<label class="switch-row"><span>开启聊天区</span><input type="checkbox" id="schat"' + (s.chat_enabled ? ' checked' : '') + '></label>' +
@@ -323,6 +350,7 @@ async function secSettings() {
         registration_open: $('#sr').checked,
         public_base_url: $('#spb').value.trim(),
         site_bg: $('#sbg').value.trim(),
+        toolbar_keep: $('#stb').checked,
         forum_enabled: $('#sforum').checked,
         chat_enabled: $('#schat').checked,
         allow_group_create: $('#sgrp').checked,
@@ -358,7 +386,8 @@ async function secAnns() {
     const a = list.find(x => x.id === aid);
     if (b.dataset.op === 'edit') return annEditor(a);
     if (b.dataset.op === 'del') {
-      if (!confirm('删除该公告?')) return;
+      const ok = await UI.confirm('确定删除该公告？');
+      if (!ok) return;
       try { await API.del('/api/admin/announcements/' + aid); secAnns(); } catch (e) { toast(e.message, 'err'); }
     } else {
       try { await API.patch('/api/admin/announcements/' + aid, { active: !a.active }); secAnns(); } catch (e) { toast(e.message, 'err'); }
@@ -438,7 +467,8 @@ async function secForum() {
     const op = b.dataset.op;
     try {
       if (op === 'bdel') {
-        if (!confirm('删除板块及其中所有帖子?')) return;
+        const ok = await UI.confirm('确定删除板块及其中所有帖子？删除后不可恢复');
+        if (!ok) return;
         await API.del('/api/admin/forum/boards/' + tr.dataset.id);
       } else if (op === 'rename') {
         const nm = prompt('新板块名:', '');
@@ -451,7 +481,8 @@ async function secForum() {
         const th2 = threads.find(x => x.id === +tr.dataset.id);
         await API.patch('/api/forum/threads/' + tr.dataset.id, { locked: !(th2 && th2.locked) });
       } else if (op === 'tdel') {
-        if (!confirm('删除该帖子?')) return;
+        const ok2 = await UI.confirm('确定删除该帖子？');
+        if (!ok2) return;
         await API.del('/api/forum/threads/' + tr.dataset.id);
       }
       secForum();
@@ -486,7 +517,8 @@ async function secChat() {
     } catch (e) { toast(e.message, 'err'); }
   };
   $$('#adm-main [data-op="del"]').forEach(b => b.onclick = async () => {
-    if (!confirm('解散该群组(消息一并删除)?')) return;
+    const ok = await UI.confirm('确定解散该群组(群内历史消息一并删除)？');
+    if (!ok) return;
     try { await API.del('/api/chat/rooms/' + b.closest('tr').dataset.id); secChat(); } catch (e) { toast(e.message, 'err'); }
   });
 }
