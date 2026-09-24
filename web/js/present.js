@@ -199,7 +199,7 @@
       '<p style="margin:10px 0 18px;color:rgba(255,255,255,.65)">' +
       String(msg).replace(/[<>&]/g, '') + '</p>' +
       '<button id="msLocalBtn" style="padding:10px 22px;border-radius:10px;border:none;' +
-      'background:#00B06F;color:#fff;font:600 14px/1 inherit;cursor:pointer;margin-right:8px;">启动本地原生放映</button>' +
+      'background:#09090b;color:#fff;font:600 14px/1 inherit;cursor:pointer;margin-right:8px;border-radius:8px;border:none;">启动本地原生放映</button>' +
       '<button id="msRetry" style="padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,.24);' +
       'background:rgba(255,255,255,.1);color:#fff;font:600 13.5px/1 inherit;cursor:pointer;margin-right:8px;">重试在线放映</button>' +
       '<button id="msBack" style="padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,.18);' +

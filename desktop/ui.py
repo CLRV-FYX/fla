@@ -55,14 +55,15 @@ HTML_TEMPLATE = f"""<!DOCTYPE html>
       width: 36px;
       height: 36px;
       border-radius: 10px;
-      background: linear-gradient(135deg, #059669, #00B06F);
+      background: #09090b;
+      border: 1px solid rgba(255, 255, 255, 0.2);
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 800;
       font-size: 16px;
       color: #fff;
-      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     }}
     .title-box h1 {{
       font-size: 16px;
@@ -81,9 +82,9 @@ HTML_TEMPLATE = f"""<!DOCTYPE html>
       gap: 6px;
       padding: 4px 10px;
       border-radius: 9999px;
-      background: rgba(2, 132, 199, 0.15);
-      border: 1px solid rgba(2, 132, 199, 0.3);
-      color: #38bdf8;
+      background: #18181b;
+      border: 1px solid #27272a;
+      color: #f4f4f5;
       font-size: 12px;
       font-weight: 600;
     }}
@@ -91,8 +92,8 @@ HTML_TEMPLATE = f"""<!DOCTYPE html>
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: #10b981;
-      box-shadow: 0 0 8px #10b981;
+      background: #ffffff;
+      box-shadow: 0 0 8px #ffffff;
       animation: pulse 2s infinite;
     }}
     @keyframes pulse {{
@@ -184,11 +185,12 @@ HTML_TEMPLATE = f"""<!DOCTYPE html>
       text-decoration: none;
     }}
     .btn-primary {{
-      background: #00B06F;
-      color: #fff;
+      background: #ffffff;
+      color: #09090b;
+      font-weight: 700;
     }}
     .btn-primary:hover {{
-      background: #00965e;
+      background: #e4e4e7;
     }}
     .btn-secondary {{
       background: rgba(255,255,255,0.08);
@@ -402,9 +404,9 @@ class ModernDesktopUI:
         body.pack(fill="both", expand=True, padx=20, pady=5)
 
         cards_data = [
-            ("🛡️  希沃白板5 拦截器", "自动抑制白板翻页笔劫持，挂载 FLA 原生悬浮工具条", "已启用", "#00B06F"),
-            ("📊  PPT 幻灯片与板书联动", "画布严格与幻灯片页面绑定，翻页自动隔离笔迹", "COM 监听", "#00B06F"),
-            ("🔌  本地 Office 唤起服务", "网页端一键启动 PPT/WPS 原生演示 (127.0.0.1:8307)", "监听中", "#00B06F"),
+            ("🛡️  希沃白板5 拦截器", "自动抑制白板翻页笔劫持，挂载 FLA 原生悬浮工具条", "已启用", "#ffffff"),
+            ("📊  PPT 幻灯片与板书联动", "画布严格与幻灯片页面绑定，翻页自动隔离笔迹", "COM 监听", "#ffffff"),
+            ("🔌  本地 Office 唤起服务", "网页端一键启动 PPT/WPS 原生演示 (127.0.0.1:8307)", "监听中", "#ffffff"),
         ]
 
         for title, desc, tag, tag_color in cards_data:
@@ -421,9 +423,9 @@ class ModernDesktopUI:
             tk.Label(c_right, text=tag, font=("Segoe UI", 8, "bold"), fg=tag_color, bg="#121316", padx=8, pady=3).pack()
 
         # Update card
-        update_card = tk.Frame(body, bg="#064e3b", highlightbackground="#059669", highlightthickness=1)
+        update_card = tk.Frame(body, bg="#18191d", highlightbackground="#272830", highlightthickness=1)
         update_card.pack(fill="x", pady=8, ipady=6, ipadx=10)
-        up_lbl = tk.Label(update_card, text=f"自动更新检测：当前已是最新版本 (v{CURRENT_VERSION})", font=font_card_p, fg="#a7f3d0", bg="#064e3b")
+        up_lbl = tk.Label(update_card, text=f"自动更新检测：当前已是最新版本 (v{CURRENT_VERSION})", font=font_card_p, fg="#f4f4f5", bg="#18191d")
         up_lbl.pack(side="left", padx=10)
 
         def do_check_update():
@@ -437,7 +439,7 @@ class ModernDesktopUI:
                     up_lbl.config(text=f"已是最新版本 (v{CURRENT_VERSION})")
             threading.Thread(target=_check, daemon=True).start()
 
-        up_btn = tk.Button(update_card, text="检查更新", font=font_sub, bg="#059669", fg="#ffffff", activebackground="#00B06F", activeforeground="#ffffff", relief="flat", padx=8, pady=2, command=do_check_update)
+        up_btn = tk.Button(update_card, text="检查更新", font=font_sub, bg="#ffffff", fg="#09090b", activebackground="#e4e4e7", activeforeground="#09090b", relief="flat", padx=8, pady=2, command=do_check_update)
         up_btn.pack(side="right", padx=10)
 
         # Footer

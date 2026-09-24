@@ -798,8 +798,8 @@
         '<div class="fla-sm-body" style="align-items:center; text-align:center;">' +
           '<div id="flaCastQrCode" style="width:190px; height:190px; background:#fff; padding:6px; border-radius:8px; border:1px solid #e2e8f0; margin:6px auto;"></div>' +
           '<div style="font-size:13px; color:#64748b; margin-top:6px;">微信或浏览器扫码，或在手机端输入配对码：</div>' +
-          '<div id="flaCastPin" style="font-size:28px; font-weight:700; letter-spacing:4px; color:#00B06F; font-family:ui-monospace, monospace; margin:4px 0;">----</div>' +
-          '<div id="flaCastStatus" style="font-size:12.5px; color:#10b981; font-weight:600; display:flex; align-items:center; justify-content:center; gap:6px;">' +
+          '<div id="flaCastPin" style="font-size:28px; font-weight:700; letter-spacing:4px; color:#09090b; font-family:ui-monospace, monospace; margin:4px 0;">----</div>' +
+          '<div id="flaCastStatus" style="font-size:12.5px; color:#52525b; font-weight:600; display:flex; align-items:center; justify-content:center; gap:6px;">' +
             '<span class="fla-timer-min-dot"></span> 等待手机连接…' +
           '</div>' +
           '<div style="font-size:12px; color:#64748b; line-height:1.5; margin-top:8px; max-width:320px;">' +
@@ -863,7 +863,7 @@
             qrContainer.textContent = fullUrl;
           }
         } else {
-          qrContainer.innerHTML = '<div style="padding:10px;font-size:12px;color:#00B06F;word-break:break-all;">' + fullUrl + '</div>';
+          qrContainer.innerHTML = '<div style="padding:10px;font-size:12px;color:#09090b;word-break:break-all;">' + fullUrl + '</div>';
         }
       }
     }
@@ -1026,12 +1026,12 @@
             '<div style="display:flex; justify-content:space-between; align-items:center;">' +
               '<span style="font-size:12px; font-weight:600; color:#0f172a;">学生名单 (支持 Excel / CSV 表格)</span>' +
               '<input type="file" id="pkFileInput" accept=".xlsx,.csv,.txt" style="display:none;">' +
-              '<button class="fla-tpill" id="pkUploadBtn" style="background:#00B06F; color:#fff; border-color:#00B06F;">导入表格</button>' +
+              '<button class="fla-tpill" id="pkUploadBtn" style="background:#09090b; color:#fff; border-color:#09090b;">导入表格</button>' +
             '</div>' +
             '<textarea class="fla-pk-textarea" id="pkRosterText" placeholder="每行一个学生姓名，如：&#10;张明&#10;李华&#10;王强">' + PK.roster.join('\n') + '</textarea>' +
             '<div style="display:flex; justify-content:flex-end; gap:6px;">' +
               '<button class="fla-tpill" id="pkDemoBtn">填入示例</button>' +
-              '<button class="fla-tpill" id="pkSaveBtn" style="background:#10b981; color:#fff; border-color:#10b981;">保存名单</button>' +
+              '<button class="fla-tpill" id="pkSaveBtn" style="background:#18181b; color:#fff; border-color:#18181b;">保存名单</button>' +
             '</div>' +
           '</div>' +
           '<div class="fla-pk-subbar">' +
@@ -1045,7 +1045,7 @@
               '</div>' +
             '</div>' +
             '<label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px; font-weight:500;">' +
-              '<input type="checkbox" id="pkNoRepeatChk"' + (PK.noRepeat ? ' checked' : '') + ' style="accent-color:#00B06F;"> 不重复' +
+              '<input type="checkbox" id="pkNoRepeatChk"' + (PK.noRepeat ? ' checked' : '') + ' style="accent-color:#09090b;"> 不重复' +
             '</label>' +
           '</div>' +
           '<div class="fla-pk-stage" id="pkStage">' +
@@ -1074,7 +1074,7 @@
               '</div>' +
             '</div>' +
             '<label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px; font-weight:500;">' +
-              '<input type="checkbox" id="pkNumNoRepeatChk"' + (PK.numNoRepeat ? ' checked' : '') + ' style="accent-color:#00B06F;"> 不重复' +
+              '<input type="checkbox" id="pkNumNoRepeatChk"' + (PK.numNoRepeat ? ' checked' : '') + ' style="accent-color:#09090b;"> 不重复' +
             '</label>' +
           '</div>' +
           '<div class="fla-pk-stage" id="pkNumStage">' +

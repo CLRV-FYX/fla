@@ -37,7 +37,7 @@ class FLAOverlay:
 
         # 独立全屏白板多页状态
         self.whiteboard_active = False
-        self.whiteboard_theme = "green"  # "green", "white", "black", "tian", "english", "music", "math"
+        self.whiteboard_theme = "black"  # "black", "white", "green", "tian", "english", "music", "math"
         self.whiteboard_pages: List[List[dict]] = [[]]
         self.whiteboard_current_page = 0
 

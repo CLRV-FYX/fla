@@ -1128,7 +1128,7 @@ async function viewDesktopCenter() {
         '<div class="dh-hero-actions">' +
           '<div style="background:rgba(0,0,0,0.3);padding:18px 24px;border-radius:14px;border:1px solid rgba(255,255,255,0.1);text-align:right;">' +
             '<div style="font-size:12px;color:#94a3b8;">当前分发版本</div>' +
-            '<div style="font-size:22px;font-weight:800;color:#10b981;">v1.36.0</div>' +
+            '<div style="font-size:22px;font-weight:800;color:#ffffff;">v1.36.0</div>' +
             '<div style="font-size:12px;color:#cbd5e1;margin-top:4px;">单文件绿色免安装 · 启动自动静默更新</div>' +
           '</div>' +
         '</div>' +

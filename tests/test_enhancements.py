@@ -68,51 +68,52 @@ def test_csharp_client_architecture():
 
 def test_file_rename_patch():
     # Attempt login with possible passwords or reset
-    import re
-    pw = "smoke-admin-pw"
-    init_pw_file = REPO_ROOT / "data" / "initial_admin_password.txt"
-    if init_pw_file.exists():
-        m = re.search(r"密码:\s*(\S+)", init_pw_file.read_text())
-        if m:
-            pw = m.group(1)
+    with TestClient(app) as c:
+        import re
+        pw = "smoke-admin-pw"
+        init_pw_file = REPO_ROOT / "data" / "initial_admin_password.txt"
+        if init_pw_file.exists():
+            m = re.search(r"密码:\s*(\S+)", init_pw_file.read_text())
+            if m:
+                pw = m.group(1)
 
-    login_resp = client.post("/api/auth/login", json={"username": "admin", "password": pw})
-    if login_resp.status_code != 200:
-        login_resp = client.post("/api/auth/login", json={"username": "admin", "password": "smoke-admin-pw"})
-    if login_resp.status_code != 200:
-        login_resp = client.post("/api/auth/login", json={"username": "admin", "password": "pw-smoke-456"})
+        login_resp = c.post("/api/auth/login", json={"username": "admin", "password": pw})
+        if login_resp.status_code != 200:
+            login_resp = c.post("/api/auth/login", json={"username": "admin", "password": "smoke-admin-pw"})
+        if login_resp.status_code != 200:
+            login_resp = c.post("/api/auth/login", json={"username": "admin", "password": "pw-smoke-456"})
 
-    assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
-    token = login_resp.json()["token"]
-    headers = {"Authorization": f"Bearer {token}"}
+        assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
+        token = login_resp.json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
 
-    # Create a board file
-    board_resp = client.post("/api/files/board", headers=headers, json={})
-    assert board_resp.status_code == 200
-    fid = board_resp.json()["id"]
+        # Create a board file
+        board_resp = c.post("/api/files/board", headers=headers, json={})
+        assert board_resp.status_code == 200
+        fid = board_resp.json()["id"]
 
-    # Rename file
-    patch_resp = client.patch(f"/api/files/{fid}", headers=headers, json={"name": "新重命名白板.fla"})
-    assert patch_resp.status_code == 200
-    data = patch_resp.json()
-    assert data["ok"] is True
-    assert data["name"] == "新重命名白板.fla"
+        # Rename file
+        patch_resp = c.patch(f"/api/files/{fid}", headers=headers, json={"name": "新重命名白板.fla"})
+        assert patch_resp.status_code == 200
+        data = patch_resp.json()
+        assert data["ok"] is True
+        assert data["name"] == "新重命名白板.fla"
 
-    # Verify updated name via GET
-    get_resp = client.get("/api/files", headers=headers)
-    assert get_resp.status_code == 200
-    files = get_resp.json()
-    matched = [f for f in files if f["id"] == fid]
-    assert len(matched) == 1
-    assert matched[0]["name"] == "新重命名白板.fla"
+        # Verify updated name via GET
+        get_resp = c.get("/api/files", headers=headers)
+        assert get_resp.status_code == 200
+        files = get_resp.json()
+        matched = [f for f in files if f["id"] == fid]
+        assert len(matched) == 1
+        assert matched[0]["name"] == "新重命名白板.fla"
 
-    # Test empty name fails
-    bad_resp = client.patch(f"/api/files/{fid}", headers=headers, json={"name": "   "})
-    assert bad_resp.status_code == 400
+        # Test empty name fails
+        bad_resp = c.patch(f"/api/files/{fid}", headers=headers, json={"name": "   "})
+        assert bad_resp.status_code == 400
 
-    # Cleanup
-    del_resp = client.delete(f"/api/files/{fid}", headers=headers)
-    assert del_resp.status_code == 200
+        # Cleanup
+        del_resp = c.delete(f"/api/files/{fid}", headers=headers)
+        assert del_resp.status_code == 200
 
 def test_web_static_assets_serve():
     resp_index = client.get("/")
