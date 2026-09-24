@@ -1,13 +1,14 @@
 #!/bin/bash
 # ================================================================
 #  FLA (FYX Lesson All) 日常管理脚本 v1.27
-#  用法:  sudo bash run.sh {status|start|stop|restart|logs|update|screen|edge|ssl}
+#  用法:  sudo bash run.sh {status|start|stop|restart|logs|pull|update|screen|edge|ssl}
 #    status   查看容器/服务状态 + 80/443 边缘网关 + 证书到期时间
 #    start    启动(开机也会自动启动, 此为手动停止后再启动)
 #    stop     停止(容器保留, 数据不丢)
 #    restart  重启
 #    logs     查看实时日志, 可选指定服务: run.sh logs [app|nginx|documentserver]
-#    update   更新/重新部署版本(智能重建容器, 数据保留, 自动进 screen)
+#    pull     同步最新代码并热重启容器: run.sh pull [分支名, 默认当前分支]
+#    update   更新/重新部署版本(智能重建容器, 数据保留, 自动进 screen) [分支名]
 #    screen   查看正在进行的安装会话(如果有)
 #    edge     查看/重建边缘网关(nginx 占 80/443 接管所有域名 → 反代 FLA 端口)
 #             run.sh edge [status|reload|setup 域名...]
@@ -148,21 +149,24 @@ case "${1:-help}" in
     fi
     ;;
   pull)
-    echo ">> 同步最新代码 (分支 arena/01a0add0-fla) ..."
+    shift
+    TARGET_BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "arena/01a0d2bc-fla")}"
+    [ "$TARGET_BRANCH" = "HEAD" ] && TARGET_BRANCH="arena/01a0d2bc-fla"
+    echo ">> 同步最新代码 (分支 $TARGET_BRANCH) ..."
     UPDATED=0
     if [ -d .git ] && command -v git >/dev/null 2>&1; then
-      if git fetch origin arena/01a0add0-fla 2>/dev/null && git reset --hard origin/arena/01a0add0-fla 2>/dev/null; then
+      if git fetch origin "$TARGET_BRANCH" 2>/dev/null && git reset --hard "origin/$TARGET_BRANCH" 2>/dev/null; then
         UPDATED=1
-      elif git fetch https://github.com/CLRV-FYX/fla.git arena/01a0add0-fla 2>/dev/null && git reset --hard FETCH_HEAD 2>/dev/null; then
+      elif git fetch https://github.com/CLRV-FYX/fla.git "$TARGET_BRANCH" 2>/dev/null && git reset --hard FETCH_HEAD 2>/dev/null; then
         UPDATED=1
       fi
     fi
     if [ "$UPDATED" = "0" ]; then
       if command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
         echo "  (通过官方代码包快速同步代码)"
-        curl -sL https://github.com/CLRV-FYX/fla/archive/refs/heads/arena/01a0add0-fla.tar.gz | tar -xz --strip-components=1 && UPDATED=1
+        curl -sL "https://github.com/CLRV-FYX/fla/archive/refs/heads/${TARGET_BRANCH}.tar.gz" | tar -xz --strip-components=1 && UPDATED=1
       elif command -v wget >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
-        wget -qO- https://github.com/CLRV-FYX/fla/archive/refs/heads/arena/01a0add0-fla.tar.gz | tar -xz --strip-components=1 && UPDATED=1
+        wget -qO- "https://github.com/CLRV-FYX/fla/archive/refs/heads/${TARGET_BRANCH}.tar.gz" | tar -xz --strip-components=1 && UPDATED=1
       fi
     fi
     # 重新 exec 本脚本，防止 bash 内存缓存/文件偏移导致未执行新版指令
@@ -198,12 +202,14 @@ case "${1:-help}" in
     ;;
   update)
     shift
-    echo ">> 拉取最新代码 (分支 arena/01a0add0-fla) ..."
+    TARGET_BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "arena/01a0d2bc-fla")}"
+    [ "$TARGET_BRANCH" = "HEAD" ] && TARGET_BRANCH="arena/01a0d2bc-fla"
+    echo ">> 拉取最新代码 (分支 $TARGET_BRANCH) ..."
     if [ -d .git ]; then
-      git fetch origin arena/01a0add0-fla && git reset --hard origin/arena/01a0add0-fla
+      git fetch origin "$TARGET_BRANCH" && git reset --hard "origin/$TARGET_BRANCH"
     elif command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
       echo "  (非 git 仓库，通过官方归档包更新代码)"
-      curl -sL https://github.com/CLRV-FYX/fla/archive/refs/heads/arena/01a0add0-fla.tar.gz | tar -xz --strip-components=1
+      curl -sL "https://github.com/CLRV-FYX/fla/archive/refs/heads/${TARGET_BRANCH}.tar.gz" | tar -xz --strip-components=1
     fi
     echo ">> 重新运行 install.sh (智能重建, 数据保留) ..."
     exec bash "$PWD/install.sh" "$@"
