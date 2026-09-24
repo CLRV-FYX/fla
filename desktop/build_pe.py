@@ -5,7 +5,7 @@ Constructs a legitimate Windows GUI executable with:
 - Standard PE32+ headers (Subsystem: Windows GUI 2, Machine: AMD64 0x8664)
 - Legitimate Import Address Table (kernel32.dll, user32.dll, shell32.dll)
 - Zero shellcode, zero PEB traversal (gs:[0x60]), zero hidden PowerShell droppers
-- Embedded FLA_Client.cs C# source and setup scripts
+- Embedded complete FLA_Client.cs C# source and setup scripts
 - Native csc.exe compilation / launch with MessageBoxW status notifications
 - Realistic application file size (~300KB - 450KB)
 """
@@ -44,13 +44,11 @@ def build_native_executable():
         make_utf16_array('szExeFile', '\\FLA\\FLA_App.exe'),
         make_utf16_array('szCsc64', 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe'),
         make_utf16_array('szCsc32', 'C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe'),
-        make_utf16_array('szCmdPfx', '/nologo /target:winexe /optimize+ /r:System.Windows.Forms.dll /r:System.Drawing.dll /out:\"'),
+        make_utf16_array('szCmdPfx', '\" /nologo /target:winexe /optimize+ /r:System.Windows.Forms.dll /r:System.Drawing.dll /out:\"'),
         make_utf16_array('szQuotes', '\" \"'),
         make_utf16_array('szQuoteEnd', '\"'),
         make_utf16_array('szTitle', 'FLA 智慧互动教学系统'),
-        make_utf16_array('szMsgErr', 'FLA 桌面端正在启动并连接服务...'),
-        make_utf16_array('szWebUrl', 'http://127.0.0.1:8306/#/library'),
-        make_utf16_array('szOpen', 'open')
+        make_utf16_array('szMsgErr', 'FLA 桌面端启动失败，请检查系统是否已安装 .NET Framework 4.0 运行环境。')
     ])
 
     c_source = f"""#define MS_ABI __attribute__((ms_abi))
@@ -120,7 +118,7 @@ MS_ABI void entry_point() {{
     unsigned short dirPath[320];
     unsigned short csPath[320];
     unsigned short exePath[320];
-    unsigned short cmdLine[1024];
+    unsigned short cmdLine[2048];
 
     DWORD len = GetEnvironmentVariableW(szLocalAppData, appdata, 290);
     if (len == 0 || len > 280) {{
@@ -155,9 +153,9 @@ MS_ABI void entry_point() {{
             cscPath = szCsc32;
         }}
 
+        // Format: \"csc.exe\" /nologo /target:winexe /optimize+ /r:System.Windows.Forms.dll /r:System.Drawing.dll /out:\"exePath\" \"csPath\"
         cmdLine[0] = '\"'; cmdLine[1] = 0;
         w_cat(cmdLine, cscPath);
-        w_cat(cmdLine, szQuotes);
         w_cat(cmdLine, szCmdPfx);
         w_cat(cmdLine, exePath);
         w_cat(cmdLine, szQuotes);
@@ -178,7 +176,7 @@ MS_ABI void entry_point() {{
         }}
     }}
 
-    // Execute compiled FLA_App.exe
+    // Execute compiled FLA_App.exe directly
     STARTUPINFOW siApp;
     PROCESS_INFORMATION piApp;
     for (int i = 0; i < sizeof(siApp); i++) ((char*)&siApp)[i] = 0;
@@ -192,9 +190,8 @@ MS_ABI void entry_point() {{
         CloseHandle(piApp.hProcess);
         CloseHandle(piApp.hThread);
     }} else {{
-        // Fallback: launch web portal and notify
-        ShellExecuteW(0, szOpen, szWebUrl, 0, 0, 1);
-        MessageBoxW(0, szMsgErr, szTitle, 0x40);
+        // Show clear error message box if compilation/launch failed
+        MessageBoxW(0, szMsgErr, szTitle, 0x10);
     }}
 
     ExitProcess(0);
@@ -391,7 +388,6 @@ def update_server_desktop_dist(final_pe):
     import base64
     b64_str = base64.b64encode(final_pe).decode('ascii')
     
-    # Split into lines of 76 characters for clean formatting
     chunk_size = 76
     chunks = [f'    "{b64_str[i:i+chunk_size]}"' for i in range(0, len(b64_str), chunk_size)]
     formatted_b64 = "(\n" + "\n".join(chunks) + "\n)"
