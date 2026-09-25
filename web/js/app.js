@@ -107,7 +107,9 @@ async function initApp() {
   try { document.getElementById('app').dataset.booted = '1'; } catch (e) { }
 }
 
-if (document.readyState === 'loading') {
+if (window.__flaDeferInit) {
+  window.__flaInit = initApp;
+} else if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initApp);
 } else {
   initApp();
