@@ -62,10 +62,24 @@ def startup():
 
 # 前端静态资源 (SPA, hash 路由)
 class NoCacheStatic(StaticFiles):
-    """v1.26: html/js/css 须向服务器 revalidate(304), 避免发版后浏览器用旧缓存"""
-    def file_response(self, *a, **kw):
-        r = super().file_response(*a, **kw)
-        r.headers["Cache-Control"] = "no-cache"
+    """html 必须 revalidate(304), 避免发版后浏览器用旧缓存;
+    带 ?v= 版本号的 js/css 内容不变 → 长缓存 immutable (弱网/跨国线路复访近乎秒开)"""
+    async def get_response(self, path, scope):
+        r = await super().get_response(path, scope)
+        try:
+            versioned = b"v=" in (scope.get("query_string") or b"")
+        except Exception:
+            versioned = False
+        r.headers["Cache-Control"] = "public, max-age=31536000, immutable" if versioned else "no-cache"
         return r
+
+
+# v1.37: 全局 gzip — 直连模式(无 nginx)与 lite 部署也能压缩; ~600KB 前端资源 ≈ 140KB,
+# 对高丢包高延迟线路(如中美)首屏体感差距巨大
+try:
+    from starlette.middleware.gzip import GZipMiddleware
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
+except Exception as _e:
+    print("[startup] GZipMiddleware unavailable:", _e)
 
 app.mount("/", NoCacheStatic(directory=str(db.WEB), html=True), name="web")

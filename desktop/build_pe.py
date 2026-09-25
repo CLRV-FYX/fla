@@ -41,7 +41,7 @@ def build_native_executable():
         make_utf16_array('szLocalAppData', 'LOCALAPPDATA'),
         make_utf16_array('szSubDir', '\\FLA'),
         make_utf16_array('szCsFile', '\\FLA\\FLA_Client.cs'),
-        make_utf16_array('szExeFile', '\\FLA\\FLA_v136.exe'),
+        make_utf16_array('szExeFile', '\\\\FLA\\\\FLA_v137.exe'),  # v1.37: 文件名跟随版本, 否则老用户永远运行旧编译产物
         make_utf16_array('szOldExe', '\\FLA\\FLA_App.exe'),
         make_utf16_array('szCsc64', 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe'),
         make_utf16_array('szCsc32', 'C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe'),

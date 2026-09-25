@@ -11,8 +11,10 @@ from server.desktop_dist import ensure_desktop_exe
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
 
-CURRENT_VERSION = "1.36.0"
+CURRENT_VERSION = "1.37.0"
 CHANGELOG = [
+    "v1.37 界面全面重绘：矢量图标悬浮工具盒、圆角卡片控制台、全新配色",
+    "v1.37 修复：课件库登录态、调色盘无法弹出、秒表倒计时、更新死锁",
     "桌面端重写升级：全面超越希沃白板5",
     "边缘吸附磨砂玻璃悬浮助手与全能教学工具条",
     "7种专业学科背景白板（田字格/四线格/五线谱/坐标网格/护眼绿/黑板/白板）",
@@ -34,7 +36,7 @@ def get_desktop_version():
         "version": CURRENT_VERSION,
         "name": "FLA 课堂助手",
         "download_url": "/api/desktop/download",
-        "release_date": "2026-09-23",
+        "release_date": "2026-09-25",
         "size": file_size,
         "changelog": CHANGELOG,
     }
