@@ -222,6 +222,9 @@ async def remote_websocket(websocket: WebSocket, sid: str, role: str = "controll
         }
     })
 
+    # 广播 presence 事件(其余对端可见, 也进入 HTTP 轮询队列)
+    _broadcast_event(session, {"type": "hello", "role": role, "time": time.time()})
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -245,3 +248,4 @@ async def remote_websocket(websocket: WebSocket, sid: str, role: str = "controll
         pass
     finally:
         session["connections"].discard(websocket)
+        _broadcast_event(session, {"type": "bye", "role": role, "time": time.time()})

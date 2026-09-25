@@ -1,6 +1,8 @@
 """FLA - 认证路由: 注册(邀请码) / 登录 / 个人信息 / 改密"""
 import re
 
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
@@ -17,7 +19,7 @@ class RegIn(BaseModel):
     username: str
     password: str
     nickname: str = ""
-    invite_code: str
+    invite_code: Optional[str] = ""
 
 
 class LoginIn(BaseModel):
@@ -53,7 +55,10 @@ def register(body: RegIn):
         raise HTTPException(400, "密码至少 6 位")
     if len(body.password.encode()) > 72:
         raise HTTPException(400, "密码过长")
-    inv = db.q1("SELECT * FROM invite_codes WHERE code=?", (body.invite_code.strip(),))
+    invite = (body.invite_code or "").strip()
+    if not invite:
+        raise HTTPException(400, "请填写邀请码")
+    inv = db.q1("SELECT * FROM invite_codes WHERE code=?", (invite,))
     if not inv:
         raise HTTPException(400, "邀请码无效")
     if inv["expires_at"] and inv["expires_at"] < db.now():

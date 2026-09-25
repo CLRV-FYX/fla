@@ -1411,18 +1411,20 @@ function viewLogin() {
     const poll = async () => {
       if (!ticket) return;
       try {
-        const r = await API.get('/api/auth/qr/' + ticket);
-        if (r.status === 'approved' && r.token) {
+        const r = await API.get('/api/auth/qr/status?ticket=' + encodeURIComponent(ticket));
+        if (r.status === 'ok' && r.token) {
           stopQrLogin();
           API.setToken(r.token); App.user = r.user;
           toast('扫码授权成功 ✓', 'ok');
           afterLoginGo();
-        } else if (r.status === 'invalid') {
-          refresh();
+        } else if (r.status === 'invalid' || r.status === 'expired') {
+          ticket = '';
+          refresh(); // 生成新二维码
         }
       } catch (e) { }
     };
     qrTimers.push(setInterval(poll, 1500));
+    App.setCleanup(stopQrLogin);
   }
 
   const switchTab = qr => {
@@ -1465,7 +1467,7 @@ async function viewRegister() {
     '<label>用户名<input name="username" autocomplete="username" minlength="2" maxlength="32" required placeholder="用于登录"></label>' +
     '<label>姓名 / 昵称<input name="nickname" maxlength="32" required placeholder="课件与互动展示名称"></label>' +
     '<label>密码<input name="password" type="password" minlength="6" autocomplete="new-password" required placeholder="至少 6 位"></label>' +
-    '<label>邀请码 (可选)<input name="invite_code" placeholder="输入教师认证邀请码"></label>' +
+    '<label>邀请码<input name="invite_code" required placeholder="向管理员获取教师邀请码"></label>' +
     '<button class="btn primary block" type="submit" style="margin-top:16px;">注 册</button></form>' +
     '<p class="auth-foot" style="margin-top:16px;font-size:13px;color:var(--mut);text-align:center;">已有账号？<a href="#/login">立即登录</a></p>' +
     '<p class="auth-extra-links"><a href="#/home">返回官网首页</a> · <a href="/api/desktop/download">下载 Windows 客户端</a></p>' +
@@ -1473,12 +1475,14 @@ async function viewRegister() {
   $('#f').onsubmit = async e => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const invite = String(fd.get('invite_code') || '').trim();
+    if (!invite) { toast('请填写管理员提供的邀请码', 'err'); return; }
     try {
       const r = await API.post('/api/auth/register', {
         username: String(fd.get('username')).trim(),
         nickname: String(fd.get('nickname')).trim(),
         password: String(fd.get('password')),
-        invite_code: String(fd.get('invite_code') || '').trim() || null,
+        invite_code: invite,
       });
       API.setToken(r.token); App.user = r.user;
       toast('注册成功，欢迎使用 FLA', 'ok');

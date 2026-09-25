@@ -83,6 +83,7 @@
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     stepNext: '<path d="M5 4l10 8-10 8V4z"/><path d="M19 5v14"/>',
     stepPrev: '<path d="M19 20L9 12l10-8v16z"/><path d="M5 19V5"/>',
+    line: '<path d="M5 12h14"/>',
     cast: '<path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><line x1="2" y1="20" x2="2.01" y2="20"/>',
     close: '<path d="M18 6 6 18M6 6l12 12"/>',
     play: '<path d="M7 5v14l12-7z"/>',
@@ -868,18 +869,22 @@
       }
     }
 
+    function setCastStatus(text) {
+      var stEl = castModal ? castModal.querySelector('#flaCastStatus') : null;
+      if (stEl) stEl.innerHTML = '<span class="fla-timer-min-dot"></span> ' + text;
+    }
+
     function connectRemoteWs() {
       if (!remoteSession) return;
       var sid = remoteSession.session_id;
       var wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      var wsUrl = wsProto + '//' + location.host + '/api/remote/ws/' + sid;
+      var wsUrl = wsProto + '//' + location.host + '/api/remote/ws/' + sid + '?role=stage';
 
       try {
         remoteWs = new WebSocket(wsUrl);
         remoteWs.onopen = function () {
           syncRemoteState();
-          var stEl = castModal ? castModal.querySelector('#flaCastStatus') : null;
-          if (stEl) stEl.innerHTML = '<span class="fla-timer-min-dot"></span> 手机遥控通道已就绪';
+          setCastStatus('大屏通道已就绪，等待手机接入…');
         };
         remoteWs.onmessage = function (e) {
           try {
@@ -888,14 +893,23 @@
           } catch (err) {}
         };
         remoteWs.onclose = function () {
+          remoteWs = null;
+          if (!remoteSession) return;
+          setCastStatus('连接中断，已切换为轮询模式');
           startRemotePolling();
         };
       } catch (err) {
+        setCastStatus('连接中断，已切换为轮询模式');
         startRemotePolling();
       }
     }
 
     function handleRemoteMessage(msg) {
+      /* 手机接入/断开 presence 事件 (WS 与 HTTP 轮询两条通道都会送达) */
+      if ((msg.type === 'hello' || msg.type === 'bye') && (msg.role || msg.sender) === 'controller') {
+        setCastStatus(msg.type === 'hello' ? '手机已连接 ✓ 可以开始遥控' : '手机已断开，等待重连…');
+        return;
+      }
       if (msg.type === 'action') {
         var act = msg.action;
         var d = msg.data || {};
@@ -941,6 +955,7 @@
     function startRemotePolling() {
       if (remotePollTimer || !remoteSession) return;
       var lastIdx = 0;
+      setCastStatus('遥控通道已就绪（轮询模式），等待手机接入…');
       remotePollTimer = setInterval(function () {
         if (!remoteSession) return;
         jget('/api/remote/' + remoteSession.session_id + '/poll?after=' + lastIdx).then(function (res) {
@@ -2840,6 +2855,14 @@
         if (S._clock) { clearInterval(S._clock); S._clock = 0; }
         clearTimeout(S.saveT); clearTimeout(S.hideT);
         if (textIn) { try { textIn.ta.remove(); } catch (e) { } textIn = null; }
+        /* 手机遥控子系统随放映销毁: 先断 WS(屏蔽 onclose 重连) 再停轮询 */
+        remoteSession = null;
+        if (remoteWs) {
+          try { remoteWs.onclose = null; remoteWs.close(); } catch (e) { }
+          remoteWs = null;
+        }
+        if (remotePollTimer) { clearInterval(remotePollTimer); remotePollTimer = null; }
+        if (castModal) { try { castModal.remove(); } catch (e) { } castModal = null; }
         try { wrap.remove(); } catch (e) { }
       }
     };

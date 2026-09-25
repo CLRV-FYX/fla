@@ -61,6 +61,7 @@
 
     try {
       var info = await API.get('/api/remote/' + sid + '/info' + (code ? '?code=' + code : ''));
+      disconnect(); // 防御: 重新进入时清理上一个会话的轮询/WS
       curSession = { id: sid, code: code, title: info.title };
       state.title = info.title || '课堂放映';
       state.page = info.page || 1;
@@ -70,6 +71,8 @@
 
       renderControllerView(app);
       connectWs(sid);
+      // 离开 #/remote 页面时自动断开, 避免轮询/WS 永久残留
+      App.setCleanup(disconnect);
     } catch (e) {
       renderPairView(app, e.message || '连接已过期，请重新配对');
     }
