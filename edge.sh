@@ -324,10 +324,16 @@ gen_conf(){
   [ -s "$CERT" ] && [ -s "$KEY" ] && HAVECERT=1
 
   # ---- http2 写法按 nginx 版本适配 (1.25.1+ 用 http2 on;) ----
+  # FLA_NO_HTTP2=1 可强制 HTTP/1.1: 跨境线路(如中国大陆)对 h2 多路复用的
+  # 干扰/重置明显多于 h1.1, 浏览器整页打不开而 curl(h1.1) 正常时优先试这个
   local L443="    listen 443 ssl;" L443v6="    listen [::]:443 ssl;" HTTP2="    http2 on;"
   local V; V=$(nginx_ver)
   if [ -n "$V" ] && ! ver_ge "$V" "1.25.1"; then
     L443="    listen 443 ssl http2;"; L443v6="    listen [::]:443 ssl http2;"; HTTP2=""
+  fi
+  if [ "${FLA_NO_HTTP2:-0}" = "1" ]; then
+    L443="    listen 443 ssl;"; L443v6="    listen [::]:443 ssl;"; HTTP2=""
+    echo "  (FLA_NO_HTTP2=1: 已强制 HTTP/1.1)"
   fi
 
   # ---- 公共片段 ----
