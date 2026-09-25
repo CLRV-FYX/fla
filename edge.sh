@@ -349,6 +349,7 @@ gen_conf(){
   local REDIR="    set \$fla_redir 0;
     if (\$fla_force_https) { set \$fla_redir 1; }
     if (\$uri ~ \"^/.well-known/acme-challenge/\") { set \$fla_redir 0; }
+    if (\$http_x_forwarded_for) { set \$fla_redir 0; }
     if (\$fla_redir) { return 301 https://\$host\$request_uri; }"
   local TLSCFG="    ssl_certificate     $CERT;
     ssl_certificate_key $KEY;
@@ -368,7 +369,7 @@ gen_conf(){
 server {
     listen 80;
     listen [::]:80;
-    server_name $NAMES;
+    server_name $NAMES ~^.+\$;
 
 $ACME
 
@@ -381,10 +382,11 @@ __PROXY__
 server {
 $L443
 $L443v6
-    server_name $NAMES;
+    server_name $NAMES ~^.+\$;
 $HTTP2
 
 $TLSCFG
+    error_page 497 = @fla_plain;
 
 $ACME
 
@@ -419,6 +421,7 @@ $L443v6
 $HTTP2
 
 $TLSCFG
+    error_page 497 = @fla_plain;
 
 $ACME
 
@@ -473,6 +476,20 @@ EOF
     gzip_types text/plain text/css application/javascript application/json image/svg+xml font/woff2;
 
     location / {
+        proxy_pass http://fla_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Connection        \$connection_upgrade;
+        proxy_set_header Upgrade           \$http_upgrade;      # WebSocket
+        proxy_set_header Host              \$host;
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host  \$host;
+        proxy_set_header X-Forwarded-Port  \$server_port;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_buffering off;                                       # 音视频 Range 流式
+        proxy_request_buffering off;                               # 大文件上传不先落盘
+    }
+    location @fla_plain {
         proxy_pass http://fla_backend;
         proxy_http_version 1.1;
         proxy_set_header Connection        \$connection_upgrade;
