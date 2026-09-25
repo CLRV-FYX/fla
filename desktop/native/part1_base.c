@@ -605,11 +605,12 @@ static DWORD WINAPI BridgeConnThread(LPVOID param) {
             lstrcpynW(urlCopy, url, lstrlenW(url) + 1);
             wchar_t* tokCopy = (wchar_t*)xmalloc((lstrlenW(token ? token : L"") + 1) * sizeof(wchar_t));
             lstrcpynW(tokCopy, token ? token : L"", lstrlenW(token ? token : L"") + 1);
+            /* 先应答再调起: 下载耗时不能拖垮网页端 1.2s 探测超时 */
+            BridgeRespond(s, "{\"ok\":true,\"msg\":\"正在调起本地放映并激活工具盒\"}");
             /* 桥接线程本身就是工作线程, 直接同步执行下载+调起 */
             LaunchOfficePresentation(urlCopy, nameCopy, tokCopy[0] ? tokCopy : g_token);
             free(nameCopy); free(urlCopy); free(tokCopy);
             if (!name || !name[0]) free(name2);
-            BridgeRespond(s, "{\"ok\":true,\"msg\":\"正在调起本地放映并激活工具盒\"}");
         } else {
             BridgeRespond(s, "{\"ok\":false,\"msg\":\"缺少 url 参数\"}");
         }
