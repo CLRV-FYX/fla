@@ -5,15 +5,78 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>FLA · FYX Lesson All</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111111' stroke-width='2'%3E%3Crect x='2' y='4' width='20' height='14' rx='2'/%3E%3Cpath d='M8 21h8M12 18v3'/%3E%3C/svg%3E">
+<style>
+/* 关键首屏样式内联: 大样式表跨网加载慢时, 启动画面也立即可见 (样式表后到会自然接管) */
+html, body { margin: 0; padding: 0; background: #fafafa; }
+.boot-loading {
+  position: fixed; inset: 0; display: grid; place-items: center; gap: 14px;
+  align-content: center; color: #71717a; font-size: 14px;
+  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.boot-loading::before {
+  content: ""; width: 28px; height: 28px; border-radius: 50%;
+  border: 3px solid #e4e4e7; border-top-color: #09090b;
+  animation: bootSpin .8s linear infinite;
+}
+@keyframes bootSpin { to { transform: rotate(360deg); } }
+.boot-err {
+  max-width: 640px; margin: 10vh auto; padding: 28px 32px;
+  border: 1px solid #e4e4e7; border-radius: 16px; background: #fff;
+  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #18181b; box-shadow: 0 8px 30px rgba(0,0,0,.08);
+}
+.boot-err h2 { margin: 0 0 8px; font-size: 19px; }
+.boot-err p { margin: 0 0 14px; font-size: 13.5px; color: #71717a; line-height: 1.7; }
+.boot-err table { width: 100%; border-collapse: collapse; font-size: 12.5px; background: #fafafa; }
+.boot-err th { text-align: left; padding: 6px 10px; color: #71717a; font-weight: 600; }
+.boot-err td { padding: 5px 10px; border-top: 1px solid #f0f0f2; }
+.boot-err .boot-acts { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+.boot-err button, .boot-err a {
+  padding: 9px 18px; border-radius: 10px; font-size: 13px; font-weight: 600;
+  cursor: pointer; text-decoration: none; display: inline-block;
+}
+.boot-err button { border: none; background: #09090b; color: #fff; }
+.boot-err a { border: 1px solid #e4e4e7; color: #18181b; }
+.boot-err .boot-tips { margin: 14px 0 0; font-size: 12px; color: #a1a1aa; line-height: 1.9; }
+</style>
 <link rel="stylesheet" href="style.css?v=137">
 </head>
 <body>
-<div id="app"><div class="boot-loading">加载中…</div></div>
+<div id="app"><div class="boot-loading">正在加载 FLA…</div></div>
 <div id="toast"></div>
+<script>
+/* 启动看门狗: 应用 12 秒内未完成初始化 → 展示诊断面板 (弱网/跨境链路/资源被拦截可见) */
+(function () {
+  setTimeout(function () {
+    var app = document.getElementById('app');
+    if (!app || app.dataset.booted === '1') return;
+    var rows = '';
+    try {
+      var res = performance.getEntriesByType('resource') || [];
+      res.forEach(function (r) {
+        var name = r.name.split('/').pop().split('?')[0];
+        var done = r.responseEnd > 0;
+        var size = (typeof r.transferSize === 'number') ? r.transferSize : null;
+        rows += '<tr><td>' + name + '</td><td>' + (done ? Math.round(r.duration) + ' ms' : '未完成') +
+                '</td><td>' + (size === null ? '—' : (size > 1024 ? Math.round(size / 1024) + ' KB' : size + ' B')) + '</td></tr>';
+      });
+    } catch (e) { }
+    if (!rows) rows = '<tr><td colspan="3">浏览器未报告任何资源加载记录</td></tr>';
+    app.innerHTML = '<div class="boot-err">' +
+      '<h2>加载超时</h2>' +
+      '<p>页面资源未能在 12 秒内加载完成。若您在中国大陆访问境外服务器，跨网链路可能不稳定或被限速。下方是浏览器实际的资源加载情况：</p>' +
+      '<table><thead><tr><th>资源</th><th>耗时</th><th>传输</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<div class="boot-acts"><button onclick="location.reload()">重新加载</button><a href="/diag.html">打开网络诊断</a></div>' +
+      '<p class="boot-tips">建议：① 点击「重新加载」重试，已下载的资源会被浏览器复用，多次刷新可逐步载入；' +
+      '② 优先使用 HTTPS 域名访问；③ 若反复失败，请将诊断页结果截图发给管理员。</p>' +
+      '</div>';
+  }, 12000);
+})();
+</script>
 <script defer src="lib/qrcode/qrcode.min.js?v=134"></script>
 <script defer src="js/api.js?v=134"></script>
 <script defer src="js/ui.js?v=137"></script>
-<script defer src="js/app.js?v=137"></script>
+<script defer src="js/app.js?v=138"></script>
 <script defer src="js/admin.js?v=134"></script>
 <script defer src="js/chat.js?v=134"></script>
 <script defer src="js/remote.js?v=137"></script>

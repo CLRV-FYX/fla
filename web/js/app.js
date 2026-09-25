@@ -103,6 +103,8 @@ async function initApp() {
   }
 
   route();
+  /* 通知 index.html 看门狗: 应用已成功启动 */
+  try { document.getElementById('app').dataset.booted = '1'; } catch (e) { }
 }
 
 if (document.readyState === 'loading') {

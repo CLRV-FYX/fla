@@ -19,19 +19,12 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BASE_DIR.parent
 
-def build_native_executable():
-    print("=== Building Native Windows x86_64 PE Executable for FLA ===")
 
-    tmp_dir = Path("/tmp/fla_pe_build")
+def generate_launcher_sources(tmp_dir):
+    """仅生成 launcher.c (旧构建与新 mingw 构建共用的 C 模板)"""
+    c_file = tmp_dir / 'launcher.c'
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    c_file = tmp_dir / "launcher.c"
-    s_file = tmp_dir / "stubs.s"
-    o_c_file = tmp_dir / "launcher.o"
-    o_s_file = tmp_dir / "stubs.o"
-    raw_exe = tmp_dir / "raw_linked.exe"
-
-    # 1. Generate launcher.c
     def make_utf16_array(name, s):
         chars = [str(ord(c)) for c in s] + ['0']
         c_str = ', '.join(chars)
@@ -41,7 +34,7 @@ def build_native_executable():
         make_utf16_array('szLocalAppData', 'LOCALAPPDATA'),
         make_utf16_array('szSubDir', '\\FLA'),
         make_utf16_array('szCsFile', '\\FLA\\FLA_Client.cs'),
-        make_utf16_array('szExeFile', '\\\\FLA\\\\FLA_v137.exe'),  # v1.37: 文件名跟随版本, 否则老用户永远运行旧编译产物
+        make_utf16_array('szExeFile', '\FLA\FLA_v137.exe'),  # v1.37: 文件名跟随版本, 否则老用户永远运行旧编译产物
         make_utf16_array('szOldExe', '\\FLA\\FLA_App.exe'),
         make_utf16_array('szCsc64', 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe'),
         make_utf16_array('szCsc32', 'C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe'),
@@ -116,11 +109,11 @@ extern const DWORD g_client_cs_len;
 {str_decls}
 
 MS_ABI void entry_point() {{
-    unsigned short appdata[300];
-    unsigned short dirPath[320];
-    unsigned short csPath[320];
-    unsigned short exePath[320];
-    unsigned short cmdLine[2048];
+    static unsigned short appdata[300];
+    static unsigned short dirPath[320];
+    static unsigned short csPath[320];
+    static unsigned short exePath[320];
+    static unsigned short cmdLine[2048];
 
     DWORD len = GetEnvironmentVariableW(szLocalAppData, appdata, 290);
     if (len == 0 || len > 280) {{
@@ -137,7 +130,7 @@ MS_ABI void entry_point() {{
     w_copy(exePath, appdata);
     w_cat(exePath, szExeFile);
 
-    unsigned short oldExePath[320];
+    static unsigned short oldExePath[320];
     w_copy(oldExePath, appdata);
     w_cat(oldExePath, szOldExe);
     DeleteFileW(oldExePath);
@@ -205,6 +198,29 @@ MS_ABI void entry_point() {{
 }}
 """
     c_file.write_text(c_source, encoding="utf-8")
+    return c_file
+
+
+def build_native_executable():
+    print("=== Building Native Windows x86_64 PE Executable for FLA ===")
+
+    tmp_dir = Path("/tmp/fla_pe_build")
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    c_file = tmp_dir / "launcher.c"
+    s_file = tmp_dir / "stubs.s"
+    o_c_file = tmp_dir / "launcher.o"
+    o_s_file = tmp_dir / "stubs.o"
+    raw_exe = tmp_dir / "raw_linked.exe"
+
+    # 1. Generate launcher.c
+    def make_utf16_array(name, s):
+        chars = [str(ord(c)) for c in s] + ['0']
+        c_str = ', '.join(chars)
+        return f"static const unsigned short {name}[] = {{{c_str}}};"
+
+    generate_launcher_sources(tmp_dir)
+
 
     # 2. Generate stubs.s
     dll_groups = [
@@ -251,7 +267,7 @@ g_app_padding:
 
     # 3. Compile with gcc and as
     subprocess.run([
-        'gcc', '-fno-ident', '-fno-asynchronous-unwind-tables',
+        'gcc', '-fno-ident', '-fno-builtin', '-fno-asynchronous-unwind-tables',
         '-nostdlib', '-m64', '-O2', '-c', '-o', str(o_c_file), str(c_file)
     ], check=True)
 
@@ -391,6 +407,204 @@ g_app_padding:
 
     return final_pe
 
+
+# ============================================================
+# v1.37: MinGW 正规交叉构建 (zig cc / lld-link)
+# 产出标准 PE: 正规段结构、真实导入表、版本信息、图标、清单、校验和
+# 杀软启发式对"正规长相"的 PE 友好得多; 无 zig 时回退旧 ld 拼装路径
+# ============================================================
+MINGW_TARGET = 'x86_64-windows-gnu'
+
+
+def _have_zig():
+    import subprocess, sys as _sys
+    try:
+        r = subprocess.run([_sys.executable, '-m', 'ziglang', 'version'],
+                           capture_output=True, text=True, timeout=30)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def _zig(*args):
+    import subprocess, sys as _sys
+    cmd = [_sys.executable, '-m', 'ziglang'] + list(args)
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError('zig %s failed:\n%s\n%s' % (args[0], r.stdout, r.stderr))
+    return r
+
+
+def _write_multisize_ico(path, sizes=(16, 24, 32, 48, 64)):
+    from PIL import Image, ImageDraw
+    def blob(s):
+        im = Image.new('RGBA', (s, s), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        d.rounded_rectangle([0, 0, s - 1, s - 1], radius=max(2, int(s * 0.22)), fill=(9, 9, 11, 255))
+        w = max(1, s // 26)
+        bw, bh = int(s * 0.56), int(s * 0.38)
+        x0 = (s - bw) // 2
+        y0 = int(s * 0.18)
+        d.rounded_rectangle([x0, y0, x0 + bw, y0 + bh], radius=max(1, s // 20), outline=(255, 255, 255, 255), width=w)
+        ly = y0 + bh
+        cx = s // 2
+        d.line([cx, ly, cx, min(s - 2, ly + int(s * 0.18))], fill=(255, 255, 255, 255), width=w)
+        d.line([cx - int(s * 0.14), min(s - 2, ly + int(s * 0.18)), cx + int(s * 0.14), min(s - 2, ly + int(s * 0.18))],
+               fill=(255, 255, 255, 255), width=w)
+        px = im.load()
+        xor = bytearray()
+        for yy in range(s - 1, -1, -1):
+            for xx in range(s):
+                r, g, b, a = px[xx, yy]
+                xor += bytes((b, g, r, a))
+        stride = ((s + 31) // 32) * 4
+        hdr = struct.pack('<IiiHHIIiiII', 40, s, s * 2, 1, 32, 0, len(xor) + stride * s, 0, 0, 0, 0)
+        return hdr + bytes(xor) + bytes(stride * s)
+
+    blobs = [blob(x) for x in sizes]
+    out = struct.pack('<HHH', 0, 1, len(sizes))
+    off = 6 + 16 * len(sizes)
+    for x, b in zip(sizes, blobs):
+        out += struct.pack('<BBBBHHII', x % 256, x % 256, 0, 0, 1, 32, len(b), off)
+        off += len(b)
+    for b in blobs:
+        out += b
+    open(path, 'wb').write(out)
+
+
+MANIFEST_XML = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+<assemblyIdentity version="{ver}.0" processorArchitecture="*" name="FLA.Desktop.Assistant" type="win32"/>
+<description>FLA Desktop Assistant</description>
+<trustInfo xmlns="urn:schemas-microsoft-com:asm.v3"><security><requestedPrivileges>
+<requestedExecutionLevel level="asInvoker" uiAccess="false"/></requestedPrivileges></security></trustInfo>
+<compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1"><application>
+<supportedOS Id="{{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}}"/>
+<supportedOS Id="{{1f676c76-80e1-4239-95bb-83d0f6d0da78}}"/>
+<supportedOS Id="{{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}}"/>
+<supportedOS Id="{{35138b9a-5d96-4fbd-8e2d-a2440225f93a}}"/>
+</application></compatibility>
+<asmv3:application xmlns:asmv3="urn:schemas-microsoft-com:asm.v3"><asmv3:windowsSettings>
+<dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
+</asmv3:windowsSettings></asmv3:application>
+</assembly>
+"""
+
+RC_TEMPLATE = """1 VERSIONINFO
+FILEVERSION     {v1},{v2},{v3},0
+PRODUCTVERSION  {v1},{v2},{v3},0
+FILEOS          0x40004L
+FILETYPE        0x1L
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "CompanyName",      "CLRV-FYX"
+      VALUE "FileDescription",  "FLA Desktop Assistant"
+      VALUE "FileVersion",      "{ver}"
+      VALUE "InternalName",     "FLA"
+      VALUE "LegalCopyright",   "CLRV-FYX. All rights reserved."
+      VALUE "OriginalFilename", "FLA.exe"
+      VALUE "ProductName",      "FLA Desktop Assistant"
+      VALUE "ProductVersion",   "{ver}"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END
+1 ICON "{ico}"
+1 24 "{manifest}"
+"""
+
+
+def write_pe_checksum(path):
+    with open(path, 'rb') as f:
+        data = bytearray(f.read())
+    e_lfanew = struct.unpack_from('<I', data, 0x3C)[0]
+    csum_off = e_lfanew + 24 + 64
+    struct.pack_into('<I', data, csum_off, 0)
+    total = len(data)
+    s = 0
+    n = total - (total % 4)
+    for i in range(0, n, 4):
+        s += struct.unpack_from('<I', data, i)[0]
+        s = (s & 0xFFFF) + (s >> 16)
+    if total % 4:
+        tail = bytes(data[n:]) + b'\x00' * (4 - total % 4)
+        s += struct.unpack('<I', tail)[0]
+        s = (s & 0xFFFF) + (s >> 16)
+    s = (s & 0xFFFF) + (s >> 16)
+    s = (s + total) & 0xFFFFFFFF
+    struct.pack_into('<I', data, csum_off, s)
+    with open(path, 'wb') as f:
+        f.write(bytes(data))
+
+
+def build_mingw_executable():
+    """正规 MinGW 交叉构建 (需要 pip install ziglang); 失败时返回 False 走回退路径"""
+    if not _have_zig():
+        print('[mingw] ziglang 不可用, 回退旧构建路径')
+        return False
+    print("=== Building via zig cc (MinGW-w64, standard PE with resources) ===")
+    tmp_dir = Path('/tmp/fla_pe_build')
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    # launcher.c / launcher.o 由旧路径的生成逻辑产出 (build_native_executable 前半段), 这里复用
+    c_file = generate_launcher_sources(tmp_dir)
+
+    import re as _re
+    _m = _re.search(r'VERSION\s*=\s*"(\d+\.\d+\.\d+)"', (BASE_DIR / 'FLA_Client.cs').read_text(encoding='utf-8-sig'))
+    if not _m:
+        raise RuntimeError('cannot parse VERSION from FLA_Client.cs')
+    CLIENT_VERSION = _m.group(1)
+    print('client version:', CLIENT_VERSION)
+    ver_parts = [int(x) for x in CLIENT_VERSION.split('.')] + [0, 0]
+    ico = tmp_dir / 'fla.ico'
+    _write_multisize_ico(str(ico))
+    man = tmp_dir / 'fla.manifest'
+    man.write_text(MANIFEST_XML.format(ver='.'.join(str(x) for x in ver_parts[:3])), encoding='utf-8')
+    rc = tmp_dir / 'launcher.rc'
+    rc.write_text(RC_TEMPLATE.format(v1=ver_parts[0], v2=ver_parts[1], v3=ver_parts[2],
+                                     ver='.'.join(str(x) for x in ver_parts[:3]),
+                                     ico=str(ico), manifest=str(man)), encoding='utf-8')
+
+    csblob_s = tmp_dir / 'csblob.s'
+    cs_client_path = (BASE_DIR / 'FLA_Client.cs').resolve()
+    csblob_s.write_text(
+        '.section .rodata\n.globl g_client_cs\ng_client_cs:\n'
+        '    .incbin "%s"\n1:\n.globl g_client_cs_len\ng_client_cs_len:\n'
+        '    .long 1b - g_client_cs\n' % cs_client_path, encoding='utf-8')
+
+    out_exe = tmp_dir / 'FLA_mingw.exe'
+    _zig('rc', str(rc), str(tmp_dir / 'launcher.res'))
+    _zig('cc', '-target', MINGW_TARGET, '-O2', '-fno-builtin', '-fno-ident',
+         '-c', str(c_file), '-o', str(tmp_dir / 'launcher.o'))
+    _zig('cc', '-target', MINGW_TARGET, '-c', str(csblob_s), '-o', str(tmp_dir / 'csblob.o'))
+    _zig('cc', '-target', MINGW_TARGET, '-nostdlib',
+         '-Wl,-e,entry_point', '-Wl,--subsystem,windows',
+         str(tmp_dir / 'launcher.o'), str(tmp_dir / 'csblob.o'), str(tmp_dir / 'launcher.res'),
+         '-lkernel32', '-luser32', '-lshell32', '-o', str(out_exe))
+
+    write_pe_checksum(str(out_exe))
+    final_pe = out_exe.read_bytes()
+    print(f"PE generated via mingw! Size: {len(final_pe)} bytes ({len(final_pe)/1024:.1f} KB)")
+
+    out_paths = [
+        BASE_DIR / "bin" / "FLA.exe",
+        REPO_ROOT / "web" / "downloads" / "FLA.exe",
+        BASE_DIR / "dist" / "FLA.exe"
+    ]
+    for p in out_paths:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(final_pe)
+        print(f"Saved: {p} ({p.stat().st_size} bytes)")
+    update_server_desktop_dist(final_pe)
+    return True
+
+
 def update_server_desktop_dist(final_pe):
     import base64
     b64_str = base64.b64encode(final_pe).decode('ascii')
@@ -437,4 +651,5 @@ def ensure_desktop_exe() -> Path:
     print(f"Updated server/desktop_dist.py ({target.stat().st_size} bytes)")
 
 if __name__ == "__main__":
-    build_native_executable()
+    if not build_mingw_executable():
+        build_native_executable()
