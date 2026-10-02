@@ -170,6 +170,21 @@ def qr_ticket(request: Request):
     return {"ticket": ticket, "expires_in": QR_TTL, "url": qr_url, "qr_svg": svg}
 
 
+@router.get("/qr/image")
+def qr_image(ticket: str, request: Request):
+    """二维码图片兜底: 浏览器端二维码库加载失败(老内核/被拦截)时用 <img> 直接显示"""
+    from fastapi.responses import Response
+    t = db.q1("SELECT ticket FROM qr_tickets WHERE ticket=?", ((ticket or "").strip(),))
+    if not t:
+        raise HTTPException(404, "invalid")
+    base = os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/") or str(request.base_url).rstrip("/")
+    origin = (request.query_params.get("o") or "").strip().rstrip("/")
+    if origin.startswith(("http://", "https://")) and len(origin) < 200:
+        base = origin
+    svg = generate_qr_svg(f"{base}/#/qr-approve?ticket={t['ticket']}")
+    return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
+
+
 @router.post("/qr/approve")
 def qr_approve(body: QrApproveIn, request: Request):
     u = require_user(request)

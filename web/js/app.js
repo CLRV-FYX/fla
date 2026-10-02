@@ -1406,6 +1406,11 @@ function viewLogin() {
         if (!holder.querySelector('svg,canvas,img,table') && r.qr_svg && r.qr_svg.trim().startsWith('<svg')) {
           holder.innerHTML = r.qr_svg;
         }
+        if (!holder.querySelector('svg,canvas,img,table')) {
+          /* 本地二维码库不可用(老内核/脚本被拦截) → 服务器出图 */
+          holder.innerHTML = '<img alt="二维码" width="190" height="190" style="width:190px;height:190px;display:block" src="/api/auth/qr/image?ticket=' +
+            encodeURIComponent(ticket) + '&o=' + encodeURIComponent(location.origin) + '">';
+        }
         const svg = holder.querySelector('svg');
         if (svg) { svg.setAttribute('width', '190'); svg.setAttribute('height', '190'); svg.style.width = '190px'; svg.style.height = '190px'; }
       } catch (e) {
