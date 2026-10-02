@@ -1444,8 +1444,9 @@ function viewLogin() {
     $('#lt-pw').classList.toggle('active', !qr);
     $('#lt-qr').classList.toggle('active', qr);
     const f = $('#f'), qb = $('#qrbox');
-    if (f) f.style.display = qr ? 'none' : 'block';
-    if (qb) qb.style.display = qr ? 'block' : 'none';
+    /* 注意: #qrbox 初始带 .hidden (display:none !important), 必须切换 class 而不是改 style */
+    if (f) { f.classList.toggle('hidden', qr); f.style.display = ''; }
+    if (qb) { qb.classList.toggle('hidden', !qr); qb.style.display = ''; }
     if (qr) startQrLogin(); else stopQrLogin();
   };
   if ($('#lt-pw')) $('#lt-pw').onclick = () => switchTab(false);
