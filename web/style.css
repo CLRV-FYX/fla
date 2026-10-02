@@ -240,7 +240,7 @@ b, strong { font-weight: 600; color: var(--ink); }
 /* ================================================================
  *  4. Form Inputs & Controls
  * ================================================================ */
-input[type="text"], input[type="password"], input[type="search"], select, textarea {
+input:not([type]), input[type="text"], input[type="email"], input[type="number"], input[type="tel"], input[type="password"], input[type="search"], select, textarea {
   width: 100%;
   padding: 9px 13px;
   border-radius: var(--radius-md);
