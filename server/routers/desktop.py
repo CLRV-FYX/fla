@@ -11,16 +11,14 @@ from server.desktop_dist import ensure_desktop_exe
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
 
-CURRENT_VERSION = "2.0.0"
+CURRENT_VERSION = "3.0.0"
 CHANGELOG = [
-    "v2.0 全原生重构：纯 Win32 单文件，零运行时依赖（无需 .NET、无需安装任何环境）",
-    "体积更小、启动更快，杀毒软件误报大幅降低",
-    "v2.0 悬浮工具盒：激光笔/画笔/荧光笔/橡皮，板书随 PPT 翻页自动保存与恢复",
-    "v2.0 课堂计时器/秒表、画笔调色盘、白板一键切换、Esc 快速退出批注",
-    "双击课件调用本机 PowerPoint / WPS 全屏放映，自动挂接悬浮工具盒",
-    "手机扫码投屏与双向实时遥控（激光笔坐标、翻页、黑板）",
-    "希沃白板5工具条智能拦截与自动保护",
-    "客户端内置版本自动检测与原地静默更新",
+    "v3.0 全新界面：采用 Fluent Design（qfluentwidgets），与 Windows 11 风格一致",
+    "首页状态卡片：服务器、网页联动、PowerPoint/WPS、账号一目了然",
+    "课件库支持搜索、右键放映，下载带进度条",
+    "放映工具盒重做：翻页、画笔、荧光笔、激光笔、橡皮、白板、黑屏、计时器，可收起",
+    "关闭窗口改为最小化到托盘，网页一键放映始终可用",
+    "出错自动记录 error.log 并提示，不再“双击没反应”",
 ]
 
 

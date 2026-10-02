@@ -2648,9 +2648,25 @@ def get_desktop_executable_bytes() -> bytes:
     return base64.b64decode(_EMBEDDED_FLA_EXE_B64)
 
 def ensure_desktop_exe() -> Path:
+    """返回可下载的 FLA.exe 路径. 正常情况直接用 desktop/bin/FLA.exe (不整读进内存, 新版约 30MB)."""
+    try:
+        if DIST_EXE_PATH.exists() and DIST_EXE_PATH.stat().st_size > 10000:
+            if not WEB_DOWNLOADS_PATH.exists() or WEB_DOWNLOADS_PATH.stat().st_size != DIST_EXE_PATH.stat().st_size:
+                try:
+                    import shutil
+                    WEB_DOWNLOADS_PATH.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(DIST_EXE_PATH, WEB_DOWNLOADS_PATH)
+                except Exception:
+                    pass
+            return DIST_EXE_PATH
+    except Exception:
+        pass
     data = get_desktop_executable_bytes()
     for target in [DIST_EXE_PATH, WEB_DOWNLOADS_PATH]:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if not target.exists() or target.stat().st_size != len(data):
-            target.write_bytes(data)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.exists() or target.stat().st_size != len(data):
+                target.write_bytes(data)
+        except Exception:
+            pass
     return DIST_EXE_PATH
