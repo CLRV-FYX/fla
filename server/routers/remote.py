@@ -21,6 +21,8 @@ router = APIRouter(prefix="/api/remote", tags=["remote"])
 # 内存会话管理
 SESSIONS: Dict[str, dict] = {}
 MAX_SESSION_AGE = 86400  # 24小时有效
+ALLOWED_BASES = {"https://t.clrv.top", "https://t.fyx.best"}
+MAX_FRAME = 3 * 1024 * 1024
 
 
 class CreateSessionReq(BaseModel):
@@ -91,7 +93,18 @@ def get_session_qr(sid: str, request: Request):
         from ..vendor import qrcode
 
     base_url = str(request.base_url).rstrip("/")
-    target_url = f"{base_url}/#/remote?sid={sid}&code={session['code']}"
+    try:
+        from .. import msview
+        base_url = msview.public_base(request).rstrip("/") or base_url
+    except Exception:
+        pass
+    want = (request.query_params.get("base") or "").rstrip("/")
+    if want in ALLOWED_BASES:
+        base_url = want
+    if request.query_params.get("kind") == "cast":
+        target_url = f"{base_url}/cast.html?sid={sid}&code={session['code']}"
+    else:
+        target_url = f"{base_url}/#/remote?sid={sid}&code={session['code']}"
     img = qrcode.make(target_url)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -175,22 +188,65 @@ def send_action(sid: str, req: ActionReq):
     return {"ok": True}
 
 
+# ---------------- 画面通道 (v3.0 桌面端): pc = 电脑屏幕→手机观看, phone = 手机摄像头→电脑大屏
+def _auth(sid: str, code: Optional[str]) -> dict:
+    session = SESSIONS.get(sid)
+    if not session:
+        raise HTTPException(404, "会话不存在或已过期")
+    if session.get("code") != (code or ""):
+        raise HTTPException(403, "配对码错误")
+    session["last_active"] = time.time()
+    return session
+
+
+@router.post("/{sid}/frame/{ch}")
+async def put_frame(sid: str, ch: str, request: Request, code: Optional[str] = Query(None)):
+    if ch not in ("pc", "phone"):
+        raise HTTPException(400, "通道无效")
+    session = _auth(sid, code)
+    body = await request.body()
+    if not body or len(body) > MAX_FRAME or not body.startswith(b"\xff\xd8"):
+        raise HTTPException(400, "需要 JPEG 图像 (≤3MB)")
+    frames = session.setdefault("frames", {})
+    seq = frames.get(ch, (0, b"", 0))[0] + 1
+    frames[ch] = (seq, body, time.time())
+    return {"ok": True, "seq": seq}
+
+
+@router.get("/{sid}/frame/{ch}")
+def get_frame(sid: str, ch: str, code: Optional[str] = Query(None), after: int = 0):
+    session = _auth(sid, code)
+    f = session.get("frames", {}).get(ch)
+    if not f or f[0] <= after:
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
+    return Response(content=f[1], media_type="image/jpeg",
+                    headers={"X-Seq": str(f[0]), "Cache-Control": "no-store", "Access-Control-Expose-Headers": "X-Seq"})
+
+
+@router.post("/{sid}/frame/{ch}/clear")
+def clear_frame(sid: str, ch: str, code: Optional[str] = Query(None)):
+    session = _auth(sid, code)
+    session.get("frames", {}).pop(ch, None)
+    return {"ok": True}
+
+
 @router.get("/{sid}/poll")
 def poll_events(sid: str, after: int = 0):
     session = SESSIONS.get(sid)
     if not session:
         raise HTTPException(404, "遥控会话不存在")
     evts = [e for e in session["events"] if e.get("idx", 0) > after]
-    return {"ok": True, "events": evts, "latest": len(session["events"])}
+    return {"ok": True, "events": evts, "latest": session.get("seq", 0)}
 
 
 def _broadcast_event(session: dict, evt: dict):
     # 加入 HTTP 轮询队列
-    idx = len(session["events"]) + 1
+    idx = session.get("seq", 0) + 1   # 单调递增 (旧实现裁剪队列后 idx 会重复, 轮询端卡死)
+    session["seq"] = idx
     evt["idx"] = idx
     session["events"].append(evt)
-    if len(session["events"]) > 50:
-        session["events"] = session["events"][-50:]
+    if len(session["events"]) > 300:
+        session["events"] = session["events"][-300:]
 
     # 向所有活跃 WebSocket 连接广播
     for ws in list(session.get("connections", [])):

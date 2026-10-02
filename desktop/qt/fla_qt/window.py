@@ -9,7 +9,7 @@ from PyQt5.QtCore import QObject, Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QHBoxLayout, QHeaderView, QSystemTrayIcon,
                              QTableWidgetItem, QVBoxLayout, QWidget)
 from qfluentwidgets import FluentIcon as FIF
-from qfluentwidgets import (Action, BodyLabel, CaptionLabel, CardWidget, FluentWindow, IconWidget, InfoBar,
+from qfluentwidgets import (Action, BodyLabel, ComboBox, CaptionLabel, CardWidget, FluentWindow, IconWidget, InfoBar,
                             InfoBarPosition, LineEdit, MessageBox, NavigationItemPosition, PasswordLineEdit,
                             PrimaryPushButton, ProgressBar, PushButton, RoundMenu, ScrollArea, SearchLineEdit,
                             StrongBodyLabel, SubtitleLabel, SwitchButton, TableWidget, TitleLabel)
@@ -112,7 +112,9 @@ class HomePage(Page):
         b2.clicked.connect(lambda: webbrowser.open(cfg.server))
         b3 = PushButton(FIF.STOP_WATCH, "计时器")
         b3.clicked.connect(win.stage.timer.popup)
-        for b in (b1, b2, b3):
+        b4 = PushButton(FIF.PHONE, "手机投屏 / 观看")
+        b4.clicked.connect(lambda: (win.stage.start(), win.stage.handle("phone")))
+        for b in (b1, b4, b2, b3):
             row.addWidget(b)
         row.addStretch(1)
         self.lay.addLayout(row)
@@ -241,16 +243,21 @@ class SettingsPage(Page):
             self.lay.addWidget(c)
             return v
 
-        v = card("服务器")
+        v = card("服务器线路")
         r = QHBoxLayout()
-        self.server = LineEdit()
-        self.server.setText(cfg.server)
-        self.server.setPlaceholderText("例如 https://t.clrv.top")
-        sb = PrimaryPushButton("保存")
-        sb.clicked.connect(self.save_server)
-        r.addWidget(self.server, 1)
-        r.addWidget(sb)
+        r.addWidget(BodyLabel("连接到"), 0)
+        self.server = ComboBox()
+        for url, label in core.SERVERS:
+            self.server.addItem(label, userData=url)
+        self.server.setCurrentIndex(core.ALLOWED.index(cfg.server))
+        self.server.currentIndexChanged.connect(self.save_server)
+        self.server.setMinimumWidth(260)
+        r.addWidget(self.server)
+        r.addStretch(1)
         v.addLayout(r)
+        tip = CaptionLabel("两条线路数据互通；某条线路慢或打不开时切换到另一条。")
+        tip.setTextColor("#666666", "#aaaaaa")
+        v.addWidget(tip)
 
         v = card("账号")
         self.acc_state = BodyLabel("")
@@ -304,14 +311,13 @@ class SettingsPage(Page):
             w.setVisible(not logged)
         self.logout_btn.setVisible(logged)
 
-    def save_server(self):
-        s = self.server.text().strip().rstrip("/")
-        if s and not s.startswith("http"):
-            s = "https://" + s
-        cfg.server = s or core.DEFAULT_SERVER
-        self.server.setText(cfg.server)
+    def save_server(self, *_):
+        url = self.server.currentData() or core.DEFAULT_SERVER
+        if url == cfg.server:
+            return
+        cfg.server = url
         cfg.save()
-        self.win.toast("已保存服务器地址")
+        self.win.toast(f"已切换到 {url.replace('https://', '')}")
         self.win.refresh_all()
 
     def login(self):
@@ -353,6 +359,9 @@ class MainWindow(FluentWindow):
         super().__init__()
         self.stage = stage
         self.bridge_ok = bridge_ok
+        from .cast import CastController
+        self.cast = CastController(stage)
+        stage.cast = self.cast
         self.setWindowTitle(core.APP_NAME)
         self.resize(940, 680)
         self.home = HomePage(self)
@@ -377,6 +386,7 @@ class MainWindow(FluentWindow):
         m.addAction(Action(FIF.HOME, "打开主窗口", triggered=self.bring_up))
         m.addAction(Action(FIF.EDIT, "放映工具盒", triggered=self.stage.start))
         m.addAction(Action(FIF.STOP_WATCH, "计时器", triggered=self.stage.timer.popup))
+        m.addAction(Action(FIF.MOVE, "退出批注（恢复鼠标）", triggered=lambda: self.stage.handle("mouse")))
         m.addSeparator()
         m.addAction(Action(FIF.CLOSE, "退出 FLA", triggered=self.quit_app))
         self.tray_menu = m
@@ -397,6 +407,8 @@ class MainWindow(FluentWindow):
             e.accept()
 
     def quit_app(self):
+        if self.cast.active:
+            self.cast.stop()
         self.tray.hide()
         QApplication.quit()
 

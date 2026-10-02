@@ -14,9 +14,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-VERSION = "3.0.0"
+VERSION = "3.1.0"
 APP_NAME = "FLA 课堂助手"
 DEFAULT_SERVER = "https://t.clrv.top"
+SERVERS = [("https://t.clrv.top", "t.clrv.top（主线路）"), ("https://t.fyx.best", "t.fyx.best（备用线路）")]
+ALLOWED = [u for u, _ in SERVERS]
 BRIDGE_PORT = 8307
 IS_WIN = sys.platform == "win32"
 
@@ -38,6 +40,7 @@ class Config:
         self.seewo = True
         self.dock_on_start = False
         self.load()
+        self._fix()
 
     def load(self):
         try:
@@ -67,7 +70,15 @@ class Config:
         except Exception:
             pass
 
+    def _fix(self):
+        s = (self.server or "").strip().rstrip("/").lower()
+        s = s.replace("http://", "https://")
+        if not s.startswith("https://"):
+            s = "https://" + s
+        self.server = s if s in ALLOWED else DEFAULT_SERVER
+
     def save(self):
+        self._fix()
         try:
             with open(self.path, "w", encoding="utf-8") as f:
                 json.dump({"server": self.server, "token": self.token, "user": self.user,

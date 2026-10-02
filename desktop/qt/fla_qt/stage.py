@@ -1,20 +1,25 @@
-"""放映舞台: 悬浮工具盒 / 全屏批注画布 / 调色盘 / 计时器"""
+"""放映舞台: 悬浮工具盒 / 全屏批注画布 / 笔与橡皮设置弹窗 / 计时器
+
+关键安全设计: 画布窗口用 setMask 把工具盒、弹窗、计时器所在区域"挖空",
+无论窗口叠放顺序如何, 这些区域的鼠标点击都穿透到下面的工具栏, 画笔不可能画到工具栏上。
+"""
 from __future__ import annotations
 
 import math
 import time
 
-from PyQt5.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PyQt5.QtCore import QPointF, QRect, QRectF, Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QRegion
 from PyQt5.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import FluentIcon as FIF
-from qfluentwidgets import (PrimaryPushButton, PushButton, SegmentedWidget, ToolTipFilter, ToolTipPosition,
-                            TransparentToggleToolButton, TransparentToolButton)
+from qfluentwidgets import (BodyLabel, PrimaryPushButton, PushButton, SegmentedWidget, ToolTipFilter,
+                            ToolTipPosition, TransparentToggleToolButton, TransparentToolButton)
 
 from . import core
 
-COLORS = ["#111111", "#E53935", "#1E88E5", "#43A047", "#FDD835", "#FB8C00", "#FFFFFF"]
-WIDTHS = [3, 6, 12]
+COLORS = ["#111111", "#E53935", "#1E88E5", "#43A047", "#FDD835", "#FB8C00", "#8E24AA", "#FFFFFF"]
+PEN_WIDTHS = [("细", 3), ("中", 6), ("粗", 12)]
+ERASER_SIZES = [("小", 12), ("中", 28), ("大", 60)]
 
 
 def _screen_rect():
@@ -22,25 +27,27 @@ def _screen_rect():
 
 
 class _Card(QWidget):
-    """白色圆角浮动卡片 (可拖动)"""
+    """白色圆角浮动卡片 (可拖动); 移动/显示/隐藏时发 changed 信号, 让画布重算挖空区域"""
+    changed = pyqtSignal()
 
-    def __init__(self, radius=14, parent=None):
+    def __init__(self, radius=14, parent=None, draggable=True):
         super().__init__(parent)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self._r = radius
         self._drag = None
+        self._draggable = draggable
 
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         rect = QRectF(self.rect()).adjusted(1, 1, -1, -1)
         p.setPen(QPen(QColor(0, 0, 0, 40), 1))
-        p.setBrush(QColor(255, 255, 255, 245))
+        p.setBrush(QColor(255, 255, 255, 248))
         p.drawRoundedRect(rect, self._r, self._r)
 
     def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton:
+        if self._draggable and e.button() == Qt.LeftButton:
             self._drag = e.globalPos() - self.frameGeometry().topLeft()
 
     def mouseMoveEvent(self, e):
@@ -50,56 +57,112 @@ class _Card(QWidget):
     def mouseReleaseEvent(self, e):
         self._drag = None
 
+    def moveEvent(self, e):
+        self.changed.emit()
+
+    def showEvent(self, e):
+        self.changed.emit()
+
+    def hideEvent(self, e):
+        self.changed.emit()
+
+    def resizeEvent(self, e):
+        self.changed.emit()
+
 
 # ================================================================== 画布
+def _densify(pts, step=3.0):
+    """在稀疏点之间插值, 保证像素橡皮切割精确"""
+    if len(pts) < 2:
+        return list(pts)
+    out = [pts[0]]
+    for b in pts[1:]:
+        a = out[-1]
+        d = math.hypot(b.x() - a.x(), b.y() - a.y())
+        n = int(d // step)
+        for i in range(1, n):
+            t = i / n
+            out.append(QPointF(a.x() + (b.x() - a.x()) * t, a.y() + (b.y() - a.y()) * t))
+        out.append(b)
+    return out
+
+
 class Overlay(QWidget):
+    tool_changed = pyqtSignal(str)
+    key_command = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.tool = "mouse"
         self.color = QColor(COLORS[1])
-        self.width_ = WIDTHS[0]
+        self.width_ = PEN_WIDTHS[0][1]
+        self.eraser_r = ERASER_SIZES[1][1]
+        self.eraser_mode = "object"     # object | pixel
         self.page = 1
         self.board = False
-        self.pages: dict = {}           # page -> [stroke]; 'board' 为白板页
+        self.pages: dict = {}
         self.cur = None
+        self.remote: dict = {}           # 手机端进行中的笔画 id -> stroke
         self.laser: list = []
+        self.cursor_pt = None
+        self.holes: list = []            # 需挖空的全局矩形 (工具栏等)
         self.laser_timer = QTimer(self, interval=30, timeout=self._laser_tick)
-        self.setCursor(Qt.CrossCursor)
+        self.setMouseTracking(True)
 
     # ---- 数据
     def strokes(self) -> list:
         return self.pages.setdefault("board" if self.board else self.page, [])
 
     def has_ink(self) -> bool:
-        return bool(self.strokes())
+        return bool(self.strokes()) or bool(self.laser)
 
-    # ---- 状态切换
+    # ---- 状态
     def set_tool(self, tool: str):
         self.tool = tool
-        self._sync_visibility()
+        self.setCursor(Qt.CrossCursor if tool in ("pen", "marker") else
+                       Qt.BlankCursor if tool == "eraser" else Qt.ArrowCursor)
+        self.sync()
 
     def set_board(self, on: bool):
         self.board = on
         if on and self.tool == "mouse":
             self.tool = "pen"
-        self._sync_visibility()
-        self.update()
+        self.sync()
 
     def set_page(self, page: int):
         self.page = max(1, page)
-        self.update()
+        self.sync()
 
-    def _sync_visibility(self):
-        self.setGeometry(_screen_rect())
+    def set_holes(self, rects):
+        self.holes = [QRect(r) for r in rects]
+        self._apply_mask()
+
+    def _apply_mask(self):
+        if not self.isVisible():
+            return
+        g = self.geometry()
+        region = QRegion(QRect(0, 0, g.width(), g.height()))
+        for r in self.holes:
+            region = region.subtracted(QRegion(r.translated(-g.x(), -g.y()).adjusted(-4, -4, 4, 4)))
+        self.setMask(region)
+
+    def sync(self):
+        """根据工具决定: 隐藏 / 显示并穿透 / 显示并接收输入"""
+        geo = _screen_rect()
+        if self.geometry() != geo:
+            self.setGeometry(geo)
         passthrough = self.tool == "mouse" and not self.board
         if passthrough and not self.has_ink():
-            self.hide()
+            if self.isVisible():
+                self.hide()
             return
-        self.setWindowFlag(Qt.WindowTransparentForInput, passthrough)
-        self.show()
+        want = bool(self.windowFlags() & Qt.WindowTransparentForInput)
+        if want != passthrough or not self.isVisible():
+            self.setWindowFlag(Qt.WindowTransparentForInput, passthrough)
+            self.show()
+        self._apply_mask()
         if not passthrough:
             self.raise_()
             self.activateWindow()
@@ -107,14 +170,29 @@ class Overlay(QWidget):
 
     def clear(self):
         self.strokes().clear()
-        self._sync_visibility()
+        self.sync()
 
     def undo(self):
         if self.strokes():
             self.strokes().pop()
-            self.update()
+            self.sync()
 
     # ---- 绘制
+    def paint_ink(self, p: QPainter, scale: float = 1.0):
+        """画全部笔迹 (也供投屏合成使用)"""
+        p.save()
+        p.scale(scale, scale)
+        for s in self.strokes() + ([self.cur] if self.cur else []):
+            self._draw_stroke(p, s)
+        now = time.time()
+        for (pt, t) in self.laser:
+            a = max(0.0, 1 - (now - t) / 0.5)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(255, 30, 30, int(210 * a)))
+            r = 4 + 6 * a
+            p.drawEllipse(QPointF(pt), r, r)
+        p.restore()
+
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
@@ -122,15 +200,11 @@ class Overlay(QWidget):
             p.fillRect(self.rect(), QColor("#FFFFFF"))
         elif self.tool != "mouse":
             p.fillRect(self.rect(), QColor(0, 0, 0, 1))   # 近乎透明但可接收鼠标
-        for s in self.strokes() + ([self.cur] if self.cur else []):
-            self._draw_stroke(p, s)
-        now = time.time()
-        for (pt, t) in self.laser:
-            a = max(0.0, 1 - (now - t) / 0.45)
-            p.setPen(Qt.NoPen)
-            p.setBrush(QColor(255, 30, 30, int(200 * a)))
-            r = 4 + 5 * a
-            p.drawEllipse(QPointF(pt), r, r)
+        self.paint_ink(p)
+        if self.tool == "eraser" and self.cursor_pt is not None:
+            p.setPen(QPen(QColor(80, 80, 80), 1.5, Qt.DashLine))
+            p.setBrush(QColor(255, 255, 255, 120))
+            p.drawEllipse(QPointF(self.cursor_pt), self.eraser_r, self.eraser_r)
 
     @staticmethod
     def _draw_stroke(p: QPainter, s: dict):
@@ -140,8 +214,7 @@ class Overlay(QWidget):
         c = QColor(s["color"])
         if s["tool"] == "marker":
             c.setAlpha(90)
-        pen = QPen(c, s["w"], Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        p.setPen(pen)
+        p.setPen(QPen(c, s["w"], Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         p.setBrush(Qt.NoBrush)
         if len(pts) == 1:
             p.drawPoint(pts[0])
@@ -153,62 +226,96 @@ class Overlay(QWidget):
         path.lineTo(QPointF(pts[-1]))
         p.drawPath(path)
 
-    # ---- 输入
+    # ---- 本地输入
     def mousePressEvent(self, e):
         if e.button() == Qt.RightButton:
             self.set_tool("mouse")
             self.tool_changed.emit("mouse")
             return
+        pos = QPointF(e.pos())
         if self.tool in ("pen", "marker"):
             w = self.width_ * (3 if self.tool == "marker" else 1)
-            self.cur = {"tool": self.tool, "color": self.color.name(), "w": w, "pts": [e.pos()]}
+            self.cur = {"tool": self.tool, "color": self.color.name(), "w": w, "pts": [pos]}
         elif self.tool == "eraser":
-            self._erase(e.pos())
+            self.erase(pos, self.eraser_r, self.eraser_mode)
         elif self.tool == "laser":
-            self._laser_add(e.pos())
+            self.laser_at(pos)
 
     def mouseMoveEvent(self, e):
-        if self.tool == "laser":
-            self._laser_add(e.pos())
-            return
-        if not (e.buttons() & Qt.LeftButton):
-            return
-        if self.cur is not None:
-            self.cur["pts"].append(e.pos())
+        pos = QPointF(e.pos())
+        if self.tool == "eraser":
+            self.cursor_pt = pos
+            if e.buttons() & Qt.LeftButton:
+                self.erase(pos, self.eraser_r, self.eraser_mode)
             self.update()
-        elif self.tool == "eraser":
-            self._erase(e.pos())
+            return
+        if self.tool == "laser":
+            self.laser_at(pos)
+            return
+        if self.cur is not None and e.buttons() & Qt.LeftButton:
+            self.cur["pts"].append(pos)
+            self.update()
 
     def mouseReleaseEvent(self, e):
         if self.cur is not None:
+            self.cur["pts"] = _densify(self.cur["pts"])
             self.strokes().append(self.cur)
             self.cur = None
             self.update()
 
-    def _erase(self, pos: QPoint, r: float = 22):
-        keep = [s for s in self.strokes()
-                if not any(math.hypot(pt.x() - pos.x(), pt.y() - pos.y()) < r + s["w"] / 2 for pt in s["pts"])]
-        if len(keep) != len(self.strokes()):
-            self.strokes()[:] = keep
+    def leaveEvent(self, e):
+        self.cursor_pt = None
+        self.update()
+
+    def erase(self, pos: QPointF, r: float, mode: str):
+        strokes = self.strokes()
+        changed = False
+        out = []
+        for s in strokes:
+            rr = r + s["w"] / 2
+            hit = [math.hypot(pt.x() - pos.x(), pt.y() - pos.y()) < rr for pt in s["pts"]]
+            if not any(hit):
+                out.append(s)
+                continue
+            changed = True
+            if mode == "object":
+                continue
+            run = []
+            for pt, h in zip(s["pts"], hit):     # 像素橡皮: 把笔画切成剩余片段
+                if h:
+                    if len(run) > 1:
+                        out.append({**s, "pts": run})
+                    run = []
+                else:
+                    run.append(pt)
+            if len(run) > 1:
+                out.append({**s, "pts": run})
+        if changed:
+            strokes[:] = out
             self.update()
 
-    def _laser_add(self, pos):
-        self.laser.append((QPoint(pos), time.time()))
+    def laser_at(self, pos):
+        self.laser.append((QPointF(pos), time.time()))
         if not self.laser_timer.isActive():
             self.laser_timer.start()
+        if not self.isVisible():
+            self.sync()
         self.update()
 
     def _laser_tick(self):
         now = time.time()
-        self.laser = [x for x in self.laser if now - x[1] < 0.45]
+        self.laser = [x for x in self.laser if now - x[1] < 0.5]
         if not self.laser:
             self.laser_timer.stop()
+            if self.tool == "mouse" and not self.board:
+                self.sync()
         self.update()
 
     def keyPressEvent(self, e):
         k = e.key()
         if k == Qt.Key_Escape:
-            self.set_board(False) if self.board else None
+            if self.board:
+                self.board = False
             self.set_tool("mouse")
             self.tool_changed.emit("mouse")
         elif k == Qt.Key_Z and e.modifiers() & Qt.ControlModifier:
@@ -218,43 +325,105 @@ class Overlay(QWidget):
         elif k in (Qt.Key_Left, Qt.Key_Up, Qt.Key_PageUp, Qt.Key_Backspace):
             self.key_command.emit("prev")
 
-    tool_changed = pyqtSignal(str)
-    key_command = pyqtSignal(str)
+    # ---- 手机端批注 (坐标为 0~1 归一化)
+    def _np(self, xy):
+        g = self.geometry() if self.isVisible() else _screen_rect()
+        return QPointF(float(xy[0]) * g.width(), float(xy[1]) * g.height())
+
+    def remote_ink(self, d: dict):
+        sid = str(d.get("id") or "")
+        pts = [self._np(p) for p in (d.get("pts") or []) if isinstance(p, (list, tuple)) and len(p) == 2]
+        g = _screen_rect()
+        s = self.remote.get(sid)
+        if s is None:
+            tool = "marker" if d.get("tool") == "marker" else "pen"
+            w = max(1.0, float(d.get("w") or 0.004) * g.width())
+            s = {"tool": tool, "color": str(d.get("color") or "#E53935")[:9], "w": w, "pts": []}
+            self.remote[sid] = s
+            self.strokes().append(s)
+        s["pts"].extend(pts)
+        if d.get("end"):
+            s["pts"] = _densify(s["pts"])
+            self.remote.pop(sid, None)
+            if len(self.remote) > 50:
+                self.remote.clear()
+        self.sync()
+
+    def remote_erase(self, d: dict):
+        g = _screen_rect()
+        r = max(4.0, float(d.get("r") or 0.02) * g.width())
+        self.erase(self._np((d.get("x", 0), d.get("y", 0))), r, "pixel" if d.get("mode") == "pixel" else "object")
+        self.sync()
+
+    def remote_laser(self, d: dict):
+        self.laser_at(self._np((d.get("x", 0), d.get("y", 0))))
 
 
-# ================================================================== 调色盘
-class Palette(_Card):
-    picked = pyqtSignal()
-
+# ================================================================== 笔 / 橡皮 设置弹窗
+class PenPopup(_Card):
     def __init__(self, overlay: Overlay):
-        super().__init__(12)
+        super().__init__(12, draggable=False)
         self.ov = overlay
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 10, 12, 10)
+        lay.setContentsMargins(14, 12, 14, 12)
+        lay.setSpacing(10)
+        lay.addWidget(BodyLabel("颜色"))
         row = QHBoxLayout()
-        row.setSpacing(6)
+        row.setSpacing(8)
+        self.swatches = []
         for c in COLORS:
             b = QFrame()
-            b.setFixedSize(26, 26)
+            b.setFixedSize(28, 28)
             b.setCursor(Qt.PointingHandCursor)
-            b.setStyleSheet(f"background:{c};border:1px solid #bbb;border-radius:13px;")
             b.mousePressEvent = (lambda _e, c=c: self._color(c))
+            self.swatches.append((c, b))
             row.addWidget(b)
         lay.addLayout(row)
+        lay.addWidget(BodyLabel("粗细"))
         self.seg = SegmentedWidget(self)
-        for i, (w, label) in enumerate(zip(WIDTHS, ["细", "中", "粗"])):
-            self.seg.addItem(str(w), label, onClick=lambda w=w: self._width(w))
-        self.seg.setCurrentItem(str(WIDTHS[0]))
+        for label, w in PEN_WIDTHS:
+            self.seg.addItem(str(w), label, onClick=lambda w=w: setattr(self.ov, "width_", w))
+        self.seg.setCurrentItem(str(self.ov.width_))
         lay.addWidget(self.seg)
+        self._paint_swatches()
         self.adjustSize()
+
+    def _paint_swatches(self):
+        cur = self.ov.color.name().lower()
+        for c, b in self.swatches:
+            ring = "3px solid #111" if c.lower() == cur else "1px solid #bbb"
+            if c.lower() == cur and c.lower() == "#111111":
+                ring = "3px solid #1E88E5"
+            b.setStyleSheet(f"background:{c};border:{ring};border-radius:14px;")
 
     def _color(self, c):
         self.ov.color = QColor(c)
-        self.picked.emit()
-        self.hide()
+        self._paint_swatches()
 
-    def _width(self, w):
-        self.ov.width_ = w
+
+class EraserPopup(_Card):
+    def __init__(self, overlay: Overlay):
+        super().__init__(12, draggable=False)
+        self.ov = overlay
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(14, 12, 14, 12)
+        lay.setSpacing(10)
+        lay.addWidget(BodyLabel("橡皮类型"))
+        self.mode = SegmentedWidget(self)
+        self.mode.addItem("object", "对象橡皮（整笔擦除）", onClick=lambda: setattr(self.ov, "eraser_mode", "object"))
+        self.mode.addItem("pixel", "像素橡皮（擦到哪算哪）", onClick=lambda: setattr(self.ov, "eraser_mode", "pixel"))
+        self.mode.setCurrentItem(self.ov.eraser_mode)
+        lay.addWidget(self.mode)
+        lay.addWidget(BodyLabel("大小"))
+        self.size = SegmentedWidget(self)
+        for label, r in ERASER_SIZES:
+            self.size.addItem(str(r), label, onClick=lambda r=r: setattr(self.ov, "eraser_r", r))
+        self.size.setCurrentItem(str(self.ov.eraser_r))
+        lay.addWidget(self.size)
+        clr = PushButton(FIF.DELETE, "清除本页全部笔迹")
+        clr.clicked.connect(lambda: (self.ov.clear(), self.hide()))
+        lay.addWidget(clr)
+        self.adjustSize()
 
 
 # ================================================================== 计时器
@@ -285,12 +454,12 @@ class TimerWindow(_Card):
         self.label.setFont(f)
         self.label.setAlignment(Qt.AlignCenter)
         lay.addWidget(self.label)
-        self.presets = QHBoxLayout()
+        presets = QHBoxLayout()
         for m in (1, 3, 5, 10, 20):
             b = PushButton(f"{m} 分")
             b.clicked.connect(lambda _=False, m=m: self._preset(m * 60))
-            self.presets.addWidget(b)
-        lay.addLayout(self.presets)
+            presets.addWidget(b)
+        lay.addLayout(presets)
         acts = QHBoxLayout()
         self.go = PrimaryPushButton(FIF.PLAY, "开始")
         self.go.clicked.connect(self.toggle)
@@ -360,6 +529,7 @@ class Dock(_Card):
         self.bar.setContentsMargins(10, 6, 10, 6)
         self.bar.setSpacing(2)
         self.tools = {}
+        self.btns = {}
         self.page_label = QLabel("1")
         self.page_label.setMinimumWidth(28)
         self.page_label.setAlignment(Qt.AlignCenter)
@@ -371,6 +541,7 @@ class Dock(_Card):
             b.installEventFilter(ToolTipFilter(b, 300, ToolTipPosition.TOP))
             b.clicked.connect(lambda _=False: self.command.emit(cmd))
             self.bar.addWidget(b)
+            self.btns[cmd] = b
             return b
 
         def sep():
@@ -385,16 +556,19 @@ class Dock(_Card):
         self.bar.addWidget(self.page_label)
         btn(FIF.RIGHT_ARROW, "下一页", "next")
         sep()
-        for icon, tip, key in [(FIF.MOVE, "鼠标 (穿透操作)", "mouse"), (FIF.PENCIL_INK, "画笔", "pen"),
-                               (FIF.HIGHTLIGHT, "荧光笔", "marker"), (FIF.CLEAR_SELECTION, "激光笔", "laser"),
-                               (FIF.ERASE_TOOL, "橡皮擦", "eraser")]:
+        for icon, tip, key in [(FIF.MOVE, "鼠标（退出批注，可操作电脑）", "mouse"),
+                               (FIF.PENCIL_INK, "画笔（再点一次：颜色/粗细）", "pen"),
+                               (FIF.HIGHTLIGHT, "荧光笔（再点一次：颜色/粗细）", "marker"),
+                               (FIF.CLEAR_SELECTION, "激光笔", "laser"),
+                               (FIF.ERASE_TOOL, "橡皮（再点一次：大小/类型）", "eraser")]:
             self.tools[key] = btn(icon, tip, key, toggle=True)
-        btn(FIF.PALETTE, "颜色与粗细", "palette")
+        btn(FIF.RETURN, "撤销 (Ctrl+Z)", "undo")
         btn(FIF.DELETE, "清除本页笔迹", "clear")
         sep()
         self.board_btn = btn(FIF.QUICK_NOTE, "白板", "board", toggle=True)
         btn(FIF.BRIGHTNESS, "黑屏 / 恢复", "black")
         btn(FIF.STOP_WATCH, "计时器", "timer")
+        self.phone_btn = btn(FIF.PHONE, "手机投屏 / 观看", "phone", toggle=True)
         sep()
         btn(FIF.HOME, "打开主窗口", "main")
         btn(FIF.MINIMIZE, "收起工具盒", "collapse")
@@ -425,7 +599,8 @@ class Dock(_Card):
     def popup(self):
         r = _screen_rect()
         self.adjustSize()
-        self.move(r.center().x() - self.width() // 2, r.bottom() - self.height() - 56)
+        if not self.isVisible():
+            self.move(r.center().x() - self.width() // 2, r.bottom() - self.height() - 56)
         self.mini.hide()
         self.show()
         self.raise_()
@@ -453,65 +628,118 @@ class Stage:
         self.show_main = show_main
         self.ov = Overlay()
         self.dock = Dock()
-        self.palette = Palette(self.ov)
+        self.pen_pop = PenPopup(self.ov)
+        self.eraser_pop = EraserPopup(self.ov)
         self.timer = TimerWindow()
+        self.cast = None                       # 由 window 注入 CastController
+        self.floating = [self.dock, self.dock.mini, self.pen_pop, self.eraser_pop, self.timer]
+        for w in self.floating:
+            w.changed.connect(self.refresh_holes)
         self.dock.command.connect(self.handle)
-        self.ov.tool_changed.connect(self.dock.set_tool)
+        self.ov.tool_changed.connect(self._tool_changed)
         self.ov.key_command.connect(self.handle)
-        self.palette.picked.connect(lambda: self.handle("pen") if self.ov.tool not in ("pen", "marker") else None)
+        # 兜底: 定时把工具栏顶到最上层 + 重算挖空 (防止任何情况下被画布盖住)
+        self.guard = QTimer(interval=800, timeout=self._guard)
+        self.guard.start()
+
+    def add_floating(self, w):
+        if w not in self.floating:
+            self.floating.append(w)
+            if hasattr(w, "changed"):
+                w.changed.connect(self.refresh_holes)
+        self.refresh_holes()
+
+    def refresh_holes(self):
+        self.ov.set_holes([w.frameGeometry() for w in self.floating if w.isVisible()])
+
+    def _guard(self):
+        if self.ov.isVisible():
+            self.refresh_holes()
+            for w in self.floating:
+                if w.isVisible():
+                    w.raise_()
+
+    def _tool_changed(self, t):
+        self.dock.set_tool(t)
+        self.dock.set_board(self.ov.board)
+        self.pen_pop.hide()
+        self.eraser_pop.hide()
 
     def start(self):
-        self.ov.page = 1
-        self.dock.set_page(1)
+        self.dock.set_page(self.ov.page)
         self.dock.popup()
+        self.refresh_holes()
+
+    def _popup_above(self, pop, cmd):
+        pop.adjustSize()
+        b = self.dock.btns[cmd]
+        c = b.mapToGlobal(b.rect().center())
+        g = self.dock.frameGeometry()
+        x = max(_screen_rect().left() + 8, c.x() - pop.width() // 2)
+        y = g.top() - pop.height() - 10
+        if y < _screen_rect().top():
+            y = g.bottom() + 10
+        pop.move(x, y)
+        pop.show()
+        pop.raise_()
 
     def handle(self, cmd: str):
         ov = self.ov
         if cmd in ("next", "prev", "first", "last"):
             if ov.board:
                 return
-            if ov.tool != "mouse":
-                ov.hide()  # 让按键送到放映窗口
             core.focus_slideshow()
             core.send_key(cmd)
             page = {"next": ov.page + 1, "prev": ov.page - 1, "first": 1}.get(cmd, ov.page)
             ov.set_page(page)
             self.dock.set_page(ov.page)
-            QTimer.singleShot(120, ov._sync_visibility)
         elif cmd in ("mouse", "pen", "marker", "laser", "eraser"):
+            pop = {"pen": self.pen_pop, "marker": self.pen_pop, "eraser": self.eraser_pop}.get(cmd)
+            again = ov.tool == cmd
             ov.set_tool(cmd)
             self.dock.set_tool(cmd)
-            self.dock.raise_()
-        elif cmd == "palette":
-            self.palette.adjustSize()
-            g = self.dock.geometry()
-            self.palette.move(g.center().x() - self.palette.width() // 2, g.top() - self.palette.height() - 8)
-            self.palette.setVisible(not self.palette.isVisible())
-            self.palette.raise_()
+            for p in (self.pen_pop, self.eraser_pop):
+                if p is not pop:
+                    p.hide()
+            if pop is not None:
+                if again and pop.isVisible():
+                    pop.hide()
+                elif again or not pop.isVisible():
+                    self._popup_above(pop, cmd)
+        elif cmd == "undo":
+            ov.undo()
         elif cmd == "clear":
             ov.clear()
         elif cmd == "board":
             ov.set_board(not ov.board)
             self.dock.set_board(ov.board)
             self.dock.set_tool(ov.tool)
-            self.dock.raise_()
         elif cmd in ("black", "white"):
             core.focus_slideshow()
             core.send_key(cmd)
         elif cmd == "timer":
             self.timer.hide() if self.timer.isVisible() else self.timer.popup()
+        elif cmd == "phone":
+            if self.cast:
+                self.cast.toggle_panel()
+            self.dock.phone_btn.setChecked(bool(self.cast and self.cast.active))
         elif cmd == "main":
+            self.handle("mouse")
             self.show_main()
         elif cmd == "collapse":
-            self.palette.hide()
+            self.pen_pop.hide()
+            self.eraser_pop.hide()
             self.dock.collapse()
-        elif cmd in ("dock_toggle",):
+        elif cmd == "dock_toggle":
             self.dock.collapse() if self.dock.isVisible() else self.dock.popup()
         elif cmd == "end":
-            ov.set_board(False)
+            ov.board = False
             ov.set_tool("mouse")
             ov.hide()
-            self.palette.hide()
+            self.pen_pop.hide()
+            self.eraser_pop.hide()
             self.dock.close_all()
-        if self.dock.isVisible():
-            self.dock.raise_()
+        self.refresh_holes()
+        for w in self.floating:
+            if w.isVisible():
+                w.raise_()
