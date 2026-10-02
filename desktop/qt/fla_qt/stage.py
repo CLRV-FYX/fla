@@ -5,11 +5,13 @@
 """
 from __future__ import annotations
 
+import json
 import math
+import os
 import time
 
 from PyQt5.QtCore import QPointF, QRect, QRectF, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QRegion
+from PyQt5.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRegion
 from PyQt5.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import FluentIcon as FIF
 from qfluentwidgets import (BodyLabel, PrimaryPushButton, PushButton, SegmentedWidget, ToolTipFilter,
@@ -32,8 +34,9 @@ class _Card(QWidget):
 
     def __init__(self, radius=14, parent=None, draggable=True):
         super().__init__(parent)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
         self._r = radius
         self._drag = None
         self._draggable = draggable
@@ -68,6 +71,72 @@ class _Card(QWidget):
 
     def resizeEvent(self, e):
         self.changed.emit()
+
+
+# ================================================================== 笔迹落盘
+def _ink_dir():
+    d = os.path.join(core.data_dir(), "ink")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def save_ink(name: str, pages: dict):
+    data = {}
+    for k, strokes in pages.items():
+        if strokes:
+            data[str(k)] = [{**{kk: v for kk, v in st.items() if kk != "pts"},
+                             "pts": [[round(p.x(), 1), round(p.y(), 1)] for p in st["pts"]]} for st in strokes]
+    try:
+        with open(os.path.join(_ink_dir(), name + ".json"), "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
+
+def load_ink(name: str) -> dict:
+    try:
+        with open(os.path.join(_ink_dir(), name + ".json"), encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return {}
+    out = {}
+    for k, strokes in data.items():
+        key = int(k) if k.isdigit() else k
+        out[key] = [{**st, "pts": [QPointF(x, y) for x, y in st.get("pts", [])]} for st in strokes]
+    return out
+
+
+def _icon(kind: str) -> QIcon:
+    pm = QPixmap(48, 48)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    if kind == "cursor":
+        p.setPen(QPen(QColor("#111111"), 3, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.setBrush(QColor("#ffffff"))
+        p.drawPolygon(QPolygonF([QPointF(14, 8), QPointF(14, 38), QPointF(22, 31), QPointF(28, 42),
+                                 QPointF(33, 40), QPointF(27, 29), QPointF(37, 29)]))
+    p.end()
+    return QIcon(pm)
+
+
+class Grip(QLabel):
+    """拖动把手: 按住拖动整个工具栏"""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setFixedSize(22, 40)
+        self.setCursor(Qt.SizeAllCursor)
+        self.setToolTip("按住拖动工具栏")
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor("#9e9e9e"))
+        for row in range(3):
+            for col in range(2):
+                p.drawEllipse(QPointF(7 + col * 8, 12 + row * 8), 2.2, 2.2)
 
 
 # ================================================================== 画布
@@ -108,6 +177,7 @@ class Overlay(QWidget):
         self.laser: list = []
         self.cursor_pt = None
         self.holes: list = []            # 需挖空的全局矩形 (工具栏等)
+        self.area = None                 # PPT 模式: 放映窗口区域 (逻辑坐标), None = 主屏
         self.laser_timer = QTimer(self, interval=30, timeout=self._laser_tick)
         self.setMouseTracking(True)
 
@@ -150,7 +220,7 @@ class Overlay(QWidget):
 
     def sync(self):
         """根据工具决定: 隐藏 / 显示并穿透 / 显示并接收输入"""
-        geo = _screen_rect()
+        geo = self.area or _screen_rect()
         if self.geometry() != geo:
             self.setGeometry(geo)
         passthrough = self.tool == "mouse" and not self.board
@@ -523,15 +593,16 @@ class TimerWindow(_Card):
 class Dock(_Card):
     command = pyqtSignal(str)
 
-    def __init__(self):
+    def __init__(self, ppt=False):
         super().__init__(14)
+        self.ppt = ppt
         self.bar = QHBoxLayout(self)
         self.bar.setContentsMargins(10, 6, 10, 6)
         self.bar.setSpacing(2)
         self.tools = {}
         self.btns = {}
         self.page_label = QLabel("1")
-        self.page_label.setMinimumWidth(28)
+        self.page_label.setMinimumWidth(44 if ppt else 28)
         self.page_label.setAlignment(Qt.AlignCenter)
 
         def btn(icon, tip, cmd, toggle=False):
@@ -552,11 +623,17 @@ class Dock(_Card):
             self.bar.addWidget(f)
             self.bar.addSpacing(4)
 
-        btn(FIF.LEFT_ARROW, "上一页", "prev")
+        self.bar.addWidget(Grip(self))
+        if ppt:
+            tag = QLabel("PPT")
+            tag.setStyleSheet("background:#111;color:#fff;border-radius:4px;padding:1px 5px;font-size:11px;font-weight:600;")
+            self.bar.addWidget(tag)
+            self.bar.addSpacing(4)
+        btn(FIF.LEFT_ARROW, "上一步（含动画）" if ppt else "上一页", "prev")
         self.bar.addWidget(self.page_label)
-        btn(FIF.RIGHT_ARROW, "下一页", "next")
+        btn(FIF.RIGHT_ARROW, "下一步（含动画）" if ppt else "下一页", "next")
         sep()
-        for icon, tip, key in [(FIF.MOVE, "鼠标（退出批注，可操作电脑）", "mouse"),
+        for icon, tip, key in [(_icon("cursor"), "鼠标（退出批注，可点击 PPT/电脑）", "mouse"),
                                (FIF.PENCIL_INK, "画笔（再点一次：颜色/粗细）", "pen"),
                                (FIF.HIGHTLIGHT, "荧光笔（再点一次：颜色/粗细）", "marker"),
                                (FIF.CLEAR_SELECTION, "激光笔", "laser"),
@@ -572,7 +649,11 @@ class Dock(_Card):
         sep()
         btn(FIF.HOME, "打开主窗口", "main")
         btn(FIF.MINIMIZE, "收起工具盒", "collapse")
-        btn(FIF.CLOSE, "结束放映工具", "end")
+        if ppt:
+            btn(FIF.CLOSE, "结束 PPT 放映", "ppt_exit")
+        else:
+            btn(FIF.CLOSE, "结束放映工具", "end")
+        self.page_label.setVisible(ppt)
         self.set_tool("mouse")
         self.adjustSize()
 
@@ -623,25 +704,56 @@ class Dock(_Card):
 
 
 # ================================================================== 舞台控制器
+def _native_to_logical(rect):
+    """Windows 物理像素矩形 → Qt 逻辑坐标 (高 DPI 缩放)"""
+    from PyQt5.QtCore import QRect as _R
+    l, t, w, h = rect
+    cx, cy = l + w / 2, t + h / 2
+    for scr in QApplication.screens():
+        g, dpr = scr.geometry(), scr.devicePixelRatio()
+        if g.x() <= cx < g.x() + g.width() * dpr and g.y() <= cy < g.y() + g.height() * dpr:
+            return _R(int(g.x() + (l - g.x()) / dpr), int(g.y() + (t - g.y()) / dpr), int(w / dpr), int(h / dpr))
+    return _R(l, t, w, h)
+
+
 class Stage:
     def __init__(self, show_main):
         self.show_main = show_main
         self.ov = Overlay()
-        self.dock = Dock()
+        self.desk_dock = Dock()
+        self.ppt_dock = Dock(ppt=True)
+        self.dock = self.desk_dock
         self.pen_pop = PenPopup(self.ov)
         self.eraser_pop = EraserPopup(self.ov)
         self.timer = TimerWindow()
         self.cast = None                       # 由 window 注入 CastController
-        self.floating = [self.dock, self.dock.mini, self.pen_pop, self.eraser_pop, self.timer]
+        self.mode = "desktop"                  # desktop | ppt
+        self.ppt = {}
+        self.ppt_key = ""
+        self.desk_dock_was_visible = False
+        self.floating = [self.desk_dock, self.desk_dock.mini, self.ppt_dock, self.ppt_dock.mini,
+                         self.pen_pop, self.eraser_pop, self.timer]
         for w in self.floating:
             w.changed.connect(self.refresh_holes)
-        self.dock.command.connect(self.handle)
+        for d in (self.desk_dock, self.ppt_dock):
+            d.command.connect(self.handle)
         self.ov.tool_changed.connect(self._tool_changed)
         self.ov.key_command.connect(self.handle)
+        self.ov.pages = load_ink("desktop")
         # 兜底: 定时把工具栏顶到最上层 + 重算挖空 (防止任何情况下被画布盖住)
         self.guard = QTimer(interval=800, timeout=self._guard)
         self.guard.start()
+        # 记录最近的外部前台窗口 (桌面模式翻页要把按键送给它)
+        self.last_fg = 0
+        self.fg_timer = QTimer(interval=300, timeout=self._track_fg)
+        self.fg_timer.start()
+        # PPT 联动
+        from .ppt import PPTWatcher
+        self.watcher = PPTWatcher()
+        self.watcher.state.connect(self._on_ppt)
+        self.watcher.start()
 
+    # ---- 通用
     def add_floating(self, w):
         if w not in self.floating:
             self.floating.append(w)
@@ -659,6 +771,36 @@ class Stage:
                 if w.isVisible():
                     w.raise_()
 
+    def _track_fg(self):
+        if not core.IS_WIN:
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+            u = ctypes.windll.user32
+            h = u.GetForegroundWindow()
+            pid = wintypes.DWORD()
+            u.GetWindowThreadProcessId(h, ctypes.byref(pid))
+            if h and pid.value != os.getpid():
+                self.last_fg = h
+        except Exception:
+            pass
+
+    def _send_desktop_key(self, cmd):
+        """未开 PPT: 把翻页键送给最近使用的外部窗口 (PDF/网页/图片查看器等)"""
+        if not core.IS_WIN:
+            return
+        try:
+            import ctypes
+            u = ctypes.windll.user32
+            if self.last_fg and u.IsWindow(self.last_fg):
+                u.SetForegroundWindow(self.last_fg)
+        except Exception:
+            pass
+        core.send_key(cmd)
+        if self.ov.tool != "mouse" or self.ov.board:
+            QTimer.singleShot(150, self.ov.sync)
+
     def _tool_changed(self, t):
         self.dock.set_tool(t)
         self.dock.set_board(self.ov.board)
@@ -666,18 +808,99 @@ class Stage:
         self.eraser_pop.hide()
 
     def start(self):
-        self.dock.set_page(self.ov.page)
         self.dock.popup()
         self.refresh_holes()
+
+    # ---- PPT 联动
+    def _on_ppt(self, info: dict):
+        if info.get("active"):
+            if self.mode != "ppt":
+                self._enter_ppt(info)
+            elif self.ppt.get("path") != info.get("path"):
+                self._leave_ppt()
+                self._enter_ppt(info)
+            self._ppt_update(info)
+        elif self.mode == "ppt":
+            self._leave_ppt()
+
+    def _ppt_name(self, path):
+        import hashlib
+        return "ppt_" + hashlib.md5((path or "").lower().encode("utf-8", "ignore")).hexdigest()[:16]
+
+    def _enter_ppt(self, info):
+        # 1. 桌面画布落盘并收起桌面工具栏
+        save_ink("desktop", self.ov.pages)
+        self.desk_dock_was_visible = self.desk_dock.isVisible() or self.desk_dock.mini.isVisible()
+        self.desk_dock.close_all()
+        self.pen_pop.hide()
+        self.eraser_pop.hide()
+        # 2. 载入本课件以前的批注 (按页)
+        self.mode = "ppt"
+        self.ppt = dict(info)
+        self.ppt_key = self._ppt_name(info.get("path"))
+        self.ov.board = False
+        self.ov.pages = load_ink(self.ppt_key)
+        self.ov.page = int(info.get("page") or 1)
+        self.ov.tool = "mouse"
+        self.ov.set_tool("mouse")
+        # 3. 打开与 PPT 同步的工具栏
+        self.dock = self.ppt_dock
+        self.dock.set_tool("mouse")
+        self.dock.set_board(False)
+        self.dock.popup()
+        self.refresh_holes()
+
+    def _ppt_update(self, info):
+        self.ppt = dict(info)
+        rect = info.get("rect")
+        self.ov.area = _native_to_logical(rect) if rect else None
+        page, total = int(info.get("page") or 1), int(info.get("total") or 0)
+        self.ppt_dock.set_page(f"{page}/{total}" if total else page)
+        if page != self.ov.page:
+            save_ink(self.ppt_key, self.ov.pages)
+            self.ov.cur = None
+        self.ov.set_page(page)       # 画布随 PPT 页码切换 (无论从哪里翻页)
+        if self.ov.area is not None:
+            a = self.ov.area
+            d = self.ppt_dock
+            if not a.contains(d.frameGeometry().center()):
+                d.move(a.center().x() - d.width() // 2, a.bottom() - d.height() - 40)
+
+    def _leave_ppt(self):
+        save_ink(self.ppt_key, self.ov.pages)
+        self.mode = "desktop"
+        self.ppt_dock.close_all()
+        self.pen_pop.hide()
+        self.eraser_pop.hide()
+        self.ov.area = None
+        self.ov.board = False
+        self.ov.pages = load_ink("desktop")
+        self.ov.page = 1
+        self.ov.set_tool("mouse")
+        self.dock = self.desk_dock
+        self.dock.set_tool("mouse")
+        if self.desk_dock_was_visible:
+            self.dock.popup()
+        self.refresh_holes()
+
+    def shutdown(self):
+        try:
+            save_ink(self.ppt_key if self.mode == "ppt" else "desktop", self.ov.pages)
+            self.watcher.stop()
+            self.watcher.wait(1500)
+        except Exception:
+            pass
 
     def _popup_above(self, pop, cmd):
         pop.adjustSize()
         b = self.dock.btns[cmd]
         c = b.mapToGlobal(b.rect().center())
         g = self.dock.frameGeometry()
-        x = max(_screen_rect().left() + 8, c.x() - pop.width() // 2)
+        scr = QApplication.screenAt(c) or QApplication.primaryScreen()
+        sr = scr.geometry()
+        x = min(max(sr.left() + 8, c.x() - pop.width() // 2), sr.right() - pop.width() - 8)
         y = g.top() - pop.height() - 10
-        if y < _screen_rect().top():
+        if y < sr.top():
             y = g.bottom() + 10
         pop.move(x, y)
         pop.show()
@@ -688,11 +911,10 @@ class Stage:
         if cmd in ("next", "prev", "first", "last"):
             if ov.board:
                 return
-            core.focus_slideshow()
-            core.send_key(cmd)
-            page = {"next": ov.page + 1, "prev": ov.page - 1, "first": 1}.get(cmd, ov.page)
-            ov.set_page(page)
-            self.dock.set_page(ov.page)
+            if self.mode == "ppt":
+                self.watcher.command(cmd)          # COM: 与点击 PPT 一致, 逐步播放动画
+            else:
+                self._send_desktop_key(cmd)
         elif cmd in ("mouse", "pen", "marker", "laser", "eraser"):
             pop = {"pen": self.pen_pop, "marker": self.pen_pop, "eraser": self.eraser_pop}.get(cmd)
             again = ov.tool == cmd
@@ -715,14 +937,19 @@ class Stage:
             self.dock.set_board(ov.board)
             self.dock.set_tool(ov.tool)
         elif cmd in ("black", "white"):
-            core.focus_slideshow()
-            core.send_key(cmd)
+            if self.mode == "ppt":
+                self.watcher.command(cmd)
+            else:
+                core.send_key(cmd)
+        elif cmd == "ppt_exit":
+            self.watcher.command("exit")
         elif cmd == "timer":
             self.timer.hide() if self.timer.isVisible() else self.timer.popup()
         elif cmd == "phone":
             if self.cast:
                 self.cast.toggle_panel()
-            self.dock.phone_btn.setChecked(bool(self.cast and self.cast.active))
+            for d in (self.desk_dock, self.ppt_dock):
+                d.phone_btn.setChecked(bool(self.cast and self.cast.active))
         elif cmd == "main":
             self.handle("mouse")
             self.show_main()
@@ -735,6 +962,7 @@ class Stage:
         elif cmd == "end":
             ov.board = False
             ov.set_tool("mouse")
+            save_ink("desktop", ov.pages)
             ov.hide()
             self.pen_pop.hide()
             self.eraser_pop.hide()

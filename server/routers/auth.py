@@ -166,7 +166,7 @@ def qr_ticket(request: Request):
     if pub_base:
         base_url = pub_base
     qr_url = f"{base_url}/#/qr-approve?ticket={ticket}"
-    svg = generate_qr_svg(qr_url)
+    svg = "" if request.query_params.get("lite") else generate_qr_svg(qr_url)
     return {"ticket": ticket, "expires_in": QR_TTL, "url": qr_url, "qr_svg": svg}
 
 

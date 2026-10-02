@@ -72,7 +72,7 @@ html, body { margin: 0; padding: 0; background: #fafafa; }
 /* 弹性加载器: 并行 fetch 所有脚本, 任一连接 8 秒无数据即中断重连 (跨境链路常见"单连接卡死"),
    最多重试 5 次, 全部到齐后按顺序执行, 最后调用 initApp。不支持 fetch 的老浏览器退回普通 script 标签。 */
 (function () {
-  var LIST = ['lib/qrcode/qrcode.min.js?v=134', 'js/api.js?v=134', 'js/ui.js?v=137', 'js/app.js?v=139',
+  var LIST = ['lib/qrcode/qrcode.min.js?v=134', 'js/api.js?v=134', 'js/ui.js?v=137', 'js/app.js?v=140',
               'js/admin.js?v=134', 'js/chat.js?v=134', 'js/remote.js?v=137', 'js/msstage.js?v=137', 'js/viewer.js?v=134'];
   var st = window.__flaLoad = { total: LIST.length, done: 0, retries: 0, files: {} };
   function plain() {

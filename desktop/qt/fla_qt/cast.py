@@ -104,7 +104,9 @@ class CastPanel(_Card):
         self.code.setStyleSheet("font-size:20px;font-weight:600;color:#111;")
         self.code.setFixedHeight(32)
         lay.addWidget(self.code)
-        hint = BodyLabel("手机扫码（或浏览器打开 /cast.html 输入配对码）：\n· 观看电脑屏幕，并可用画笔/激光笔/橡皮直接在大屏批注、翻页\n· 投屏：把手机摄像头或照片投到大屏")
+        hint = BodyLabel("① 手机看电脑：扫码后手机实时显示电脑桌面/PPT，在手机上画，电脑桌面同步出现笔迹\n"
+                         "② 手机拍摄投到电脑：扫码后切到「投屏到电脑」，摄像头/照片直接显示在电脑上\n"
+                         "③ 手机整屏镜像到电脑：点下方按钮，用手机自带的「无线投屏」连接本电脑")
         hint.setWordWrap(True)
         lay.addWidget(hint)
         self.state = CaptionLabel("")
@@ -117,6 +119,9 @@ class CastPanel(_Card):
         row.addWidget(self.view_btn)
         row.addWidget(self.stop_btn)
         lay.addLayout(row)
+        self.mirror_btn = PushButton(FIF.PROJECTOR, "手机整屏镜像到电脑（无线投屏）")
+        self.mirror_btn.clicked.connect(ctl.open_mirror)
+        lay.addWidget(self.mirror_btn)
         hint.setFixedWidth(300)
         self.adjustSize()
 
@@ -186,12 +191,12 @@ class CastController(QObject):
             self.panel.qr.setText("创建失败\n请检查网络/服务器")
             self.panel.state.setText(str(d.get("error") or d.get("detail") or ""))
             self.active = False
-            self.stage.dock.phone_btn.setChecked(False)
+            [d.phone_btn.setChecked(False) for d in (self.stage.desk_dock, self.stage.ppt_dock)]
             return
         self.sid, self.code = d["session_id"], d["code"]
         self.panel.code.setText(f"配对码 {self.code}")
         self.panel.state.setText("等待手机连接…")
-        self.stage.dock.phone_btn.setChecked(True)
+        [d.phone_btn.setChecked(True) for d in (self.stage.desk_dock, self.stage.ppt_dock)]
         self.last_hash = ""
         self.grab_timer.start()
         sid, code = self.sid, self.code
@@ -219,7 +224,7 @@ class CastController(QObject):
         self.grab_timer.stop()
         self.panel.hide()
         self.hide_phone()
-        self.stage.dock.phone_btn.setChecked(False)
+        [d.phone_btn.setChecked(False) for d in (self.stage.desk_dock, self.stage.ppt_dock)]
         sid = self.sid
         if sid:
             threading.Thread(target=lambda: self._safe(lambda: _http(
@@ -350,6 +355,34 @@ class CastController(QObject):
                 w.raise_()
         if not self.stage.dock.isVisible() and not self.stage.dock.mini.isVisible():
             self.stage.start()
+
+    def open_mirror(self):
+        """Windows 自带 Miracast 接收端: 安卓/华为/小米等手机的「无线投屏」可直接把整屏投到本机"""
+        from qfluentwidgets import MessageBox
+        self.stage.handle("mouse")
+        self.main.bring_up()
+        box = MessageBox(
+            "手机整屏镜像到电脑",
+            "1. 在即将打开的「投影到此电脑」设置中，开启“所有位置都可用”\n"
+            "   （首次使用需点“可选功能”安装「无线显示器」，约 1 分钟）\n"
+            "2. 点“启动‘连接’应用以投影到此电脑”\n"
+            "3. 手机下拉控制中心 →「无线投屏 / 多屏互动 / Smart View」→ 选择本电脑\n\n"
+            "· 手机与电脑需在同一 Wi-Fi；iPhone 的 AirPlay 不被 Windows 原生支持，请用上方扫码投屏。",
+            self.main)
+        box.yesButton.setText("打开设置")
+        box.cancelButton.setText("取消")
+        if box.exec() and core.IS_WIN:
+            import os
+            for uri in ("ms-settings:project",):
+                try:
+                    os.startfile(uri)  # noqa
+                except Exception:
+                    pass
+            try:
+                import subprocess
+                subprocess.Popen(["explorer.exe", "shell:AppsFolder\\Microsoft.Windows.SecondaryTileExperience_cw5n1h2txyewy!App"])
+            except Exception:
+                pass
 
     def hide_phone(self):
         self.phone_view.hide()

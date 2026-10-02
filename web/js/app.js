@@ -1392,21 +1392,26 @@ function viewLogin() {
     holder.innerHTML = '<div class="qr-spin"></div>';
 
     let ticket = '';
-    const refresh = async () => {
+    /* v3.1: 票据接口只取轻量 JSON(不带 SVG), 二维码在本地用当前域名生成;
+       跨境慢链路: 单次 20s 超时 + 自动重试 3 次, 失败给出「重试」按钮 */
+    const refresh = async (attempt) => {
+      attempt = attempt || 0;
+      if (attempt === 0 && !holder.querySelector('svg,canvas,img,table')) holder.innerHTML = '<div class="qr-spin"></div>';
       try {
-        const r = await API.post('/api/auth/qr/ticket', {});
+        const r = await API.req('/api/auth/qr/ticket?lite=1', { method: 'POST', timeout: 20000 });
         ticket = r.ticket;
-        const url = r.url || (location.origin + '/#/qr-approve?ticket=' + encodeURIComponent(ticket));
+        const url = location.origin + '/#/qr-approve?ticket=' + encodeURIComponent(ticket);
         holder.innerHTML = '';
-        if (r.qr_svg && r.qr_svg.trim().startsWith('<svg')) {
+        if (UI && UI.renderQR) UI.renderQR(holder, url, 190);
+        if (!holder.querySelector('svg,canvas,img,table') && r.qr_svg && r.qr_svg.trim().startsWith('<svg')) {
           holder.innerHTML = r.qr_svg;
-          const svg = holder.querySelector('svg');
-          if (svg) { svg.setAttribute('width', '190'); svg.setAttribute('height', '190'); svg.style.width = '190px'; svg.style.height = '190px'; }
-        } else if (UI && UI.renderQR) {
-          UI.renderQR(holder, url, 190);
         }
+        const svg = holder.querySelector('svg');
+        if (svg) { svg.setAttribute('width', '190'); svg.setAttribute('height', '190'); svg.style.width = '190px'; svg.style.height = '190px'; }
       } catch (e) {
-        holder.innerHTML = '<div class="qr-err" style="color:var(--danger);font-size:13px;">加载二维码失败，请检查网络</div>';
+        if (attempt < 3 && $('#qr-holder') === holder) { setTimeout(() => refresh(attempt + 1), 1500); return; }
+        holder.innerHTML = '<div class="qr-err" style="color:var(--danger);font-size:13px;">二维码加载失败（网络较慢）<br><button class="btn sm soft" id="qr-retry" style="margin-top:8px">重试</button></div>';
+        const b = $('#qr-retry'); if (b) b.onclick = () => refresh(0);
       }
     };
     await refresh();

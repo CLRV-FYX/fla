@@ -362,6 +362,7 @@ class MainWindow(FluentWindow):
         from .cast import CastController
         self.cast = CastController(stage)
         stage.cast = self.cast
+        self.cast.main = self
         self.setWindowTitle(core.APP_NAME)
         self.resize(940, 680)
         self.home = HomePage(self)
@@ -409,6 +410,7 @@ class MainWindow(FluentWindow):
     def quit_app(self):
         if self.cast.active:
             self.cast.stop()
+        self.stage.shutdown()
         self.tray.hide()
         QApplication.quit()
 
