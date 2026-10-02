@@ -1398,21 +1398,20 @@ function viewLogin() {
       attempt = attempt || 0;
       if (attempt === 0 && !holder.querySelector('svg,canvas,img,table')) holder.innerHTML = '<div class="qr-spin"></div>';
       try {
-        const r = await API.req('/api/auth/qr/ticket?lite=1', { method: 'POST', timeout: 20000 });
+        const r = await API.req('/api/auth/qr/ticket', { method: 'POST', timeout: 20000 });
         ticket = r.ticket;
         const url = location.origin + '/#/qr-approve?ticket=' + encodeURIComponent(ticket);
-        holder.innerHTML = '';
-        if (UI && UI.renderQR) UI.renderQR(holder, url, 190);
-        if (!holder.querySelector('svg,canvas,img,table') && r.qr_svg && r.qr_svg.trim().startsWith('<svg')) {
-          holder.innerHTML = r.qr_svg;
+        /* 1) 浏览器离线生成 SVG  2) 服务器返回的 SVG  3) 服务器图片 */
+        if (!(UI && UI.renderQR && UI.renderQR(holder, url, 190))) {
+          if (r.qr_svg && r.qr_svg.trim().indexOf('<svg') === 0) {
+            holder.innerHTML = r.qr_svg;
+            const svg = holder.querySelector('svg');
+            if (svg) { svg.setAttribute('width', '190'); svg.setAttribute('height', '190'); svg.style.width = '190px'; svg.style.height = '190px'; }
+          } else {
+            holder.innerHTML = '<img alt="二维码" width="190" height="190" style="width:190px;height:190px;display:block" src="/api/auth/qr/image?ticket=' +
+              encodeURIComponent(ticket) + '&o=' + encodeURIComponent(location.origin) + '">';
+          }
         }
-        if (!holder.querySelector('svg,canvas,img,table')) {
-          /* 本地二维码库不可用(老内核/脚本被拦截) → 服务器出图 */
-          holder.innerHTML = '<img alt="二维码" width="190" height="190" style="width:190px;height:190px;display:block" src="/api/auth/qr/image?ticket=' +
-            encodeURIComponent(ticket) + '&o=' + encodeURIComponent(location.origin) + '">';
-        }
-        const svg = holder.querySelector('svg');
-        if (svg) { svg.setAttribute('width', '190'); svg.setAttribute('height', '190'); svg.style.width = '190px'; svg.style.height = '190px'; }
       } catch (e) {
         if (attempt < 3 && $('#qr-holder') === holder) { setTimeout(() => refresh(attempt + 1), 1500); return; }
         holder.innerHTML = '<div class="qr-err" style="color:var(--danger);font-size:13px;">二维码加载失败（网络较慢）<br><button class="btn sm soft" id="qr-retry" style="margin-top:8px">重试</button></div>';
