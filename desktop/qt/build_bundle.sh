@@ -41,13 +41,13 @@ cp "$SP"/pywin32_system32/*.dll "$S/python/"
 
 # 3. 瘦身: 只保留用到的 Qt 模块 / 插件
 Q="$SP/PyQt5"
-keep_pyd="QtCore QtGui QtWidgets QtSvg QtXml"
+keep_pyd="QtCore QtGui QtWidgets QtSvg QtXml QtNetwork QtWebSockets"
 for f in "$Q"/*.pyd; do b=$(basename "$f" .pyd); case " $keep_pyd " in *" $b "*) ;; *) [[ $b == sip* ]] || rm -f "$f";; esac; done
 rm -f "$Q"/*.pyi; rm -rf "$Q"/uic "$Q"/bindings "$Q"/Qt5/qml "$Q"/Qt5/qsci "$Q"/Qt5/translations "$Q"/Qt5/lib
 B="$Q/Qt5/bin"
 for f in "$B"/*.dll; do
   case $(basename "$f") in
-    Qt5Core.dll|Qt5Gui.dll|Qt5Widgets.dll|Qt5Svg.dll|Qt5Xml.dll|msvcp140*.dll|vcruntime140*.dll|concrt140.dll|libEGL.dll|libGLESv2.dll|d3dcompiler_47.dll) ;;
+    Qt5Core.dll|Qt5Gui.dll|Qt5Widgets.dll|Qt5Svg.dll|Qt5Xml.dll|Qt5Network.dll|Qt5WebSockets.dll|libssl-1_1-x64.dll|libcrypto-1_1-x64.dll|msvcp140*.dll|vcruntime140*.dll|concrt140.dll|libEGL.dll|libGLESv2.dll|d3dcompiler_47.dll) ;;
     *) rm -f "$f";;
   esac
 done
@@ -61,6 +61,8 @@ find "$SP" -name "__pycache__" -prune -exec rm -rf {} +
 
 # 4. FLA 程序 (预编译 .pyc 由 Windows 首次运行时生成, 这里只放源码)
 cp -r "$HERE/fla_qt" "$S/app/"; cp "$HERE/fla_desktop.py" "$S/app/"
+cp "$ROOT/web/cast.html" "$S/app/fla_qt/cast.html"            # 局域网极速模式: 电脑直接给手机提供页面
+cp -r "$ROOT/server/vendor/qrcode" "$SP/qrcode"                # 本地生成局域网二维码
 find "$S/app" -name "__pycache__" -prune -exec rm -rf {} +
 cp "$ROOT/desktop/assets/fla.ico" "$S/app/fla.ico"
 echo "  运行环境: $(du -sh "$S" | cut -f1)"
@@ -87,6 +89,7 @@ a = open(l, "rb").read(); b = open(p, "rb").read()
 open(out, "wb").write(a + b + struct.pack("<Q", len(a)) + b"FLAPAYLD")
 print("  FLA.exe:", len(a) + len(b) + 16)
 PY
+mkdir -p "$ROOT/desktop/dist" "$ROOT/web/downloads"
 cp "$ROOT/desktop/bin/FLA.exe" "$ROOT/desktop/dist/FLA.exe"
 cp "$ROOT/desktop/bin/FLA.exe" "$ROOT/web/downloads/FLA.exe"
 echo "== done"

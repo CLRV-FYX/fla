@@ -144,6 +144,7 @@ def get_session_info(sid: str, code: Optional[str] = Query(None)):
         "page": session.get("page", 1),
         "total": session.get("total", 1),
         "black": session.get("black", False),
+        "lan": session.get("lan", []) if code else [],
     }
 
 
@@ -210,6 +211,10 @@ async def put_frame(sid: str, ch: str, request: Request, code: Optional[str] = Q
     frames = session.setdefault("frames", {})
     seq = frames.get(ch, (0, b"", 0))[0] + 1
     frames[ch] = (seq, body, time.time())
+    # 桥接: 手机走 HTTP 兜底、电脑已在 hub 上时, 直接推给电脑
+    if ch == "phone":
+        for ws in list(HUBS.get(sid, {}).get("pc", ())):
+            asyncio.create_task(_hub_safe(ws, b"C" + body, True))
     return {"ok": True, "seq": seq}
 
 
@@ -305,3 +310,104 @@ async def remote_websocket(websocket: WebSocket, sid: str, role: str = "controll
     finally:
         session["connections"].discard(websocket)
         _broadcast_event(session, {"type": "bye", "role": role, "time": time.time()})
+
+
+# ================================================================ v3.3 低延迟中继 (hub)
+# 一条 WebSocket 同时承载: 文本 = JSON 指令/批注/ack, 二进制 = 画面帧 (首字节 b"P" 电脑画面 / b"C" 手机画面 + JPEG)
+# 角色: pc (电脑桌面端) / phone (手机网页或 App)。只转发给对端角色; 对端正在发送时丢帧, 永远只发最新帧。
+# 端到端流控: 接收方显示完一帧回 {"type":"ack","ch":"P"}, 发送方收到 ack 才发下一帧 → 不堆积, 延迟最低。
+HUBS: Dict[str, Dict[str, set]] = {}
+
+
+async def _hub_send(ws: WebSocket, payload, binary: bool):
+    st = ws.scope.setdefault("fla_state", {"busy": False})
+    if binary:
+        if st["busy"]:
+            return False          # 对端还在收上一帧 → 丢掉旧帧
+        st["busy"] = True
+        try:
+            await ws.send_bytes(payload)
+        finally:
+            st["busy"] = False
+        return True
+    await ws.send_text(payload)
+    return True
+
+
+def _hub_peers(sid: str, role: str) -> list:
+    other = "phone" if role == "pc" else "pc"
+    return list(HUBS.get(sid, {}).get(other, ()))
+
+
+async def _hub_presence(sid: str):
+    h = HUBS.get(sid, {})
+    import json as _json
+    msg = _json.dumps({"type": "peers", "pc": len(h.get("pc", ())), "phone": len(h.get("phone", ()))})
+    for ws in [w for s in h.values() for w in s]:
+        try:
+            await ws.send_text(msg)
+        except Exception:
+            pass
+
+
+@router.websocket("/hub/{sid}")
+async def remote_hub(websocket: WebSocket, sid: str, code: str = "", role: str = "phone"):
+    session = SESSIONS.get(sid)
+    if not session or session.get("code") != code or role not in ("pc", "phone"):
+        await websocket.close(code=4004)
+        return
+    await websocket.accept()
+    hub = HUBS.setdefault(sid, {"pc": set(), "phone": set()})
+    hub[role].add(websocket)
+    await _hub_presence(sid)
+    try:
+        while True:
+            m = await websocket.receive()
+            if m.get("type") == "websocket.disconnect":
+                break
+            session["last_active"] = time.time()
+            if m.get("bytes") is not None:
+                data = m["bytes"]
+                if len(data) > MAX_FRAME + 1:
+                    continue
+                for peer in _hub_peers(sid, role):
+                    asyncio.create_task(_hub_safe(peer, data, True))
+            elif m.get("text") is not None:
+                txt = m["text"]
+                if txt == "ping":
+                    await websocket.send_text("pong")
+                    continue
+                for peer in _hub_peers(sid, role):
+                    asyncio.create_task(_hub_safe(peer, txt, False))
+                # 兼容旧客户端: 手机指令同时进入 HTTP 轮询队列
+                if role == "phone" and '"ack"' not in txt[:40]:
+                    try:
+                        import json as _json
+                        d = _json.loads(txt)
+                        if d.get("action"):
+                            _broadcast_event(session, {"id": secrets.token_hex(4), "type": "action", "action": d["action"],
+                                                       "data": d.get("data") or {}, "time": time.time(), "via": "hub"})
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    finally:
+        hub[role].discard(websocket)
+        if not hub["pc"] and not hub["phone"]:
+            HUBS.pop(sid, None)
+        await _hub_presence(sid)
+
+
+async def _hub_safe(ws, payload, binary):
+    try:
+        await _hub_send(ws, payload, binary)
+    except Exception:
+        pass
+
+
+@router.post("/{sid}/lan")
+def set_lan(sid: str, body: dict, code: Optional[str] = Query(None)):
+    """桌面端上报局域网直连地址 (手机 App / 网页优先尝试直连, 不绕服务器)"""
+    session = _auth(sid, code)
+    session["lan"] = [str(u)[:120] for u in (body.get("urls") or [])][:4]
+    return {"ok": True}

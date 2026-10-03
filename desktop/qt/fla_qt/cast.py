@@ -21,7 +21,34 @@ from qfluentwidgets import (BodyLabel, CaptionLabel, PrimaryPushButton, PushButt
 
 from . import core
 from .core import cfg
+from .link import Link
 from .stage import _Card, _screen_rect
+
+
+def qr_pixmap(text: str, size: int = 230) -> QPixmap:
+    """本地生成二维码 (局域网地址不经服务器)"""
+    try:
+        import qrcode  # noqa
+    except ImportError:
+        import os
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "server", "vendor"))
+        import qrcode  # noqa
+    q = qrcode.QRCode(border=2, error_correction=qrcode.constants.ERROR_CORRECT_M)
+    q.add_data(text)
+    q.make(fit=True)
+    m = q.get_matrix()
+    n = len(m)
+    cell = max(1, size // n)
+    pm = QPixmap(cell * n, cell * n)
+    pm.fill(QColor("#FFFFFF"))
+    p = QPainter(pm)
+    for y, row in enumerate(m):
+        for x, v in enumerate(row):
+            if v:
+                p.fillRect(x * cell, y * cell, cell, cell, QColor("#000000"))
+    p.end()
+    return pm
 
 
 def _http(method, path, data=None, ctype="application/json", timeout=10):
@@ -93,6 +120,13 @@ class CastPanel(_Card):
         x.clicked.connect(self.hide)
         top.addWidget(x)
         lay.addLayout(top)
+        from qfluentwidgets import SegmentedWidget
+        self.seg = SegmentedWidget(self)
+        self.seg.addItem("lan", "同一 Wi-Fi（极速）", lambda: ctl.set_qr_mode("lan"))
+        self.seg.addItem("net", "任意网络", lambda: ctl.set_qr_mode("net"))
+        self.seg.setCurrentItem("net")
+        self.seg.setFixedWidth(300)
+        lay.addWidget(self.seg, 0, Qt.AlignHCenter)
         self.qr = QLabel("正在创建会话…")
         self.qr.setFixedSize(240, 240)
         self.qr.setAlignment(Qt.AlignCenter)
@@ -122,6 +156,10 @@ class CastPanel(_Card):
         self.mirror_btn = PushButton(FIF.PROJECTOR, "手机整屏镜像到电脑（无线投屏）")
         self.mirror_btn.clicked.connect(ctl.open_mirror)
         lay.addWidget(self.mirror_btn)
+        self.apk = CaptionLabel("安卓手机整屏投屏：在网站「下载」页安装 FLA 投屏 App，输入配对码即可")
+        self.apk.setWordWrap(True)
+        self.apk.setFixedWidth(300)
+        lay.addWidget(self.apk)
         hint.setFixedWidth(300)
         self.adjustSize()
 
@@ -153,7 +191,14 @@ class CastController(QObject):
         self.sig.qr.connect(self._on_qr)
         self.sig.phone_frame.connect(self.phone_view.set_frame)
         self.sig.status.connect(lambda t: self.panel.state.setText(t))
-        self.grab_timer = QTimer(self, interval=600, timeout=self._grab)
+        self.grab_timer = QTimer(self, interval=70, timeout=self._grab)
+        self.link = Link()
+        self.link.message.connect(self._on_event)
+        self.link.phone_frame.connect(self._on_phone_frame)
+        self.link.status.connect(lambda t: self.panel.state.setText(t))
+        self.qr_mode = "net"
+        self.net_qr = None
+        self.http_frame_at = 0.0
 
     # ---- 会话
     def toggle_panel(self):
@@ -200,6 +245,16 @@ class CastController(QObject):
         self.last_hash = ""
         self.grab_timer.start()
         sid, code = self.sid, self.code
+        self.link.start(sid, code)
+        if self.link.lan_urls:
+            urls = [u["ws"] for u in self.link.lan_urls]
+            threading.Thread(target=lambda: self._safe(lambda: _http(
+                "POST", f"/api/remote/{sid}/lan?code={code}", json.dumps({"urls": urls}).encode())), daemon=True).start()
+            self.qr_mode = "lan"
+            self.panel.seg.setCurrentItem("lan")
+            self.set_qr_mode("lan")
+        else:
+            self.panel.seg.setEnabled(False)
         threading.Thread(target=self._poll_loop, args=(gen, sid), daemon=True).start()
         threading.Thread(target=self._phone_loop, args=(gen, sid, code), daemon=True).start()
 
@@ -215,13 +270,31 @@ class CastController(QObject):
     def _on_qr(self, raw):
         pm = QPixmap()
         if pm.loadFromData(raw):
-            self.panel.qr.setPixmap(pm.scaled(230, 230, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.net_qr = pm.scaled(230, 230, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            if self.qr_mode == "net":
+                self.panel.qr.setPixmap(self.net_qr)
             self.panel.adjustSize()
+
+    def set_qr_mode(self, mode):
+        self.qr_mode = mode
+        if mode == "lan" and self.link.lan_urls and self.link.lan_urls[0].get("page"):
+            u = self.link.lan_urls[0]
+            try:
+                self.panel.qr.setPixmap(qr_pixmap(u["page"], 230))
+            except Exception as e:  # noqa
+                self.panel.qr.setText("二维码生成失败\n" + str(e)[:40])
+            self.panel.state.setText(f"手机连同一 Wi-Fi 后扫码（{u['ip']}）。首次使用请在 Windows 防火墙弹窗中点“允许”")
+        else:
+            if self.net_qr is not None:
+                self.panel.qr.setPixmap(self.net_qr)
+            self.panel.state.setText("手机用任意网络扫码（经服务器中转）")
 
     def stop(self):
         self.active = False
         self.gen += 1
         self.grab_timer.stop()
+        self.link.stop()
+        self.panel.seg.setEnabled(True)
         self.panel.hide()
         self.hide_phone()
         [d.phone_btn.setChecked(False) for d in (self.stage.desk_dock, self.stage.ppt_dock)]
@@ -241,13 +314,17 @@ class CastController(QObject):
 
     # ---- 电脑画面 → 手机
     def _grab(self):
-        if not self.active or not self.sid or self.uploading:
+        """有接收方空闲才截屏编码: 端到端 ack 流控, 画面不变不发"""
+        if not self.active or not self.sid:
             return
-        scr = QApplication.primaryScreen()
-        pm = scr.grabWindow(0)
+        now = time.time()
+        hub_ready = self.link.any_ready()
+        http_due = (not self.link.targets()) and not self.uploading and now - self.http_frame_at > 1.0
+        if not hub_ready and not http_due:
+            return
+        pm = self._screen_pixmap()
         if pm.isNull():
             return
-        # 合成批注 (分层窗口截屏不一定包含画布)
         geo = _screen_rect()
         scale = pm.width() / max(1, geo.width())
         p = QPainter(pm)
@@ -256,29 +333,49 @@ class CastController(QObject):
             p.fillRect(pm.rect(), QColor("#FFFFFF"))
         self.stage.ov.paint_ink(p, scale)
         p.end()
-        if pm.width() > 1280:
-            pm = pm.scaledToWidth(1280, Qt.SmoothTransformation)
+        lan = self.link.has_lan_viewer()
+        maxw, q = (1600, 65) if lan else (1280, 50)
+        if pm.width() > maxw:
+            pm = pm.scaledToWidth(maxw, Qt.SmoothTransformation if lan else Qt.FastTransformation)
+        # 变化检测: 64px 缩略图哈希, 比整帧 JPEG 便宜得多
+        thumb = pm.scaledToWidth(64).toImage()
+        h = hashlib.md5(bytes(thumb.constBits().asstring(thumb.byteCount()))).hexdigest()
+        if h == self.last_hash and now - self.last_upload < 3:
+            return
         ba = QByteArray()
         buf = QBuffer(ba)
         buf.open(QIODevice.WriteOnly)
-        pm.save(buf, "JPG", 60)
+        pm.save(buf, "JPG", q)
         data = bytes(ba)
-        h = hashlib.md5(data[::7]).hexdigest()
-        if h == self.last_hash and time.time() - self.last_upload < 5:
-            return
-        self.last_hash = h
-        self.uploading = True
-        sid, code = self.sid, self.code
+        sent = self.link.send_frame(data) if hub_ready else 0
+        if sent:
+            self.last_hash = h
+            self.last_upload = now
+        if http_due:
+            # 兜底: 手机若没连上 WebSocket, 仍可通过 HTTP 拉取 (慢速)
+            self.last_hash = h
+            self.http_frame_at = now
+            self.uploading = True
+            sid, code = self.sid, self.code
 
-        def up():
-            try:
-                _http("POST", f"/api/remote/{sid}/frame/pc?code={code}", data, "image/jpeg", timeout=15)
-                self.last_upload = time.time()
-            except Exception:
-                pass
-            finally:
-                self.uploading = False
-        threading.Thread(target=up, daemon=True).start()
+            def up():
+                try:
+                    _http("POST", f"/api/remote/{sid}/frame/pc?code={code}", data, "image/jpeg", timeout=15)
+                    self.last_upload = time.time()
+                except Exception:
+                    pass
+                finally:
+                    self.uploading = False
+            threading.Thread(target=up, daemon=True).start()
+
+    @staticmethod
+    def _screen_pixmap():
+        return QApplication.primaryScreen().grabWindow(0)
+
+    def _on_phone_frame(self, data: bytes):
+        if not self.phone_view.isVisible():
+            self.show_phone()
+        self.phone_view.set_frame(data)
 
     # ---- 手机指令
     def _poll_loop(self, gen, sid):
@@ -291,12 +388,12 @@ class CastController(QObject):
                 evs = d.get("events") or []
                 for e in evs:
                     after = max(after, int(e.get("idx") or 0))
-                    if not first:
+                    if not first and not (e.get("via") == "hub" and self.link.server_ok):
                         self.sig.event.emit(e)
                 if first:
                     first = False
                     after = max(after, int(d.get("latest") or 0))
-                time.sleep(0.12 if evs else 0.3)
+                time.sleep(1.0 if self.link.server_ok else (0.12 if evs else 0.3))
             except Exception:
                 time.sleep(1.5)
 
@@ -333,6 +430,9 @@ class CastController(QObject):
     def _phone_loop(self, gen, sid, code):
         seq = 0
         while self.active and gen == self.gen:
+            if self.link.server_ok or self.link.lan_targets:
+                time.sleep(0.5)
+                continue
             try:
                 st, hdr, raw = _http("GET", f"/api/remote/{sid}/frame/phone?code={code}&after={seq}", timeout=15)
                 if st == 200 and raw:

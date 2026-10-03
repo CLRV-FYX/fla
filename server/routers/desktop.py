@@ -11,8 +11,10 @@ from server.desktop_dist import ensure_desktop_exe
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
 
-CURRENT_VERSION = "3.2.0"
+CURRENT_VERSION = "3.3.0"
 CHANGELOG = [
+    "v3.3.0: 投屏大幅降延迟: WebSocket 实时推送 + 端到端流控(不堆积旧帧), 同一 Wi-Fi 下手机与电脑直连不绕服务器",
+    "v3.3.0: 新增安卓「FLA 投屏」App, 整个手机屏幕实时投到电脑; 网站首页新增手机端下载",
     "v3.2.0: 自动识别 PowerPoint/WPS 放映，切换为 PPT 专用工具栏，画布按幻灯片页保存，翻页播放动画",
     "v3.2.0: 未放映时翻页按钮把翻页键发给当前窗口；桌面画布自动保存到本地",
     "v3.2.0: 工具栏新增拖动把手；手机整屏无线镜像入口；修复扫码登录二维码加载失败",
@@ -35,7 +37,7 @@ def get_desktop_version():
         "version": CURRENT_VERSION,
         "name": "FLA 课堂助手",
         "download_url": "/api/desktop/download",
-        "release_date": "2026-09-25",
+        "release_date": "2026-10-03",
         "size": file_size,
         "changelog": CHANGELOG,
     }

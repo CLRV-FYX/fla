@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="FLA 投屏">
 <title>FLA 手机投屏</title>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -78,6 +81,7 @@ footer{position:absolute;left:0;right:0;bottom:0;background:#fff;color:#111;padd
 
 <div id="castPane">
   <video id="video" playsinline muted></video>
+  <button class="btn" id="appBtn" style="display:none">整个手机屏幕投到电脑（App）</button>
   <button class="btn" id="camBtn">开启摄像头投屏</button>
   <button class="btn dark" id="flipBtn" style="display:none">切换前/后摄像头</button>
   <label class="btn dark" style="text-align:center">拍照 / 选图片投屏<input type="file" id="photo" accept="image/*" capture="environment" hidden></label>
@@ -88,13 +92,44 @@ footer{position:absolute;left:0;right:0;bottom:0;background:#fff;color:#111;padd
 <div id="pair"><div style="font-size:16px">输入大屏上显示的 4 位配对码</div><input id="pairInput" inputmode="numeric" maxlength="4"><button class="btn" id="pairBtn">连接</button></div>
 <div id="msg"></div>
 
+<script>/*__LAN_WS_PORT__*/</script>
 <script>
 (function () {
   var q = new URLSearchParams(location.search), sid = q.get('sid'), code = q.get('code');
+  var LAN = q.get('lan') === '1', SRV = q.get('srv') || '';
   var $ = function (id) { return document.getElementById(id); };
   function toast(t) { var m = $('msg'); m.textContent = t; m.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(function () { m.style.display = 'none'; }, 2200); }
   function api(path, opt) { return fetch(path, opt); }
+  /* v3.3 低延迟: 一条 WebSocket 收发一切 (局域网直连 或 服务器中继), 断开时退回 HTTP */
+  var ws = null, wsOk = false, wsFails = 0, wsLast = 0;
+  function wsUrl() {
+    if (LAN) return 'ws://' + location.hostname + ':' + (window.FLA_LAN_WS_PORT || 8308) + '/hub/' + sid + '?code=' + code;
+    return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/api/remote/hub/' + sid + '?code=' + code + '&role=phone';
+  }
+  function wsSend(o) { if (wsOk) { try { ws.send(typeof o === 'string' ? o : JSON.stringify(o)); return true; } catch (e) { } } return false; }
+  function connect() {
+    if (!sid || !code) return;
+    try { ws = new WebSocket(wsUrl()); } catch (e) { wsFails++; setTimeout(connect, 1500); return; }
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = function () { wsOk = true; wsFails = 0; wsLast = Date.now(); action('hello_phone'); };
+    ws.onclose = function () { wsOk = false; wsFails++; setTimeout(connect, Math.min(5000, 800 * wsFails)); };
+    ws.onerror = function () { };
+    ws.onmessage = function (ev) {
+      wsLast = lastOk = Date.now();
+      if (typeof ev.data === 'string') {
+        if (ev.data === 'pong') return;
+        var d; try { d = JSON.parse(ev.data); } catch (e) { return; }
+        if (d.type === 'ack' && d.ch === 'C') { camPending = 0; }
+        return;
+      }
+      var u8 = new Uint8Array(ev.data);
+      if (u8[0] === 80) showFrame(new Blob([u8.subarray(1)], { type: 'image/jpeg' }), true);   // 'P'
+    };
+  }
+  setInterval(function () { wsSend('ping'); }, 15000);
   function action(a, data) {
+    if (wsSend({ action: a, data: data || {} })) return Promise.resolve();
+    if (LAN) return Promise.resolve();
     return api('/api/remote/' + sid + '/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: a, data: data || {} }) }).catch(function () {});
   }
 
@@ -109,11 +144,29 @@ footer{position:absolute;left:0;right:0;bottom:0;background:#fff;color:#111;padd
     return;
   }
 
-  /* ---------- 观看: 拉取电脑画面 ---------- */
-  var img = $('img'), seq = 0, alive = true, lastOk = 0, url = null;
+  /* ---------- 观看: 电脑画面 ---------- */
+  var img = $('img'), seq = 0, alive = true, lastOk = 0, url = null, showing = false, queued = null;
+  function showFrame(blob, viaWs) {
+    if (showing) { queued = [blob, viaWs]; return; }       // 解码中 → 只保留最新一帧
+    showing = true;
+    var u = URL.createObjectURL(blob);
+    img.onload = function () {
+      if (url) URL.revokeObjectURL(url); url = u; $('wait').style.display = 'none';
+      if (img.naturalWidth !== fit.w || img.naturalHeight !== fit.h) { fit.w = img.naturalWidth; fit.h = img.naturalHeight; fit(); }
+      done();
+    };
+    img.onerror = function () { URL.revokeObjectURL(u); done(); };
+    img.src = u;
+    function done() {
+      showing = false;
+      if (viaWs) wsSend({ type: 'ack', ch: 'P' });           // 显示完才要下一帧 → 不堆积
+      if (queued) { var x = queued; queued = null; showFrame(x[0], x[1]); }
+    }
+  }
+  /* HTTP 兜底 (WebSocket 不通时) */
   function pull() {
     if (!alive) return;
-    if (document.hidden || mode !== 'watch') { setTimeout(pull, 800); return; }
+    if (LAN || wsOk || document.hidden || mode !== 'watch') { setTimeout(pull, 800); return; }
     var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 15000);
     fetch('/api/remote/' + sid + '/frame/pc?code=' + code + '&after=' + seq, { signal: ctl.signal, cache: 'no-store' })
       .then(function (r) {
@@ -123,17 +176,11 @@ footer{position:absolute;left:0;right:0;bottom:0;background:#fff;color:#111;padd
         lastOk = Date.now();
         if (r.status === 204) { setTimeout(pull, 300); return; }
         seq = parseInt(r.headers.get('X-Seq') || seq + 1, 10);
-        return r.blob().then(function (b) {
-          var u = URL.createObjectURL(b);
-          img.onload = function () { if (url) URL.revokeObjectURL(url); url = u; $('wait').style.display = 'none'; fit(); pull(); };
-          img.onerror = function () { setTimeout(pull, 500); };
-          img.src = u;
-        });
+        return r.blob().then(function (b) { showFrame(b, false); setTimeout(pull, 50); });
       })
       .catch(function () { clearTimeout(t); setTimeout(pull, 1500); });
   }
   setInterval(function () { $('dot').className = 'dot' + (Date.now() - lastOk < 4000 ? ' on' : ''); }, 1000);
-  action('hello_phone');
 
   /* ---------- 批注 ---------- */
   var ink = $('ink'), ctx = ink.getContext('2d');
@@ -234,7 +281,17 @@ footer{position:absolute;left:0;right:0;bottom:0;background:#fff;color:#111;padd
   }
   $('tWatch').onclick = function () { setMode('watch'); };
   $('tCast').onclick = function () { setMode('cast'); };
+  var camPending = 0;
   function upload(blob) {
+    if (wsOk) {
+      camPending = Date.now();
+      return blob.arrayBuffer().then(function (ab) {
+        var out = new Uint8Array(ab.byteLength + 1); out[0] = 67; out.set(new Uint8Array(ab), 1);   // 'C'
+        wsSend(out.buffer);
+        $('castTip').textContent = '正在实时投到大屏';
+      });
+    }
+    if (LAN) { $('castTip').textContent = '连接中…'; return Promise.resolve(); }
     sending = true;
     return api('/api/remote/' + sid + '/frame/phone?code=' + code, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob })
       .then(function (r) { if (!r.ok) throw 0; $('castTip').textContent = '已投到大屏 ' + new Date().toLocaleTimeString(); })
@@ -242,21 +299,27 @@ footer{position:absolute;left:0;right:0;bottom:0;background:#fff;color:#111;padd
       .then(function () { sending = false; });
   }
   function drawTo(src, w, h) {
-    var s = Math.min(1, 1280 / Math.max(w, h)); cv.width = Math.round(w * s); cv.height = Math.round(h * s);
+    var s = Math.min(1, (LAN ? 1280 : 960) / Math.max(w, h)); cv.width = Math.round(w * s); cv.height = Math.round(h * s);
     cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
-    return new Promise(function (res) { cv.toBlob(res, 'image/jpeg', 0.6); });
+    return new Promise(function (res) { cv.toBlob(res, 'image/jpeg', LAN ? 0.7 : 0.55); });
   }
   function startCam() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { toast('此浏览器不支持摄像头（请用 HTTPS 打开，或改用拍照投屏）'); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      if (LAN && SRV) { if (confirm('局域网极速页面无法使用摄像头（浏览器要求 HTTPS）。\n切换到在线页面使用摄像头？')) location.href = SRV + '/cast.html?sid=' + sid + '&code=' + code; return; }
+      toast('此浏览器不支持摄像头（请用 HTTPS 打开，或改用拍照投屏）'); return;
+    }
     stopCam(true);
     navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 } }, audio: false }).then(function (s) {
       stream = s; var v = $('video'); v.srcObject = s; v.play();
       $('camBtn').style.display = 'none'; $('flipBtn').style.display = $('stopCast').style.display = '';
       action('cast_start');
+      var busy = false;
       camTimer = setInterval(function () {
-        if (sending || !v.videoWidth) return;
-        drawTo(v, v.videoWidth, v.videoHeight).then(function (b) { if (b) upload(b); });
-      }, 350);
+        if (busy || sending || !v.videoWidth) return;
+        if (camPending && Date.now() - camPending < 1500) return;   // 等电脑显示完 (ack)
+        busy = true;
+        drawTo(v, v.videoWidth, v.videoHeight).then(function (b) { return b && upload(b); }).then(function () { busy = false; }, function () { busy = false; });
+      }, 40);
     }).catch(function () { toast('无法打开摄像头，请允许浏览器使用摄像头'); });
   }
   function stopCam(silent) {
@@ -266,6 +329,16 @@ footer{position:absolute;left:0;right:0;bottom:0;background:#fff;color:#111;padd
     if (!silent) { $('stopCast').style.display = 'none'; action('cast_stop'); }
   }
   $('camBtn').onclick = startCam;
+  if (/Android/i.test(navigator.userAgent)) {
+    var b = $('appBtn'); b.style.display = '';
+    b.onclick = function () {
+      var base = SRV || location.origin, t = Date.now();
+      location.href = 'fla://cast?sid=' + sid + '&code=' + code + '&srv=' + encodeURIComponent(base);
+      setTimeout(function () {          // 没装 App → 页面仍在前台 → 去下载
+        if (!document.hidden && Date.now() - t < 2500 && confirm('还没有安装 FLA 投屏 App，现在下载？')) location.href = base + '/api/app/android';
+      }, 1500);
+    };
+  }
   $('flipBtn').onclick = function () { facing = facing === 'environment' ? 'user' : 'environment'; startCam(); };
   $('stopCast').onclick = function () { stopCam(false); };
   $('photo').onchange = function (e) {
@@ -278,6 +351,7 @@ footer{position:absolute;left:0;right:0;bottom:0;background:#fff;color:#111;padd
   };
 
   setMode('watch');
+  connect();
   pull();
 })();
 </script>

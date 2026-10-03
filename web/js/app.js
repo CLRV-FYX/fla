@@ -1105,6 +1105,32 @@ async function uploadFiles(files) {
 /* ================================================================
  *  9. 专属桌面端中心 (Windows 客户端一键下载与连接)
  * ================================================================ */
+function mobileDownloadSection() {
+  setTimeout(() => {
+    fetch('/api/app/info').then(r => r.json()).then(d => {
+      const a = document.getElementById('apk-dl');
+      if (a && !(d.android && d.android.available)) { a.removeAttribute('href'); a.classList.remove('primary'); a.style.opacity = '.6'; a.textContent = '安卓 App 构建中，稍后开放'; }
+    }).catch(() => { });
+  }, 0);
+  const card = (title, body, btn) =>
+    '<div style="flex:1;min-width:240px;background:#fff;border:1px solid var(--line,#e5e5e5);border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:10px;">' +
+    '<h3 style="margin:0;font-size:18px;">' + title + '</h3><div style="font-size:13.5px;color:var(--ink2,#444);line-height:1.7;flex:1;">' + body + '</div>' + btn + '</div>';
+  return '<section class="home-section" id="mobile-dl" style="max-width:1100px;margin:40px auto;padding:0 20px;">' +
+    '<h2 style="text-align:center;margin-bottom:6px;">手机端</h2>' +
+    '<p style="text-align:center;color:var(--mut,#777);margin-bottom:22px;">手机整屏实时投到电脑大屏 · 手机观看电脑并批注</p>' +
+    '<div style="display:flex;gap:16px;flex-wrap:wrap;">' +
+    card('安卓 / 鸿蒙 4.x 及以下',
+      '安装「FLA 投屏」App，输入电脑上的 4 位配对码，<b>整个手机屏幕</b>实时投到电脑（PPT、相册、任何 App）。<br>同一 Wi-Fi 自动直连，延迟最低。<br><span style="color:var(--mut,#888)">安装时如提示“未知来源”，请选择“允许本次安装”。</span>',
+      '<a class="btn primary" href="/api/app/android" id="apk-dl">' + UI.icon('download', 16) + ' 下载安卓 APK</a>') +
+    card('iPhone / iPad',
+      '苹果不允许从网站直接安装 App，<b>无需安装</b>：用相机扫电脑上的二维码即可打开网页版，支持摄像头/照片投屏、观看电脑屏幕并批注。<br>可点 Safari 分享 →「添加到主屏幕」当 App 用。',
+      '<a class="btn" href="/cast.html">打开网页版（输入配对码）</a>') +
+    card('鸿蒙 NEXT（纯血鸿蒙）',
+      '纯血鸿蒙不再支持安装 APK。请直接扫码使用网页版（功能同 iPhone）；整屏投屏可用系统自带的「无线投屏」投到电脑（电脑端面板 →「手机整屏镜像到电脑」）。',
+      '<a class="btn" href="/cast.html">打开网页版</a>') +
+    '</div></section>';
+}
+
 async function viewDesktopCenter() {
   document.title = '桌面客户端中心 - FLA';
   const ready = await probeDesktopClient();
@@ -1323,6 +1349,7 @@ function viewHome() {
             '</div>' +
           '</div>' +
         '</section>' +
+        mobileDownloadSection() +
       '</main>' +
 
       '<footer class="home-footer">' +
@@ -1335,6 +1362,7 @@ function viewHome() {
             '<a href="#/desktop">桌面端中心</a>' +
             '<a href="#/remote">手机遥控</a>' +
             '<a href="/api/desktop/download">客户端下载</a>' +
+            '<a href="#mobile-dl" onclick="var e=document.getElementById(\'mobile-dl\');if(e){e.scrollIntoView({behavior:\'smooth\'});}return false;">手机端下载</a>' +
           '</div>' +
         '</div>' +
       '</footer>' +
