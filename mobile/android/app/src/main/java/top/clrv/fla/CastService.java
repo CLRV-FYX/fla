@@ -34,8 +34,9 @@ public class CastService extends Service {
     interface Listener { void on(String s); }
     static Listener listener;
 
-    static final int MAX_SIDE = 1280;
-    static final int QUALITY = 55;
+    static final int MAX_SIDE = 1600;
+    static volatile boolean running;
+    static final int QUALITY = 62;
 
     MediaProjection projection;
     VirtualDisplay display;
@@ -67,6 +68,7 @@ public class CastService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) { stopSelf(); return START_NOT_STICKY; }
         startAsForeground();
+        running = true;
         sid = intent.getStringExtra("sid");
         code = intent.getStringExtra("code");
         server = intent.getStringExtra("server");
@@ -131,7 +133,7 @@ public class CastService extends Service {
             if (rowPad != 0) { Bitmap c = Bitmap.createBitmap(bmp, 0, 0, w, h); bmp.recycle(); bmp = c; }
             ByteArrayOutputStream out = new ByteArrayOutputStream(64 * 1024);
             out.write('C');
-            bmp.compress(Bitmap.CompressFormat.JPEG, viaLan ? 70 : QUALITY, out);
+            bmp.compress(Bitmap.CompressFormat.JPEG, viaLan ? 78 : QUALITY, out);
             bmp.recycle();
             pendingAt = System.currentTimeMillis();
             WsClient sock = ws;
@@ -185,6 +187,7 @@ public class CastService extends Service {
     @Override
     public void onDestroy() {
         stopped = true;
+        running = false;
         try { if (ws != null) { ws.sendText("{\"action\":\"cast_stop\"}"); ws.close(); } } catch (Exception ignored) { }
         if (display != null) display.release();
         if (reader != null) reader.close();

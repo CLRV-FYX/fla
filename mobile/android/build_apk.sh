@@ -22,7 +22,8 @@ echo ">> FLA 投屏 $VN ($VC)"
 # 1. 资源 + 清单 (Gradle 用 namespace, aapt2 直连需要 package 属性)
 sed 's#<manifest xmlns:android="http://schemas.android.com/apk/res/android">#<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="top.clrv.fla">#' "$APP/AndroidManifest.xml" > "$W/AndroidManifest.xml"
 "$T/aapt2" compile --dir "$APP/res" -o "$W/res.zip"
-"$T/aapt2" link -I "$A34" --manifest "$W/AndroidManifest.xml" "$W/res.zip" \
+cp "$ROOT/web/js/jsqr.min.js" "$APP/assets/jsqr.min.js"
+"$T/aapt2" link -I "$A34" -A "$APP/assets" --manifest "$W/AndroidManifest.xml" "$W/res.zip" \
   --min-sdk-version 24 --target-sdk-version 34 --version-code "$VC" --version-name "$VN" \
   -o "$W/base.apk"
 

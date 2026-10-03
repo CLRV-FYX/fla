@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/app", tags=["mobile"])
 ROOT = Path(__file__).resolve().parents[2]
 APK = ROOT / "desktop" / "bin" / "FLA-cast.apk"
 ICON = ROOT / "mobile" / "android" / "app" / "src" / "main" / "res" / "mipmap-xxhdpi" / "ic_launcher.png"
-APK_VERSION = "1.0.0"
+APK_VERSION = "1.1.0"
 
 
 @router.get("/info")
