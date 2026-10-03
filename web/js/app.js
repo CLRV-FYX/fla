@@ -1110,6 +1110,7 @@ function mobileDownloadSection() {
     fetch('/api/app/info').then(r => r.json()).then(d => {
       const a = document.getElementById('apk-dl');
       if (a && !(d.android && d.android.available)) { a.removeAttribute('href'); a.classList.remove('primary'); a.style.opacity = '.6'; a.textContent = '安卓 App 构建中，稍后开放'; }
+      if (a && d.android && d.android.size) a.innerHTML += ' <small style="opacity:.75">v' + (d.android.version || '') + ' · ' + Math.max(1, Math.round(d.android.size / 1024)) + ' KB</small>';
     }).catch(() => { });
   }, 0);
   const card = (title, body, btn) =>
@@ -1119,15 +1120,15 @@ function mobileDownloadSection() {
     '<h2 style="text-align:center;margin-bottom:6px;">手机端</h2>' +
     '<p style="text-align:center;color:var(--mut,#777);margin-bottom:22px;">手机整屏实时投到电脑大屏 · 手机观看电脑并批注</p>' +
     '<div style="display:flex;gap:16px;flex-wrap:wrap;">' +
-    card('安卓 / 鸿蒙 4.x 及以下',
+    card('安卓 / 鸿蒙 4.x 及以下（Android 7+）',
       '安装「FLA 投屏」App，输入电脑上的 4 位配对码，<b>整个手机屏幕</b>实时投到电脑（PPT、相册、任何 App）。<br>同一 Wi-Fi 自动直连，延迟最低。<br><span style="color:var(--mut,#888)">安装时如提示“未知来源”，请选择“允许本次安装”。</span>',
       '<a class="btn primary" href="/api/app/android" id="apk-dl">' + UI.icon('download', 16) + ' 下载安卓 APK</a>') +
     card('iPhone / iPad',
-      '苹果不允许从网站直接安装 App，<b>无需安装</b>：用相机扫电脑上的二维码即可打开网页版，支持摄像头/照片投屏、观看电脑屏幕并批注。<br>可点 Safari 分享 →「添加到主屏幕」当 App 用。',
-      '<a class="btn" href="/cast.html">打开网页版（输入配对码）</a>') +
-    card('鸿蒙 NEXT（纯血鸿蒙）',
-      '纯血鸿蒙不再支持安装 APK。请直接扫码使用网页版（功能同 iPhone）；整屏投屏可用系统自带的「无线投屏」投到电脑（电脑端面板 →「手机整屏镜像到电脑」）。',
-      '<a class="btn" href="/cast.html">打开网页版</a>') +
+      '点下方按钮下载<b>描述文件</b> → 打开「设置」顶部「已下载描述文件」→ 安装，主屏即出现全屏的「FLA 投屏」图标，像 App 一样用（摄像头/照片投屏、观看电脑屏幕并批注）。<br><span style="color:var(--mut,#888)">请用 Safari 打开本页再点；可随时在 设置-通用-VPN与设备管理 删除。iOS 不允许第三方 App 录制整个屏幕推流，整屏请用控制中心「屏幕镜像」。</span>',
+      '<a class="btn primary" href="/api/app/ios.mobileconfig">' + UI.icon('download', 16) + ' 安装 iOS 描述文件</a><a class="btn" href="/cast.html" style="margin-top:6px;">直接打开网页版</a>') +
+    card('鸿蒙 NEXT（纯血鸿蒙 5.x）',
+      '纯血鸿蒙也能装安卓 App：在华为应用市场搜索并安装<b>「卓易通」</b>（或「出境易」），打开后添加/导入上面下载的 <b>FLA-cast.apk</b> 即可运行。<br>不想装也可直接用网页版（扫码即用，功能同 iPhone）。',
+      '<a class="btn primary" href="/api/app/android">' + UI.icon('download', 16) + ' 下载 APK（卓易通中安装）</a><a class="btn" href="/cast.html" style="margin-top:6px;">打开网页版</a>') +
     '</div></section>';
 }
 

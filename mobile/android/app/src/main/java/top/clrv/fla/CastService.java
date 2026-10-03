@@ -6,7 +6,6 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
-import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
@@ -25,14 +24,6 @@ import android.view.WindowManager;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.concurrent.TimeUnit;
-
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
-import okhttp3.WebSocket;
-import okhttp3.WebSocketListener;
-import okio.ByteString;
 
 /**
  * 整屏采集 → JPEG → WebSocket 二进制帧 (首字节 'C') 发给电脑。
@@ -51,16 +42,21 @@ public class CastService extends Service {
     ImageReader reader;
     HandlerThread thread;
     Handler worker;
-    WebSocket ws;
+    WsClient ws;
     volatile boolean connected, stopped;
     volatile long pendingAt;
     String sid, code, server;
     ArrayList<String> lan;
     int lanIdx;
     boolean viaLan;
-    final OkHttpClient http = new OkHttpClient.Builder()
-            .connectTimeout(1500, TimeUnit.MILLISECONDS).readTimeout(0, TimeUnit.MILLISECONDS)
-            .pingInterval(15, TimeUnit.SECONDS).build();
+    final Runnable pinger = new Runnable() {
+        @Override public void run() {
+            if (stopped) return;
+            WsClient w = ws;
+            if (w != null && w.isOpen()) w.sendText("ping");
+            worker.postDelayed(this, 15000);
+        }
+    };
 
     void say(String s) { if (listener != null) listener.on(s); }
 
@@ -90,6 +86,7 @@ public class CastService extends Service {
         startCapture();
         lanIdx = 0;
         connect();
+        worker.postDelayed(pinger, 15000);
         return START_NOT_STICKY;
     }
 
@@ -101,7 +98,7 @@ public class CastService extends Service {
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, "cast") : new Notification.Builder(this);
         Notification n = b.setContentTitle("FLA 正在投屏到电脑").setContentText("点此返回 App 停止投屏")
                 .setSmallIcon(android.R.drawable.ic_menu_share).setContentIntent(open).setOngoing(true).build();
-        if (Build.VERSION.SDK_INT >= 29) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+        if (Build.VERSION.SDK_INT >= 29) startForeground(1, n, 32 /* ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION */);
         else startForeground(1, n);
     }
 
@@ -111,7 +108,9 @@ public class CastService extends Service {
         float s = Math.min(1f, (float) MAX_SIDE / Math.max(dm.widthPixels, dm.heightPixels));
         int w = Math.round(dm.widthPixels * s) & ~1, h = Math.round(dm.heightPixels * s) & ~1;
         reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2);
-        reader.setOnImageAvailableListener(this::onImage, worker);
+        reader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+            @Override public void onImageAvailable(ImageReader r) { onImage(r); }
+        }, worker);
         display = projection.createVirtualDisplay("fla-cast", w, h, dm.densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.getSurface(), null, worker);
     }
@@ -135,7 +134,8 @@ public class CastService extends Service {
             bmp.compress(Bitmap.CompressFormat.JPEG, viaLan ? 70 : QUALITY, out);
             bmp.recycle();
             pendingAt = System.currentTimeMillis();
-            ws.send(ByteString.of(out.toByteArray()));
+            WsClient sock = ws;
+            if (sock == null || !sock.sendBinary(out.toByteArray())) pendingAt = 0;
         } catch (Exception ignored) {
         } finally {
             if (img != null) img.close();
@@ -151,33 +151,41 @@ public class CastService extends Service {
             viaLan = false;
         }
         say(viaLan ? "正在局域网直连电脑…" : "正在经服务器连接电脑…");
-        ws = http.newWebSocket(new Request.Builder().url(url).build(), new WebSocketListener() {
-            @Override public void onOpen(WebSocket s, Response r) {
+        final WsClient[] self = new WsClient[1];
+        self[0] = new WsClient(url, viaLan ? 1500 : 8000, new WsClient.Listener() {
+            @Override public void onOpen() {
                 connected = true; pendingAt = 0;
-                s.send("{\"action\":\"cast_start\",\"data\":{\"source\":\"android\"}}");
+                self[0].sendText("{\"action\":\"cast_start\",\"data\":{\"source\":\"android\"}}");
                 say(viaLan ? "投屏中（局域网直连，极速）" : "投屏中（服务器中转）");
             }
-            @Override public void onMessage(WebSocket s, String t) {
+            @Override public void onText(String t) {
                 if (t.contains("\"ack\"") && t.contains("\"C\"")) pendingAt = 0;
             }
-            @Override public void onFailure(WebSocket s, Throwable t, Response r) { retry(); }
-            @Override public void onClosed(WebSocket s, int c, String reason) { retry(); }
+            @Override public void onClose(String reason) {
+                if (self[0] == ws) retry();
+            }
         });
+        ws = self[0];
+        ws.connectAsync();
     }
 
     void retry() {
         boolean was = connected;
         connected = false;
         if (stopped) return;
-        if (!was && lanIdx < lan.size()) { lanIdx++; worker.post(this::connect); return; }   // 下一个局域网地址 / 服务器
+        if (!was && lanIdx < lan.size()) {            // 下一个局域网地址 / 最后走服务器
+            lanIdx++;
+            worker.post(new Runnable() { @Override public void run() { connect(); } });
+            return;
+        }
         say("连接断开，正在重连…");
-        worker.postDelayed(() -> { lanIdx = 0; connect(); }, 2000);
+        worker.postDelayed(new Runnable() { @Override public void run() { lanIdx = 0; connect(); } }, 2000);
     }
 
     @Override
     public void onDestroy() {
         stopped = true;
-        try { if (ws != null) { ws.send("{\"action\":\"cast_stop\"}"); ws.close(1000, "bye"); } } catch (Exception ignored) { }
+        try { if (ws != null) { ws.sendText("{\"action\":\"cast_stop\"}"); ws.close(); } } catch (Exception ignored) { }
         if (display != null) display.release();
         if (reader != null) reader.close();
         if (projection != null) projection.stop();

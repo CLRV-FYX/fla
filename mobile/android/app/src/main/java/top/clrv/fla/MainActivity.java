@@ -1,6 +1,5 @@
 package top.clrv.fla;
 
-import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -25,12 +24,11 @@ import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
-import java.util.concurrent.TimeUnit;
-
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
 
 /** FLA 投屏: 输入电脑上显示的 4 位配对码 → 把手机整个屏幕实时投到电脑 */
 public class MainActivity extends Activity {
@@ -44,12 +42,11 @@ public class MainActivity extends Activity {
     String sid, code, server;
     ArrayList<String> lanUrls = new ArrayList<>();
     final Handler ui = new Handler(Looper.getMainLooper());
-    final OkHttpClient http = new OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(10, TimeUnit.SECONDS).build();
 
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
-        if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
+        if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 1);
         int pad = dp(24);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -92,13 +89,17 @@ public class MainActivity extends Activity {
         startBtn = new Button(this);
         startBtn.setText("开始投屏");
         startBtn.setTextSize(18);
-        startBtn.setOnClickListener(v -> begin());
+        startBtn.setOnClickListener(new android.view.View.OnClickListener() {
+            @Override public void onClick(android.view.View v) { begin(); }
+        });
         root.addView(startBtn);
         stopBtn = new Button(this);
         stopBtn.setText("停止投屏");
-        stopBtn.setOnClickListener(v -> {
-            stopService(new Intent(this, CastService.class));
-            setStatus("已停止");
+        stopBtn.setOnClickListener(new android.view.View.OnClickListener() {
+            @Override public void onClick(android.view.View v) {
+                stopService(new Intent(MainActivity.this, CastService.class));
+                setStatus("已停止");
+            }
         });
         root.addView(stopBtn);
 
@@ -114,7 +115,11 @@ public class MainActivity extends Activity {
         tip.setPadding(0, dp(24), 0, 0);
         root.addView(tip);
         setContentView(root);
-        CastService.listener = s -> ui.post(() -> setStatus(s));
+        CastService.listener = new CastService.Listener() {
+            @Override public void on(final String s) {
+                ui.post(new Runnable() { @Override public void run() { setStatus(s); } });
+            }
+        };
         handleIntent(getIntent());
     }
 
@@ -145,27 +150,43 @@ public class MainActivity extends Activity {
         server = SERVERS[Math.min(idx, SERVERS.length - 1)];
         getSharedPreferences("fla", MODE_PRIVATE).edit().putInt("server", idx).apply();
         setStatus("正在查找电脑…");
-        new Thread(() -> {
-            try {
-                JSONObject p = get(server + "/api/remote/pair/" + code);
-                sid = p.getString("session_id");
-                lanUrls.clear();
+        new Thread(new Runnable() {
+            @Override public void run() {
                 try {
-                    JSONObject info = get(server + "/api/remote/" + sid + "/info?code=" + code);
-                    JSONArray lan = info.optJSONArray("lan");
-                    if (lan != null) for (int k = 0; k < lan.length(); k++) lanUrls.add(lan.getString(k));
-                } catch (Exception ignored) { }
-                ui.post(this::askCapture);
-            } catch (Exception e) {
-                ui.post(() -> setStatus("配对码无效或网络不通：请确认电脑已打开「手机投屏」面板\n(" + e.getMessage() + ")"));
+                    JSONObject p = get(server + "/api/remote/pair/" + code);
+                    sid = p.getString("session_id");
+                    lanUrls.clear();
+                    try {
+                        JSONObject info = get(server + "/api/remote/" + sid + "/info?code=" + code);
+                        JSONArray lan = info.optJSONArray("lan");
+                        if (lan != null) for (int k = 0; k < lan.length(); k++) lanUrls.add(lan.getString(k));
+                    } catch (Exception ignored) { }
+                    ui.post(new Runnable() { @Override public void run() { askCapture(); } });
+                } catch (final Exception e) {
+                    ui.post(new Runnable() { @Override public void run() {
+                        setStatus("配对码无效或网络不通：请确认电脑已打开「手机投屏」面板\n(" + e.getMessage() + ")");
+                    } });
+                }
             }
         }).start();
     }
 
     JSONObject get(String url) throws Exception {
-        try (Response r = http.newCall(new Request.Builder().url(url).header("User-Agent", "FLA-Android/1.0").build()).execute()) {
-            if (!r.isSuccessful()) throw new Exception("HTTP " + r.code());
-            return new JSONObject(r.body().string());
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(8000);
+        c.setReadTimeout(10000);
+        c.setRequestProperty("User-Agent", "FLA-Android/1.0");
+        try {
+            int code = c.getResponseCode();
+            if (code != 200) throw new Exception("HTTP " + code);
+            InputStream in = c.getInputStream();
+            ByteArrayOutputStream b = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
+            return new JSONObject(new String(b.toByteArray(), "UTF-8"));
+        } finally {
+            c.disconnect();
         }
     }
 

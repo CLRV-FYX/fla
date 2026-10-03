@@ -7,3 +7,4 @@ pypdf>=4.0
 python-pptx>=1.0
 matplotlib>=3.8
 qrcode>=7.4.2
+cryptography>=41  # 可选: iOS 描述文件签名

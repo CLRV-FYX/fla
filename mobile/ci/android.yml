@@ -1,5 +1,5 @@
 # 复制到仓库 .github/workflows/android.yml 即可启用 (沙箱无 workflow 推送权限, 需在 GitHub 网页上手动新建)
-# 每次 mobile/android 有改动: 自动编译签名好的 APK, 提交到 mobile/bin/FLA.apk, 服务器 run.sh pull 后网站即可下载
+# 每次 mobile/android 有改动: 自动编译签名好的 APK, 提交到 desktop/bin/FLA-cast.apk, 服务器 run.sh pull 后网站即可下载
 name: Android APK
 on:
   push:
@@ -22,11 +22,11 @@ jobs:
         run: gradle assembleRelease --no-daemon
       - name: Commit APK
         run: |
-          cp mobile/android/app/build/outputs/apk/release/app-release.apk mobile/bin/FLA.apk
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk desktop/bin/FLA-cast.apk
           git config user.name "fla-bot"
           git config user.email "fla-bot@users.noreply.github.com"
-          git add mobile/bin/FLA.apk
+          git add desktop/bin/FLA-cast.apk
           git commit -m "android: 自动构建 FLA.apk [skip ci]" || exit 0
           git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}"
       - uses: actions/upload-artifact@v4
-        with: { name: FLA-apk, path: mobile/bin/FLA.apk }
+        with: { name: FLA-apk, path: desktop/bin/FLA-cast.apk }
