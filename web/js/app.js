@@ -130,6 +130,7 @@ function route() {
   if (parts[0] === 'remote') {
     if (window.Remote) return window.Remote.view();
   }
+  if (parts[0] === 'mobile') return viewMobileCenter();
   if (!App.user) {
     if (parts[0] === 'login') return viewLogin();
     if (parts[0] === 'register') return viewRegister();
@@ -452,6 +453,7 @@ function shell(content, active) {
       '<nav class="nav">' +
         '<a class="' + (active === 'library' ? 'on' : '') + '" href="#/library">' + UI.icon('folder', 15) + ' 课件库</a>' +
         '<a class="' + (active === 'desktop' ? 'on' : '') + '" href="#/desktop">' + UI.icon('laptop', 15) + ' 桌面端中心</a>' +
+        '<a href="#/mobile">' + UI.icon('mobile', 15) + ' 手机端中心</a>' +
         '<a class="' + (active === 'chat' ? 'on' : '') + '" href="#/chat">' + UI.icon('chat', 15) +
           ' 聊天<i class="nav-badge hidden" id="chat-badge"></i></a>' +
         '<a class="' + (active === 'forum' ? 'on' : '') + '" href="#/forum">' + UI.icon('forum', 15) + ' 论坛</a>' +
@@ -1118,18 +1120,111 @@ function mobileDownloadSection() {
     '<h3 style="margin:0;font-size:18px;">' + title + '</h3><div style="font-size:13.5px;color:var(--ink2,#444);line-height:1.7;flex:1;">' + body + '</div>' + btn + '</div>';
   return '<section class="home-section" id="mobile-dl" style="max-width:1100px;margin:40px auto;padding:0 20px;">' +
     '<h2 style="text-align:center;margin-bottom:6px;">手机端</h2>' +
-    '<p style="text-align:center;color:var(--mut,#777);margin-bottom:22px;">手机整屏实时投到电脑大屏 · 手机观看电脑并批注</p>' +
+    '<p style="text-align:center;color:var(--mut,#777);margin-bottom:22px;">手机整屏实时投到电脑大屏 · 手机观看电脑并批注 · <a href="#/mobile" style="font-weight:600;">进入手机端中心 →</a></p>' +
     '<div style="display:flex;gap:16px;flex-wrap:wrap;">' +
     card('安卓 / 鸿蒙 4.x 及以下（Android 7+）',
-      '安装「FLA 投屏」App，输入电脑上的 4 位配对码，<b>整个手机屏幕</b>实时投到电脑（PPT、相册、任何 App）。<br>同一 Wi-Fi 自动直连，延迟最低。<br><span style="color:var(--mut,#888)">安装时如提示“未知来源”，请选择“允许本次安装”。</span>',
+      '安装「FLA 手机端」App，<b>扫电脑上的二维码</b>或输入 4 位配对码，<b>整个手机屏幕</b>实时投到电脑（PPT、相册、任何 App）。<br>同一 Wi-Fi 自动直连，延迟最低。<br><span style="color:var(--mut,#888)">安装时如提示“未知来源”，请选择“允许本次安装”。</span>',
       '<a class="btn primary" href="/api/app/android" id="apk-dl">' + UI.icon('download', 16) + ' 下载安卓 APK</a>') +
     card('iPhone / iPad',
-      '点下方按钮下载<b>描述文件</b> → 打开「设置」顶部「已下载描述文件」→ 安装，主屏即出现全屏的「FLA 投屏」图标，像 App 一样用（摄像头/照片投屏、观看电脑屏幕并批注）。<br><span style="color:var(--mut,#888)">请用 Safari 打开本页再点；可随时在 设置-通用-VPN与设备管理 删除。iOS 不允许第三方 App 录制整个屏幕推流，整屏请用控制中心「屏幕镜像」。</span>',
+      '点下方按钮下载<b>描述文件</b> → 打开「设置」顶部「已下载描述文件」→ 安装，主屏即出现全屏的「FLA 投屏」图标，像 App 一样用（摄像头/照片投屏、观看电脑屏幕并批注）。<br><span style="color:var(--mut,#888)">请用 Safari 打开本页再点；可随时在 设置-通用-VPN与设备管理 删除。</span>',
       '<a class="btn primary" href="/api/app/ios.mobileconfig">' + UI.icon('download', 16) + ' 安装 iOS 描述文件</a><a class="btn" href="/cast.html" style="margin-top:6px;">直接打开网页版</a>') +
     card('鸿蒙 NEXT（纯血鸿蒙 5.x）',
       '纯血鸿蒙也能装安卓 App：在华为应用市场搜索并安装<b>「卓易通」</b>（或「出境易」），打开后添加/导入上面下载的 <b>FLA-cast.apk</b> 即可运行。<br>不想装也可直接用网页版（扫码即用，功能同 iPhone）。',
       '<a class="btn primary" href="/api/app/android">' + UI.icon('download', 16) + ' 下载 APK（卓易通中安装）</a><a class="btn" href="/cast.html" style="margin-top:6px;">打开网页版</a>') +
     '</div></section>';
+}
+
+/* ================================================================
+ *  9b. 手机端中心 (公开页面, 无需登录)
+ * ================================================================ */
+function viewMobileCenter() {
+  document.title = '手机端中心 - FLA';
+  const origin = location.origin;
+  const qr = UI.qrSvgString(origin + '/api/app/get', 184);
+  const wx = /[?&]wx=1/.test(location.hash) || /MicroMessenger| QQ\//i.test(navigator.userAgent);
+  const ua = navigator.userAgent, isIOS = /iPhone|iPad/i.test(ua), isAnd = /Android|Harmony/i.test(ua);
+  const css = '<style>' +
+    '.mc{min-height:100vh;background:#0b0b0c;color:#f5f5f7;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}' +
+    '.mc a{color:inherit;text-decoration:none}' +
+    '.mc-top{max-width:1120px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:18px 22px}' +
+    '.mc-top .b{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px}' +
+    '.mc-top .b i{width:34px;height:34px;border-radius:10px;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;letter-spacing:-.5px}' +
+    '.mc-top nav{display:flex;gap:18px;font-size:14px;color:#a1a1a8}.mc-top nav a:hover{color:#fff}' +
+    '.mc-hero{max-width:1120px;margin:0 auto;padding:46px 22px 30px;display:flex;gap:40px;align-items:center;flex-wrap:wrap}' +
+    '.mc-hero .l{flex:1;min-width:300px}' +
+    '.mc-tag{display:inline-flex;gap:8px;align-items:center;padding:6px 12px;border:1px solid rgba(255,255,255,.12);border-radius:99px;font-size:12.5px;color:#a1a1a8}' +
+    '.mc-hero h1{font-size:46px;line-height:1.12;margin:18px 0 14px;letter-spacing:-.5px}' +
+    '.mc-hero h1 span{color:#8b8b93}' +
+    '.mc-hero p{color:#a1a1a8;font-size:16px;line-height:1.75;max-width:560px}' +
+    '.mc-btns{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}' +
+    '.mc-btn{display:inline-flex;align-items:center;gap:9px;padding:14px 22px;border-radius:14px;background:#1d1d20;border:1px solid rgba(255,255,255,.1);font-weight:600;font-size:15px}' +
+    '.mc-btn:hover{background:#26262a}.mc-btn.w{background:#fff;color:#000;border-color:#fff}.mc-btn.w:hover{background:#e8e8ea}' +
+    '.mc-btn small{font-weight:400;opacity:.65;font-size:12px}' +
+    '.mc-qr{background:#fff;color:#000;border-radius:24px;padding:22px 22px 16px;text-align:center;box-shadow:0 30px 80px rgba(255,255,255,.07)}' +
+    '.mc-qr b{display:block;margin-top:10px;font-size:15px}.mc-qr span{font-size:12.5px;color:#666}' +
+    '.mc-sec{max-width:1120px;margin:0 auto;padding:34px 22px}' +
+    '.mc-sec h2{font-size:28px;margin:0 0 6px}.mc-sec .s{color:#8b8b93;margin:0 0 22px}' +
+    '.mc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}' +
+    '.mc-card{background:#151518;border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:22px}' +
+    '.mc-card .ic{width:44px;height:44px;border-radius:13px;background:#232327;display:flex;align-items:center;justify-content:center;margin-bottom:14px}' +
+    '.mc-card h3{margin:0 0 6px;font-size:17px}.mc-card p{margin:0;color:#9a9aa2;font-size:13.5px;line-height:1.7}' +
+    '.mc-card .act{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}' +
+    '.mc-card .act a{padding:9px 14px;border-radius:11px;background:#232327;font-size:13.5px;font-weight:600}.mc-card .act a.w{background:#fff;color:#000}' +
+    '.mc-steps{counter-reset:s;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}' +
+    '.mc-steps div{background:#151518;border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:22px 22px 22px 66px;position:relative;color:#b5b5bb;font-size:14px;line-height:1.7}' +
+    '.mc-steps div:before{counter-increment:s;content:counter(s);position:absolute;left:20px;top:20px;width:32px;height:32px;border-radius:50%;background:#fff;color:#000;font-weight:800;display:flex;align-items:center;justify-content:center}' +
+    '.mc-steps b{color:#fff;display:block;font-size:15px}' +
+    '.mc-faq details{background:#151518;border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px 20px;margin-bottom:10px}' +
+    '.mc-faq summary{cursor:pointer;font-weight:600}.mc-faq p{color:#9a9aa2;font-size:14px;line-height:1.75;margin:10px 0 0}' +
+    '.mc-wx{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99;display:flex;justify-content:flex-end;padding:20px;color:#fff;font-size:17px;line-height:1.7;text-align:right}' +
+    '.mc-foot{text-align:center;color:#55555c;font-size:12.5px;padding:40px 0 50px}' +
+    '@media(max-width:640px){.mc-hero h1{font-size:34px}.mc-top nav{display:none}.mc-qr{display:none}}' +
+    '</style>';
+  const ic = (n) => UI.icon(n, 22);
+  const andBtn = '<a class="mc-btn w" href="/api/app/android">' + UI.icon('download', 18) + ' 下载安卓 App <small id="mc-apk">Android 7+</small></a>';
+  const iosBtn = '<a class="mc-btn' + (isIOS ? ' w' : '') + '" href="/api/app/ios.mobileconfig">' + UI.icon('download', 18) + ' 安装到 iPhone 主屏</a>';
+  const webBtn = '<a class="mc-btn" href="/cast.html">打开网页版</a>';
+  $('#app').innerHTML = css + '<div class="mc">' +
+    (wx ? '<div class="mc-wx" onclick="this.remove()"><div>点右上角 <b>···</b><br>选择「在浏览器中打开」<br>才能下载安装 ↗</div></div>' : '') +
+    '<div class="mc-top"><a class="b" href="#/home"><i>FLA</i>手机端中心</a><nav><a href="#/home">官网首页</a><a href="#/desktop">桌面端中心</a><a href="/cast.html">网页版</a><a href="#mc-faq">常见问题</a></nav></div>' +
+    '<section class="mc-hero"><div class="l">' +
+      '<span class="mc-tag"><span style="width:7px;height:7px;border-radius:50%;background:#34c759"></span> 扫码即连 · 同一 Wi-Fi 自动直连</span>' +
+      '<h1>手机，就是你的<br>第二块讲台<span>。</span></h1>' +
+      '<p>整个手机屏幕实时投到教室大屏；在手机上高清观看电脑画面，直接批注、翻页、激光笔指点；摄像头秒变实物展台。</p>' +
+      '<div class="mc-btns">' + (isIOS ? iosBtn + webBtn : andBtn + iosBtn) + '</div>' +
+    '</div>' +
+    '<div class="mc-qr">' + (qr || '<div style="width:184px;height:184px;display:flex;align-items:center;justify-content:center">二维码加载失败</div>') +
+      '<b>手机扫码下载</b><span>自动识别 安卓 / 鸿蒙 / iPhone</span></div>' +
+    '</section>' +
+    '<section class="mc-sec"><h2>能做什么</h2><p class="s">一个 App 搞定课堂上所有手机与电脑的互动</p><div class="mc-grid">' +
+      '<div class="mc-card"><div class="ic">' + ic('mobile') + '</div><h3>整屏投到电脑</h3><p>PPT、相册、视频、任何 App 实时显示在大屏，不依赖学校的无线投屏设备，有网就能用。</p></div>' +
+      '<div class="mc-card"><div class="ic">' + ic('laptop') + '</div><h3>高清观看电脑</h3><p>电脑画面静止时自动补发原画质，双指放大看清小字，走到教室后排也能操作。</p></div>' +
+      '<div class="mc-card"><div class="ic">' + ic('edit') + '</div><h3>手机批注 · 遥控翻页</h3><p>画笔、荧光笔、激光笔、橡皮，笔迹实时出现在电脑上；上一页/下一页/黑屏/白板一键操作。</p></div>' +
+      '<div class="mc-card"><div class="ic">' + ic('image') + '</div><h3>实物展台</h3><p>摄像头实时投屏展示作业与实验，或拍一张高清照片发到大屏。</p></div>' +
+    '</div></section>' +
+    '<section class="mc-sec"><h2>下载安装</h2><p class="s">按你的手机系统选择</p><div class="mc-grid">' +
+      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>安卓 / 鸿蒙 4.x 及以下</h3><p>安装「FLA 手机端」App（约 100 KB）。功能最全：<b>整屏投屏</b> + 扫码连接 + 观看批注。安装时提示“未知来源”请选择允许。</p><div class="act"><a class="w" href="/api/app/android">下载 APK</a></div></div>' +
+      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>鸿蒙 NEXT（纯血鸿蒙 5.x）</h3><p>在华为应用市场安装<b>「卓易通」</b>（或「出境易」），在其中导入 FLA-cast.apk 即可运行全部功能。</p><div class="act"><a class="w" href="/api/app/android">下载 APK</a><a href="/cast.html">网页版</a></div></div>' +
+      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>iPhone / iPad</h3><p>用 Safari 打开本页 → 安装描述文件 → 「设置」顶部「已下载描述文件」→ 安装。主屏出现全屏「FLA 投屏」，支持扫码、观看批注、摄像头/照片投屏。</p><div class="act"><a class="w" href="/api/app/ios.mobileconfig">安装描述文件</a><a href="/cast.html">网页版</a></div></div>' +
+    '</div></section>' +
+    '<section class="mc-sec"><h2>三步连接</h2><p class="s">第一次用也只要十秒</p><div class="mc-steps">' +
+      '<div><b>电脑端打开「手机」</b>FLA 桌面端工具栏点「手机」，屏幕上出现二维码和 4 位配对码。</div>' +
+      '<div><b>手机扫码</b>打开 FLA 手机端点「扫码连接」（或用系统相机扫码），也可直接输入配对码。</div>' +
+      '<div><b>开始互动</b>「观看电脑」里批注翻页；「投屏到电脑」里一键整屏投屏或摄像头投屏。</div>' +
+    '</div></section>' +
+    '<section class="mc-sec mc-faq" id="mc-faq"><h2>常见问题</h2><p class="s"></p>' +
+      '<details><summary>整屏投屏需要学校有无线投屏设备吗？</summary><p>不需要。安卓 App 自己录制屏幕，通过网络（同一 Wi-Fi 时局域网直连，否则经服务器中转）发到电脑上的 FLA，学校网络只要能上网即可。</p></details>' +
+      '<details><summary>iPhone 能整屏投屏吗？</summary><p>苹果只允许经 App Store / 开发者签名的原生 App 录制整个屏幕（ReplayKit 广播扩展），网页和描述文件做不到。iPhone 目前支持：扫码连接、高清观看电脑并批注翻页、摄像头/照片投屏。</p></details>' +
+      '<details><summary>观看电脑画面不够清晰？</summary><p>新版电脑端在画面静止时会自动补发一帧原画质；手机上双指放大、双击还原。同一 Wi-Fi 下走局域网直连，清晰度和流畅度最高。</p></details>' +
+      '<details><summary>微信里点下载没反应？</summary><p>微信/QQ 会拦截安装包下载，请点右上角「···」→「在浏览器中打开」。</p></details>' +
+    '</section>' +
+    '<div class="mc-foot">© ' + new Date().getFullYear() + ' FLA · <a href="#/home">返回官网</a></div>' +
+  '</div>';
+  fetch('/api/app/info').then(r => r.json()).then(d => {
+    const el = document.getElementById('mc-apk');
+    if (el && d.android && d.android.size) el.textContent = 'v' + (d.android.version || '') + ' · ' + Math.max(1, Math.round(d.android.size / 1024)) + ' KB';
+  }).catch(() => { });
+  window.scrollTo(0, 0);
 }
 
 async function viewDesktopCenter() {
@@ -1272,6 +1367,7 @@ function viewHome() {
           '<div class="home-nav-links">' +
             '<a href="#features" class="home-link" id="nav-features-link">核心功能</a>' +
             '<a href="#/desktop" class="home-link">桌面端中心</a>' +
+            '<a href="#/mobile" class="home-link">手机端中心</a>' +
             '<a href="#/remote" class="home-link">手机遥控</a>' +
             navUserSection +
           '</div>' +
@@ -1363,7 +1459,7 @@ function viewHome() {
             '<a href="#/desktop">桌面端中心</a>' +
             '<a href="#/remote">手机遥控</a>' +
             '<a href="/api/desktop/download">客户端下载</a>' +
-            '<a href="#mobile-dl" onclick="var e=document.getElementById(\'mobile-dl\');if(e){e.scrollIntoView({behavior:\'smooth\'});}return false;">手机端下载</a>' +
+            '<a href="#/mobile">手机端中心</a>' +
           '</div>' +
         '</div>' +
       '</footer>' +

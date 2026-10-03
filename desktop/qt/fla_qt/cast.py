@@ -139,8 +139,8 @@ class CastPanel(_Card):
         self.code.setFixedHeight(32)
         lay.addWidget(self.code)
         hint = BodyLabel("① 手机看电脑：扫码后手机实时显示电脑桌面/PPT，在手机上画，电脑桌面同步出现笔迹\n"
-                         "② 手机拍摄投到电脑：扫码后切到「投屏到电脑」，摄像头/照片直接显示在电脑上\n"
-                         "③ 手机整屏镜像到电脑：点下方按钮，用手机自带的「无线投屏」连接本电脑")
+                         "② 手机投到电脑：安卓装「FLA 手机端」App 可整屏投屏（PPT/相册/任何 App）；\n"
+                         "    iPhone/鸿蒙用网页版投摄像头/照片")
         hint.setWordWrap(True)
         lay.addWidget(hint)
         self.state = CaptionLabel("")
@@ -153,10 +153,7 @@ class CastPanel(_Card):
         row.addWidget(self.view_btn)
         row.addWidget(self.stop_btn)
         lay.addLayout(row)
-        self.mirror_btn = PushButton(FIF.PROJECTOR, "手机整屏镜像到电脑（无线投屏）")
-        self.mirror_btn.clicked.connect(ctl.open_mirror)
-        lay.addWidget(self.mirror_btn)
-        self.apk = CaptionLabel("安卓手机整屏投屏：在网站「下载」页安装 FLA 投屏 App，输入配对码即可")
+        self.apk = CaptionLabel("手机端 App 下载：网站首页 → 手机端中心（App 内可直接扫上方二维码连接）")
         self.apk.setWordWrap(True)
         self.apk.setFixedWidth(300)
         lay.addWidget(self.apk)
@@ -183,6 +180,8 @@ class CastController(QObject):
         self.uploading = False
         self.last_hash = ""
         self.last_upload = 0.0
+        self.changed_at = 0.0
+        self.hq_hash = None
         self.panel = CastPanel(self)
         self.phone_view = PhoneView(self.hide_phone)
         stage.add_floating(self.panel)
@@ -334,14 +333,24 @@ class CastController(QObject):
         self.stage.ov.paint_ink(p, scale)
         p.end()
         lan = self.link.has_lan_viewer()
-        maxw, q = (1600, 65) if lan else (1280, 50)
-        if pm.width() > maxw:
-            pm = pm.scaledToWidth(maxw, Qt.SmoothTransformation if lan else Qt.FastTransformation)
-        # 变化检测: 64px 缩略图哈希, 比整帧 JPEG 便宜得多
-        thumb = pm.scaledToWidth(64).toImage()
+        # 变化检测: 缩略图哈希, 比整帧 JPEG 便宜得多
+        thumb = pm.scaledToWidth(160, Qt.FastTransformation).toImage()
         h = hashlib.md5(bytes(thumb.constBits().asstring(thumb.byteCount()))).hexdigest()
-        if h == self.last_hash and now - self.last_upload < 3:
-            return
+        if h != self.last_hash:
+            self.changed_at, self.hq_hash = now, None
+        hq = False
+        if h == self.last_hash:
+            # 画面静止 0.35s → 补发一帧高清 (原分辨率/高质量), 手机端文字清晰; 之后不再重复发
+            if self.hq_hash != h and now - self.changed_at > 0.35:
+                hq = True
+            elif now - self.last_upload < 3:
+                return
+        if hq:
+            maxw, q = 2560, 88
+        else:
+            maxw, q = (1920, 75) if lan else (1600, 62)
+        if pm.width() > maxw:
+            pm = pm.scaledToWidth(maxw, Qt.SmoothTransformation)
         ba = QByteArray()
         buf = QBuffer(ba)
         buf.open(QIODevice.WriteOnly)
@@ -351,6 +360,8 @@ class CastController(QObject):
         if sent:
             self.last_hash = h
             self.last_upload = now
+            if hq:
+                self.hq_hash = h
         if http_due:
             # 兜底: 手机若没连上 WebSocket, 仍可通过 HTTP 拉取 (慢速)
             self.last_hash = h

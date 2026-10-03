@@ -109,3 +109,17 @@ def ios_profile(request: Request):
     base = f"{proto.split(',')[0].strip()}://{host.split(',')[0].strip()}"
     return Response(_sign(_profile(base)), media_type="application/x-apple-aspen-config",
                     headers={"Content-Disposition": 'attachment; filename="FLA.mobileconfig"', "Cache-Control": "no-cache"})
+
+
+@router.get("/get")
+def smart_get(request: Request):
+    """手机端中心二维码: 按系统自动跳转 (安卓/鸿蒙 → APK, iPhone/iPad → 描述文件, 其他 → 网页版)"""
+    from fastapi.responses import RedirectResponse
+    ua = (request.headers.get("user-agent") or "").lower()
+    if "micromessenger" in ua or " qq/" in ua:      # 微信/QQ 内置浏览器拦截下载 → 引导用浏览器打开
+        return RedirectResponse("/#/mobile?wx=1", status_code=302)
+    if "iphone" in ua or "ipad" in ua or ("macintosh" in ua and "mobile" in ua):
+        return RedirectResponse("/api/app/ios.mobileconfig", status_code=302)
+    if "android" in ua or "harmony" in ua or "openharmony" in ua:
+        return RedirectResponse("/api/app/android", status_code=302)
+    return RedirectResponse("/cast.html", status_code=302)

@@ -11,8 +11,10 @@ from server.desktop_dist import ensure_desktop_exe
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
 
-CURRENT_VERSION = "3.3.0"
+CURRENT_VERSION = "3.4.0"
 CHANGELOG = [
+    "v3.4.0: 手机观看电脑更清晰: 画面静止时自动补发原画质高清帧, 运动时分辨率/质量也提高",
+    "v3.4.0: 手机投屏面板去掉无线投屏(Miracast), 改为 FLA 手机端 App 整屏投屏; App 可直接扫面板二维码连接",
     "v3.3.0: 投屏大幅降延迟: WebSocket 实时推送 + 端到端流控(不堆积旧帧), 同一 Wi-Fi 下手机与电脑直连不绕服务器",
     "v3.3.0: 新增安卓「FLA 投屏」App, 整个手机屏幕实时投到电脑; 网站首页新增手机端下载",
     "v3.2.0: 自动识别 PowerPoint/WPS 放映，切换为 PPT 专用工具栏，画布按幻灯片页保存，翻页播放动画",
