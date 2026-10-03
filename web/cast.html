@@ -311,6 +311,7 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
     img.onload = function () {
       if (url) URL.revokeObjectURL(url); url = u; $('wait').style.display = 'none';
       if (img.naturalWidth !== fit.w || img.naturalHeight !== fit.h) { fit.w = img.naturalWidth; fit.h = img.naturalHeight; fit(); }
+      if (clearAt && !cur && Date.now() > clearAt) { clearAt = 0; drawLocal(); }
       done();
     };
     img.onerror = function () { URL.revokeObjectURL(u); done(); };
@@ -405,7 +406,7 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
     var r = ink.getBoundingClientRect();
     return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))];
   }
-  var cur = null, buf = [], flushT = null, lastLaser = 0, lastErase = 0;
+  var clearAt = 0, cur = null, buf = [], flushT = null, lastLaser = 0, lastErase = 0;
   function flush(end) {
     if (!cur) return;
     if (buf.length || end) action('ink', { id: cur.id, tool: cur.tool, color: cur.color, w: cur.w, pts: buf, end: !!end });
@@ -442,7 +443,7 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
   function up() {
     if (!cur) return;
     clearInterval(flushT); flush(true);
-    cur = null; setTimeout(drawLocal, 1600);   // 留 1.6s 本地笔迹, 等电脑画面带回
+    cur = null; clearAt = Date.now() + 700; setTimeout(drawLocal, 2500);   // 电脑画面带回笔迹后即清掉本地预览 (避免看到两条线)
   }
   ink.addEventListener('pointerup', up); ink.addEventListener('pointercancel', up);
 

@@ -397,8 +397,11 @@ class Overlay(QWidget):
 
     # ---- 手机端批注 (坐标为 0~1 归一化)
     def _np(self, xy):
-        g = self.geometry() if self.isVisible() else _screen_rect()
-        return QPointF(float(xy[0]) * g.width(), float(xy[1]) * g.height())
+        """手机看到的是整块主屏截图 → 归一化坐标按主屏换算, 再转成本窗口坐标
+        (PPT 模式下本窗口只覆盖放映区域, 不能直接按窗口大小换算, 否则位置错开)"""
+        sr = _screen_rect()
+        g = self.area or _screen_rect()
+        return QPointF(sr.x() + float(xy[0]) * sr.width() - g.x(), sr.y() + float(xy[1]) * sr.height() - g.y())
 
     def remote_ink(self, d: dict):
         sid = str(d.get("id") or "")

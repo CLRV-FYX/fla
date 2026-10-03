@@ -12,7 +12,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from PyQt5.QtCore import QBuffer, QByteArray, QIODevice, QObject, Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import QBuffer, QByteArray, QIODevice, QObject, QRectF, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QImage, QPainter, QPixmap
 from PyQt5.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import FluentIcon as FIF
@@ -325,12 +325,22 @@ class CastController(QObject):
         if pm.isNull():
             return
         geo = _screen_rect()
+        scr = QApplication.primaryScreen()
+        dpr = scr.devicePixelRatio() or 1.0
+        # 多显示器(扩展到投影仪)时 grabWindow(0) 可能是整个虚拟桌面 → 只裁主屏, 与手机坐标一致
+        vg = scr.virtualGeometry()
+        if pm.width() > geo.width() * dpr + 2 or pm.height() > geo.height() * dpr + 2:
+            pm = pm.copy(int((geo.x() - vg.x()) * dpr), int((geo.y() - vg.y()) * dpr),
+                         int(geo.width() * dpr), int(geo.height() * dpr))
         scale = pm.width() / max(1, geo.width())
+        ov = self.stage.ov
+        og = ov.area or geo                     # 笔迹坐标相对批注窗口 (PPT 模式 = 放映区域)
         p = QPainter(pm)
         p.setRenderHint(QPainter.Antialiasing)
-        if self.stage.ov.board:
-            p.fillRect(pm.rect(), QColor("#FFFFFF"))
-        self.stage.ov.paint_ink(p, scale)
+        if ov.board:
+            p.fillRect(QRectF((og.x() - geo.x()) * scale, (og.y() - geo.y()) * scale, og.width() * scale, og.height() * scale), QColor("#FFFFFF"))
+        p.translate((og.x() - geo.x()) * scale, (og.y() - geo.y()) * scale)
+        ov.paint_ink(p, scale)
         p.end()
         lan = self.link.has_lan_viewer()
         # 变化检测: 缩略图哈希, 比整帧 JPEG 便宜得多
