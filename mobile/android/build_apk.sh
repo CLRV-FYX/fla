@@ -1,25 +1,17 @@
 #!/usr/bin/env bash
 # 无 Gradle / 无 Android SDK 的 APK 构建 (沙箱只能连 PyPI / npm / github.com 时使用)
-# 工具链 (放在 $T, 默认 /tmp/apktools):
-#   java     : PyPI jdk4py 自带的 JRE
-#   javac    : npm dataslope-tools-jar (OpenJDK8 tools.jar)
-#   aapt2    : npm aaptjs3 (linux x64 预编译)
-#   d8       : npm d8-termux 的 dex 版 → google/enjarify 转回 JVM 字节码 (见 prepare_tools)
-#   apksigner: github MuntashirAkon/apksig-android 源码编译 (+ android.util.Base64/os.Build 垫片)
-#   android.jar: github Sable/android-platforms (android-34 链接, android-28 编译)
+# 工具链: 先运行 mobile/android/prep_tools.sh (只需 PyPI + npm)
 # 用法: bash mobile/android/build_apk.sh   产物: desktop/bin/FLA-cast.apk
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 T="${T:-/tmp/apktools}"
+[ -f "$T/d8.jar" ] || bash "$HERE/prep_tools.sh"
 JAVA="$T/jre/bin/java"
-JC="$JAVA -cp $T/tools.jar com.sun.tools.javac.Main"
-D8="$JAVA -XX:+UnlockDiagnosticVMOptions -XX:-BytecodeVerificationRemote -XX:-BytecodeVerificationLocal -cp $T/d8/c1.jar:$T/d8/c2.jar:$T/d8/c3.jar com.android.tools.r8.D8"
-SIGN="$JAVA -cp $T/apksig com.android.apksigner.ApkSignerTool"
-A34="$T/android-34.jar"; A28="$T/android-28.jar"
-for f in "$JAVA" "$T/tools.jar" "$T/aapt2" "$A34" "$A28" "$T/d8/c1.jar" "$T/apksig/com/android/apksigner/ApkSignerTool.class"; do
-  [ -e "$f" ] || { echo "缺少工具: $f (先准备工具链, 见文件头注释)"; exit 1; }
-done
+JC="$JAVA -jar $T/ecj.jar"
+D8="$JAVA -cp $T/d8.jar com.android.tools.r8.D8"
+SIGN="$JAVA --enable-native-access=ALL-UNNAMED -jar $T/apksigner.jar"
+A34="$T/android.jar"
 
 APP="$HERE/app/src/main"
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
@@ -36,7 +28,7 @@ sed 's#<manifest xmlns:android="http://schemas.android.com/apk/res/android">#<ma
 
 # 2. Java → class → dex
 mkdir -p "$W/cls" "$W/dex"
-$JC -nowarn -source 8 -target 8 -encoding UTF-8 -bootclasspath "$A34" -d "$W/cls" $(find "$APP/java" -name "*.java")
+$JC -nowarn -source 1.8 -target 1.8 -encoding UTF-8 -bootclasspath "$A34" -d "$W/cls" $(find "$APP/java" -name "*.java")
 $D8 --release --lib "$A34" --min-api 24 --output "$W/dex" $(find "$W/cls" -name "*.class")
 
 # 3. 合并 + 4 字节对齐 (resources.arsc 必须不压缩且对齐)
