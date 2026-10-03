@@ -1137,6 +1137,56 @@ function mobileDownloadSection() {
 /* ================================================================
  *  9b. 手机端中心 (公开页面, 无需登录)
  * ================================================================ */
+/* iOS 安装向导: 按系统版本给出「免电脑、免证书」的可行路线 (TrollStore 永久安装, 不需要签名、不会掉签) */
+function iosGuide() {
+  const ua = navigator.userAgent;
+  const m = /OS (\d+)_(\d+)(?:_(\d+))?/.exec(ua);
+  const v = m ? [+m[1], +m[2], +(m[3] || 0)] : null;
+  const ver = v ? v.join('.') : '';
+  const le = (a, b) => { for (let i = 0; i < 3; i++) { if (a[i] !== b[i]) return a[i] < b[i]; } return true; };
+  const ipa = location.origin + '/api/app/ios.ipa';
+  const magnet = 'apple-magnifier://install?url=' + encodeURIComponent(ipa);
+  let tier = 'unknown';
+  if (v) {
+    if (v[0] < 14) tier = 'old';
+    else if (le(v, [15, 4, 99])) tier = 'ota';       // 14.0 – 15.4.x: Safari 直接装 TrollStore, 全程无电脑
+    else if (v[0] === 16 && v[1] >= 7) tier = 'none';  // 16.7 正式版起已修复
+    else if (le(v, [17, 0, 0])) tier = 'pc';         // 15.5 – 17.0: TrollStore 可装, 但首次需要电脑
+    else tier = 'none';                              // 17.0.1+: 苹果已修复漏洞
+  }
+  const step = (n, t) => '<div><b>' + n + '</b>' + t + '</div>';
+  const install =
+    step('安装 FLA', '在 TrollStore 设置里打开「URL Scheme」后，回到本页点下方「一键安装到 TrollStore」；或点「下载 IPA」→ 分享 → 用 TrollStore 打开 → Install。永久有效，不掉签、不用证书。') ;
+  const btns = '<div class="mc-btns"><a class="mc-btn w" href="' + magnet + '">一键安装到 TrollStore</a><a class="mc-btn" href="/api/app/ios.ipa">下载 IPA</a></div>';
+  let body = '';
+  if (tier === 'ota') {
+    body = '<p class="s">你的系统 iOS ' + ver + ' 支持<b>免电脑、免证书、永久安装</b>（TrollStore）。只需做一次：</p><div class="mc-steps">' +
+      step('安装 TrollStore 助手', '用 Safari 打开 <a href="https://api.jailbreaks.app/troll" style="text-decoration:underline">api.jailbreaks.app/troll</a>（iOS 14 的 A12 及更新机型用 <a href="https://api.jailbreaks.app/troll64e" style="text-decoration:underline">troll64e</a>），弹窗点「安装」，桌面出现「GTA Car Tracker」（不出现就重启手机）。') +
+      step('装好 TrollStore', '打开 GTA Car Tracker → Install TrollStore，桌面出现 TrollStore。') +
+      install + '</div>' + btns;
+  } else if (tier === 'pc') {
+    body = '<p class="s">你的系统 iOS ' + ver + ' 可以永久安装（TrollStore），但<b>第一次</b>需要信息老师用电脑帮忙装一次 TrollStore（TrollInstallerX），之后所有更新都在手机上点一下完成。</p><div class="mc-steps">' +
+      step('电脑装 TrollStore（一次）', '按 B站/网上「TrollInstallerX 安装 TrollStore」教程操作（iOS 17.0 用 TrollRestore）。') +
+      install + '</div>' + btns;
+  } else if (tier === 'none') {
+    body = '<p class="s">你的系统 iOS ' + ver + ' 已被苹果修复漏洞，<b>不存在</b>既不用电脑、又不用证书的正规安装方式。</p>' +
+      '<div class="mc-grid">' +
+      '<div class="mc-card"><h3>现在就能用：免安装版</h3><p>安装描述文件，主屏出现「FLA 投屏」：扫码、观看电脑并批注、摄像头/照片投屏（没有整屏投屏）。</p><div class="act"><a class="w" href="/api/app/ios.mobileconfig">安装描述文件</a></div></div>' +
+      '<div class="mc-card"><h3>根本解决：TestFlight</h3><p>学校/开发者开通苹果开发者账号（688 元/年）后，老师只需从 App Store 装「TestFlight」，点邀请链接即可安装完整版，<b>不用电脑、不用证书、所有 iOS 版本都能用</b>。</p></div>' +
+      '<div class="mc-card"><h3>关于 B站「共享证书」方法</h3><p>那类方法（轻松签/全能签 + 网上公开的企业证书）用的是别人泄露的证书：随时被苹果吊销导致 App 闪退，签名工具还能往 App 里注入代码，不建议用在教师手机上，所以本站不提供。</p></div>' +
+      '</div>';
+  } else if (tier === 'old') {
+    body = '<p class="s">iOS ' + ver + ' 版本过低，请使用网页版。</p>';
+  } else {
+    body = '<p class="s">请用 iPhone / iPad 的 Safari 打开本页，会自动显示适合你系统版本的安装方法。</p><div class="mc-grid">' +
+      '<div class="mc-card"><h3>iOS 14.0 – 15.4.1</h3><p>免电脑、免证书、永久安装：Safari 打开 api.jailbreaks.app/troll 装 TrollStore，再一键安装 FLA。</p></div>' +
+      '<div class="mc-card"><h3>iOS 15.5 – 17.0</h3><p>首次需电脑装 TrollStore（TrollInstallerX），之后永久免签。</p></div>' +
+      '<div class="mc-card"><h3>iOS 17.0.1 及以上</h3><p>无免证书方法：先用免安装版（描述文件）；开通开发者账号后可走 TestFlight。</p></div>' +
+      '</div>';
+  }
+  return '<section class="mc-sec" id="mc-ios-guide"><h2>iPhone 完整版安装（整屏投屏）</h2>' + body + '</section>';
+}
+
 function viewMobileCenter() {
   document.title = '手机端中心 - FLA';
   const origin = location.origin;
@@ -1186,7 +1236,7 @@ function viewMobileCenter() {
   const webBtn = '<a class="mc-btn" href="/cast.html">打开网页版</a>';
   $('#app').innerHTML = css + '<div class="mc">' +
     (wx ? '<div class="mc-wx" onclick="this.remove()"><div>点右上角 <b>···</b><br>选择「在浏览器中打开」<br>才能下载安装 ↗</div></div>' : '') +
-    '<div class="mc-top"><a class="b" href="#/home"><i>FLA</i>手机端中心</a><nav><a href="#/home">官网首页</a><a href="#/desktop">桌面端中心</a><a href="/cast.html">网页版</a><a href="#mc-faq">常见问题</a></nav></div>' +
+    '<div class="mc-top"><a class="b" href="#/home"><i>FLA</i>手机端中心</a><nav><a href="#/home">官网首页</a><a href="#/desktop">桌面端中心</a><a href="/cast.html">网页版</a><a href="#mc-faq" onclick="document.getElementById(\'mc-faq\').scrollIntoView({behavior:\'smooth\'});return false;">常见问题</a></nav></div>' +
     '<section class="mc-hero"><div class="l">' +
       '<span class="mc-tag"><span style="width:7px;height:7px;border-radius:50%;background:#34c759"></span> 扫码即连 · 同一 Wi-Fi 自动直连</span>' +
       '<h1>手机，就是你的<br>第二块讲台<span>。</span></h1>' +
@@ -1205,9 +1255,10 @@ function viewMobileCenter() {
     '<section class="mc-sec"><h2>下载安装</h2><p class="s">按你的手机系统选择</p><div class="mc-grid">' +
       '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>安卓 / 鸿蒙 4.x 及以下</h3><p>安装「FLA 手机端」App（约 100 KB）。功能最全：<b>整屏投屏</b> + 扫码连接 + 观看批注。安装时提示“未知来源”请选择允许。</p><div class="act"><a class="w" href="/api/app/android">下载 APK</a></div></div>' +
       '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>鸿蒙 NEXT（纯血鸿蒙 5.x）</h3><p>在华为应用市场安装<b>「卓易通」</b>（或「出境易」），在其中导入 FLA-cast.apk 即可运行全部功能。</p><div class="act"><a class="w" href="/api/app/android">下载 APK</a><a href="/cast.html">网页版</a></div></div>' +
-      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>iPhone / iPad · 完整版 App</h3><p>支持<b>整屏投屏</b>（系统录屏直播到电脑）+ 原生扫码 + 观看批注。苹果不允许网站直接安装，下载 IPA 后用<b>爱思助手「IPA 签名」</b>、Sideloadly（免费 Apple ID）或 TrollStore 安装；免费 Apple ID 签名 7 天需重签一次。</p><div class="act"><a class="w" href="/api/app/ios.ipa">下载 IPA</a></div></div>' +
+      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>iPhone / iPad · 完整版 App</h3><p>支持<b>整屏投屏</b>。iOS 14 – 15.4 可免电脑、免证书永久安装（TrollStore）；用 iPhone 的 Safari 打开本页会按系统版本显示方法。</p><div class="act"><a class="w" href="#mc-ios-guide" onclick="document.getElementById(\'mc-ios-guide\').scrollIntoView({behavior:\'smooth\'});return false;">查看安装方法</a><a href="/api/app/ios.ipa">下载 IPA</a></div></div>' +
       '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>iPhone / iPad · 免安装版</h3><p>Safari 打开本页 → 安装描述文件 → 「设置」顶部「已下载描述文件」→ 安装。主屏出现「FLA 投屏」：扫码、观看批注、摄像头/照片投屏（不含整屏投屏）。</p><div class="act"><a class="w" href="/api/app/ios.mobileconfig">安装描述文件</a><a href="/cast.html">网页版</a></div></div>' +
     '</div></section>' +
+    iosGuide() +
     '<section class="mc-sec"><h2>三步连接</h2><p class="s">第一次用也只要十秒</p><div class="mc-steps">' +
       '<div><b>电脑端打开「手机」</b>FLA 桌面端工具栏点「手机」，屏幕上出现二维码和 4 位配对码。</div>' +
       '<div><b>手机扫码</b>打开 FLA 手机端点「扫码连接」（或用系统相机扫码），也可直接输入配对码。</div>' +
@@ -1215,7 +1266,7 @@ function viewMobileCenter() {
     '</div></section>' +
     '<section class="mc-sec mc-faq" id="mc-faq"><h2>常见问题</h2><p class="s"></p>' +
       '<details><summary>整屏投屏需要学校有无线投屏设备吗？</summary><p>不需要。安卓 App 自己录制屏幕，通过网络（同一 Wi-Fi 时局域网直连，否则经服务器中转）发到电脑上的 FLA，学校网络只要能上网即可。</p></details>' +
-      '<details><summary>iPhone 怎么整屏投屏？</summary><p>安装「完整版 App」（IPA，需自签名）→ 扫码连接电脑 →「投屏到电脑」→「整个手机屏幕投到电脑」→ 在系统面板选「FLA 投屏」点「开始直播」。之后切到任何 App 都会实时显示在电脑上；点左上角红色计时条可停止。也可从控制中心长按「屏幕录制」选择 FLA 投屏。</p></details>' +
+      '<details><summary>iPhone 怎么整屏投屏？</summary><p>按上方「iPhone 完整版安装」装好 App → 扫码连接电脑 →「投屏到电脑」→「整个手机屏幕投到电脑」→ 在系统面板选「FLA 投屏」点「开始直播」。之后切到任何 App 都会实时显示在电脑上；点左上角红色计时条可停止。也可从控制中心长按「屏幕录制」选择 FLA 投屏。</p></details>' +
       '<details><summary>App 会自动更新吗？</summary><p>安卓 App 每次打开自动检查新版本并在后台下载，下载完弹窗一键安装；电脑端同样每次启动自动下载新版，可立即重启或退出时自动安装。iOS 版界面随网站自动更新。</p></details>' +
       '<details><summary>观看电脑画面不够清晰？</summary><p>新版电脑端在画面静止时会自动补发一帧原画质；手机上双指放大、双击还原。同一 Wi-Fi 下走局域网直连，清晰度和流畅度最高。</p></details>' +
       '<details><summary>微信里点下载没反应？</summary><p>微信/QQ 会拦截安装包下载，请点右上角「···」→「在浏览器中打开」。</p></details>' +
