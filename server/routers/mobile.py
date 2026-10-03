@@ -17,7 +17,10 @@ router = APIRouter(prefix="/api/app", tags=["mobile"])
 ROOT = Path(__file__).resolve().parents[2]
 APK = ROOT / "desktop" / "bin" / "FLA-cast.apk"
 ICON = ROOT / "mobile" / "android" / "app" / "src" / "main" / "res" / "mipmap-xxhdpi" / "ic_launcher.png"
-APK_VERSION = "1.1.0"
+APK_VERSION = "1.2.0"
+APK_CODE = 3            # 与 mobile/android/app/build.gradle versionCode 一致, App 据此自动更新
+IPA = ROOT / "desktop" / "bin" / "FLA-ios.ipa"
+IPA_VERSION = "1.0.0"
 
 
 @router.get("/info")
@@ -25,8 +28,10 @@ def app_info():
     ok = APK.exists() and APK.stat().st_size > 10000
     return {
         "android": {"available": ok, "url": "/api/app/android", "size": APK.stat().st_size if ok else 0,
-                    "version": APK_VERSION},
-        "ios": {"available": True, "profile": "/api/app/ios.mobileconfig", "web": "/cast.html"},
+                    "version": APK_VERSION, "code": APK_CODE},
+        "ios": {"available": True, "profile": "/api/app/ios.mobileconfig", "web": "/cast.html",
+                "ipa": "/api/app/ios.ipa" if IPA.exists() else "", "ipa_version": IPA_VERSION,
+                "ipa_size": IPA.stat().st_size if IPA.exists() else 0},
         "harmony": {"web": "/cast.html", "hint": "纯血鸿蒙(HarmonyOS NEXT)请用「卓易通」或「出境易」安装安卓包"},
     }
 
@@ -37,6 +42,14 @@ def download_apk():
         raise HTTPException(404, "安卓安装包尚未构建，请稍后再试")
     return FileResponse(str(APK), filename="FLA-cast.apk", media_type="application/vnd.android.package-archive",
                         headers={"Content-Disposition": 'attachment; filename="FLA-cast.apk"', "Cache-Control": "no-cache"})
+
+
+@router.get("/ios.ipa")
+def download_ipa():
+    if not IPA.exists():
+        raise HTTPException(404, "iOS 安装包尚未构建")
+    return FileResponse(str(IPA), filename="FLA-ios.ipa", media_type="application/octet-stream",
+                        headers={"Content-Disposition": 'attachment; filename="FLA-ios.ipa"', "Cache-Control": "no-cache"})
 
 
 def _esc(s: str) -> str:

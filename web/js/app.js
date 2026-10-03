@@ -1205,7 +1205,8 @@ function viewMobileCenter() {
     '<section class="mc-sec"><h2>下载安装</h2><p class="s">按你的手机系统选择</p><div class="mc-grid">' +
       '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>安卓 / 鸿蒙 4.x 及以下</h3><p>安装「FLA 手机端」App（约 100 KB）。功能最全：<b>整屏投屏</b> + 扫码连接 + 观看批注。安装时提示“未知来源”请选择允许。</p><div class="act"><a class="w" href="/api/app/android">下载 APK</a></div></div>' +
       '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>鸿蒙 NEXT（纯血鸿蒙 5.x）</h3><p>在华为应用市场安装<b>「卓易通」</b>（或「出境易」），在其中导入 FLA-cast.apk 即可运行全部功能。</p><div class="act"><a class="w" href="/api/app/android">下载 APK</a><a href="/cast.html">网页版</a></div></div>' +
-      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>iPhone / iPad</h3><p>用 Safari 打开本页 → 安装描述文件 → 「设置」顶部「已下载描述文件」→ 安装。主屏出现全屏「FLA 投屏」，支持扫码、观看批注、摄像头/照片投屏。</p><div class="act"><a class="w" href="/api/app/ios.mobileconfig">安装描述文件</a><a href="/cast.html">网页版</a></div></div>' +
+      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>iPhone / iPad · 完整版 App</h3><p>支持<b>整屏投屏</b>（系统录屏直播到电脑）+ 原生扫码 + 观看批注。苹果不允许网站直接安装，下载 IPA 后用<b>爱思助手「IPA 签名」</b>、Sideloadly（免费 Apple ID）或 TrollStore 安装；免费 Apple ID 签名 7 天需重签一次。</p><div class="act"><a class="w" href="/api/app/ios.ipa">下载 IPA</a></div></div>' +
+      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>iPhone / iPad · 免安装版</h3><p>Safari 打开本页 → 安装描述文件 → 「设置」顶部「已下载描述文件」→ 安装。主屏出现「FLA 投屏」：扫码、观看批注、摄像头/照片投屏（不含整屏投屏）。</p><div class="act"><a class="w" href="/api/app/ios.mobileconfig">安装描述文件</a><a href="/cast.html">网页版</a></div></div>' +
     '</div></section>' +
     '<section class="mc-sec"><h2>三步连接</h2><p class="s">第一次用也只要十秒</p><div class="mc-steps">' +
       '<div><b>电脑端打开「手机」</b>FLA 桌面端工具栏点「手机」，屏幕上出现二维码和 4 位配对码。</div>' +
@@ -1214,7 +1215,8 @@ function viewMobileCenter() {
     '</div></section>' +
     '<section class="mc-sec mc-faq" id="mc-faq"><h2>常见问题</h2><p class="s"></p>' +
       '<details><summary>整屏投屏需要学校有无线投屏设备吗？</summary><p>不需要。安卓 App 自己录制屏幕，通过网络（同一 Wi-Fi 时局域网直连，否则经服务器中转）发到电脑上的 FLA，学校网络只要能上网即可。</p></details>' +
-      '<details><summary>iPhone 能整屏投屏吗？</summary><p>苹果只允许经 App Store / 开发者签名的原生 App 录制整个屏幕（ReplayKit 广播扩展），网页和描述文件做不到。iPhone 目前支持：扫码连接、高清观看电脑并批注翻页、摄像头/照片投屏。</p></details>' +
+      '<details><summary>iPhone 怎么整屏投屏？</summary><p>安装「完整版 App」（IPA，需自签名）→ 扫码连接电脑 →「投屏到电脑」→「整个手机屏幕投到电脑」→ 在系统面板选「FLA 投屏」点「开始直播」。之后切到任何 App 都会实时显示在电脑上；点左上角红色计时条可停止。也可从控制中心长按「屏幕录制」选择 FLA 投屏。</p></details>' +
+      '<details><summary>App 会自动更新吗？</summary><p>安卓 App 每次打开自动检查新版本并在后台下载，下载完弹窗一键安装；电脑端同样每次启动自动下载新版，可立即重启或退出时自动安装。iOS 版界面随网站自动更新。</p></details>' +
       '<details><summary>观看电脑画面不够清晰？</summary><p>新版电脑端在画面静止时会自动补发一帧原画质；手机上双指放大、双击还原。同一 Wi-Fi 下走局域网直连，清晰度和流畅度最高。</p></details>' +
       '<details><summary>微信里点下载没反应？</summary><p>微信/QQ 会拦截安装包下载，请点右上角「···」→「在浏览器中打开」。</p></details>' +
     '</section>' +

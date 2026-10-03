@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-VERSION = "3.4.0"
+VERSION = "3.4.1"
 APP_NAME = "FLA 课堂助手"
 DEFAULT_SERVER = "https://t.clrv.top"
 SERVERS = [("https://t.clrv.top", "t.clrv.top（主线路）"), ("https://t.fyx.best", "t.fyx.best（备用线路）")]
@@ -145,6 +145,8 @@ def download(url: str, dest: str, token: str = "", progress=None, timeout: float
                 got += len(chunk)
                 if progress:
                     progress(got, total)
+        if total and got != total:
+            raise IOError("下载不完整")
         os.replace(tmp, dest)
         return True
     except Exception:
@@ -322,8 +324,8 @@ def parse_protocol(arg: str) -> dict | None:
 
 
 # ------------------------------------------------------------------ 自更新
-def apply_update(new_exe: str) -> bool:
-    """用下载好的新 exe 替换自身并重启 (Windows 允许重命名运行中的 exe)"""
+def apply_update(new_exe: str, restart: bool = True) -> bool:
+    """用下载好的新 exe 替换自身 (Windows 允许重命名运行中的 exe); restart=False 用于退出时静默安装"""
     if not (IS_WIN and (BUNDLED or getattr(sys, "frozen", False))):
         return False
     cur = exe_path()
@@ -343,7 +345,8 @@ def apply_update(new_exe: str) -> bool:
         except Exception:
             pass
         return False
-    subprocess.Popen([cur], close_fds=True)
+    if restart:
+        subprocess.Popen([cur], close_fds=True)
     return True
 
 

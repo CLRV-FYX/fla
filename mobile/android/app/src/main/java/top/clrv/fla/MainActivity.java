@@ -42,7 +42,9 @@ import java.util.ArrayList;
  */
 public class MainActivity extends Activity {
     static final String HOME = "https://app.fla/home.html";
-    static final String VERSION = "1.1.0";
+    static final String VERSION = "1.2.0";
+    static final int VERSION_CODE = 3;
+    static final String[] SERVERS = {"https://t.clrv.top", "https://t.fyx.best"};
     static final int REQ_CAPTURE = 7, REQ_CAM = 8, REQ_FILE = 9;
 
     WebView web;
@@ -160,6 +162,88 @@ public class MainActivity extends Activity {
         Intent i = getIntent();
         if (i != null && i.getData() != null && "fla".equals(i.getData().getScheme())) handleUri(i.getData());
         else web.loadUrl(HOME);
+        ui.postDelayed(new Runnable() { @Override public void run() { checkUpdate(); } }, 1500);
+    }
+
+    // ================= 自动更新: 每次打开检查 → 后台下载 → 下载好后弹窗安装 =================
+    boolean updating;
+    void checkUpdate() {
+        if (updating) return;
+        updating = true;
+        new Thread(new Runnable() { @Override public void run() {
+            try {
+                JSONObject info = null;
+                String base = null;
+                for (String s : SERVERS) {
+                    try { info = get(s + "/api/app/info"); base = s; break; } catch (Exception ignored) { }
+                }
+                if (info == null) return;
+                JSONObject a = info.optJSONObject("android");
+                if (a == null || !a.optBoolean("available")) return;
+                int code = a.optInt("code", 0);
+                final String ver = a.optString("version", "");
+                if (code <= VERSION_CODE) return;
+                long size = a.optLong("size", 0);
+                java.io.File f = UpdateProvider.apkFile(MainActivity.this);
+                java.io.File part = new java.io.File(getCacheDir(), "update.part");
+                HttpURLConnection c = (HttpURLConnection) new URL(base + a.optString("url", "/api/app/android")).openConnection();
+                c.setConnectTimeout(10000);
+                c.setReadTimeout(30000);
+                c.setRequestProperty("User-Agent", "FLA-Android/" + VERSION);
+                if (c.getResponseCode() != 200) return;
+                InputStream in = c.getInputStream();
+                java.io.FileOutputStream out = new java.io.FileOutputStream(part);
+                byte[] buf = new byte[16384];
+                long got = 0;
+                int n;
+                while ((n = in.read(buf)) > 0) { out.write(buf, 0, n); got += n; }
+                out.close();
+                in.close();
+                c.disconnect();
+                if (size > 0 && got != size) { part.delete(); return; }
+                f.delete();
+                if (!part.renameTo(f)) return;
+                ui.post(new Runnable() { @Override public void run() { askInstall(ver); } });
+            } catch (Exception ignored) {
+            } finally {
+                updating = false;
+            }
+        } }).start();
+    }
+
+    void askInstall(String ver) {
+        if (isFinishing()) return;
+        new AlertDialog.Builder(this).setTitle("新版本已下载")
+            .setMessage("FLA 手机端 v" + ver + " 已下载完成（当前 v" + VERSION + "），现在安装？")
+            .setPositiveButton("立即安装", new android.content.DialogInterface.OnClickListener() {
+                @Override public void onClick(android.content.DialogInterface d, int w) { install(); }
+            })
+            .setNegativeButton("稍后", null).show();
+    }
+
+    void install() {
+        if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+            toastJs("请允许「FLA 手机端」安装应用，返回后再点安装");
+            try {
+                startActivity(new Intent("android.settings.MANAGE_UNKNOWN_APP_SOURCES", Uri.parse("package:" + getPackageName())));
+            } catch (Exception ignored) { }
+            pendingInstall = true;
+            return;
+        }
+        Intent i = new Intent(Intent.ACTION_VIEW);
+        i.setDataAndType(Uri.parse("content://" + UpdateProvider.AUTH + "/update.apk"), "application/vnd.android.package-archive");
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        try { startActivity(i); } catch (Exception e) { toastJs("无法打开安装器：" + e.getMessage()); }
+    }
+
+    boolean pendingInstall;
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (pendingInstall && UpdateProvider.apkFile(this).exists()) {
+            pendingInstall = false;
+            if (Build.VERSION.SDK_INT < 26 || getPackageManager().canRequestPackageInstalls()) install();
+        }
     }
 
     @Override

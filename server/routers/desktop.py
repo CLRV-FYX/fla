@@ -11,8 +11,11 @@ from server.desktop_dist import ensure_desktop_exe
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
 
-CURRENT_VERSION = "3.4.0"
+CURRENT_VERSION = "3.4.1"
 CHANGELOG = [
+    "v3.4.1: 修复手机批注与电脑显示位置不一致/出现两条线 (PPT 放映区域、多显示器、缩放屏幕)",
+    "v3.4.1: 自动更新: 每次启动自动检查并在后台下载新版, 可立即重启或退出时自动安装",
+    "v3.4.1: 支持 iPhone 整屏投屏 (FLA iOS App, 系统录屏直播到电脑)",
     "v3.4.0: 手机观看电脑更清晰: 画面静止时自动补发原画质高清帧, 运动时分辨率/质量也提高",
     "v3.4.0: 手机投屏面板去掉无线投屏(Miracast), 改为 FLA 手机端 App 整屏投屏; App 可直接扫面板二维码连接",
     "v3.3.0: 投屏大幅降延迟: WebSocket 实时推送 + 端到端流控(不堆积旧帧), 同一 Wi-Fi 下手机与电脑直连不绕服务器",

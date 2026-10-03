@@ -408,6 +408,10 @@ class MainWindow(FluentWindow):
             e.accept()
 
     def quit_app(self):
+        pend = getattr(self, "pending_update", None)
+        if pend and os.path.exists(pend):
+            core.apply_update(pend, restart=False)      # 「稍后」的更新: 退出时静默安装, 下次打开即新版
+            self.pending_update = None
         if self.cast.active:
             self.cast.stop()
         self.stage.shutdown()
@@ -461,7 +465,7 @@ class MainWindow(FluentWindow):
         _keep.add(sig)
         run_async(work, done)
 
-    # ---- 自更新
+    # ---- 自更新: 每次启动自动检查 → 后台静默下载 → 下载好后询问立即重启; 选「稍后」则退出时自动安装
     def check_update(self, manual=False):
         def done(r):
             st, data = r
@@ -474,30 +478,52 @@ class MainWindow(FluentWindow):
                 if manual:
                     self.toast(f"已是最新版本 v{core.VERSION}")
                 return
-            log = data.get("changelog") or []
-            text = f"发现新版本 v{ver}（当前 v{core.VERSION}）\n\n" + "\n".join(
-                "· " + (x if isinstance(x, str) else str(x)) for x in log[:8]) + "\n\n现在更新吗？"
-            box = MessageBox("发现新版本", text, self)
-            box.yesButton.setText("立即更新")
-            box.cancelButton.setText("稍后")
-            if box.exec():
-                self.do_update(data.get("download_url") or "/api/desktop/download")
+            self.do_update(data.get("download_url") or "/api/desktop/download", ver, data, manual)
         run_async(lambda: core.api("GET", "/api/desktop/version", timeout=10), done)
 
-    def do_update(self, url):
+    def do_update(self, url, ver="", data=None, manual=False):
         if not (core.IS_WIN and (core.BUNDLED or getattr(__import__("sys"), "frozen", False))):
-            webbrowser.open(core.full_url(url))
+            if manual:
+                webbrowser.open(core.full_url(url))
             return
-        self.toast("正在下载新版本，完成后自动重启…")
+        if getattr(self, "_updating", False):
+            return
+        self._updating = True
         dest = core.update_temp_path()
+        if manual:
+            self.toast(f"正在后台下载新版本 v{ver}…")
+
+        def fetch():
+            ok = core.download(url, dest, timeout=60)
+            if ok is True:
+                try:
+                    with open(dest, "rb") as f:
+                        ok = f.read(2) == b"MZ"           # 必须是 Windows 可执行文件
+                    size = int((data or {}).get("size") or 0)
+                    if ok and size and abs(os.path.getsize(dest) - size) > 16:
+                        ok = False
+                except Exception:
+                    ok = False
+            return ok
 
         def done(ok):
-            if ok is True and core.apply_update(dest):
+            self._updating = False
+            if ok is not True:
+                if manual:
+                    self.toast("自动更新下载失败，已为你打开下载页", ok=False)
+                    webbrowser.open(core.full_url(url))
+                return
+            self.pending_update = dest
+            log = (data or {}).get("changelog") or []
+            text = f"新版本 v{ver} 已下载完成（当前 v{core.VERSION}）\n\n" + "\n".join(
+                "· " + (x if isinstance(x, str) else str(x)) for x in log[:6]) + "\n\n立即重启完成更新？选择「稍后」将在退出 FLA 时自动安装。"
+            box = MessageBox("更新已就绪", text, self)
+            box.yesButton.setText("立即重启")
+            box.cancelButton.setText("稍后")
+            if box.exec() and core.apply_update(dest):
+                self.pending_update = None
                 self.quit_app()
-            else:
-                self.toast("自动更新失败，已为你打开下载页", ok=False)
-                webbrowser.open(core.full_url(url))
-        run_async(lambda: core.download(url, dest, timeout=60), done)
+        run_async(fetch, done)
 
 
 class _Progress(QObject):
