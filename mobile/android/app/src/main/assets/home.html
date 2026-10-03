@@ -111,7 +111,16 @@ h1{font-size:26px;margin:18px 0 4px}
   var st = null, raf = 0, cvs = document.createElement('canvas'), cx = cvs.getContext('2d', { willReadFrequently: true });
   function close() { cancelAnimationFrame(raf); if (st) st.getTracks().forEach(function (t) { t.stop(); }); st = null; $('scan').style.display = 'none'; }
   $('sx').onclick = close;
+  function handleScan(t) {
+    t = String(t || '').trim(); var u = null;
+    try { u = new URL(t); } catch (e) { }
+    if (u && u.searchParams.get('sid') && u.searchParams.get('code')) { N.vibrate && N.vibrate(); location.href = u.href; return; }
+    if (/^\d{4}$/.test(t)) { pi.value = t; paint(); return; }
+    toast('这不是 FLA 电脑端的二维码');
+  }
+  window.onScan = handleScan;            // iOS: 原生扫码回调
   $('scanBtn').onclick = function () {
+    if (N.scanNative) { N.scanNative(); return; }
     $('scan').style.display = 'block';
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: false }).then(function (s) {
       st = s; var v = $('sv'); v.srcObject = s; v.play(); var last = 0;
@@ -123,10 +132,7 @@ h1{font-size:26px;margin:18px 0 4px}
         cx.drawImage(v, 0, 0, cvs.width, cvs.height);
         var r = jsQR(cx.getImageData(0, 0, cvs.width, cvs.height).data, cvs.width, cvs.height, { inversionAttempts: 'dontInvert' });
         if (!r || !r.data) return;
-        var t = r.data.trim(), u = null;
-        try { u = new URL(t); } catch (e) { }
-        if (u && u.searchParams.get('sid') && u.searchParams.get('code')) { close(); N.vibrate && N.vibrate(); location.href = u.href; return; }
-        if (/^\d{4}$/.test(t)) { close(); pi.value = t; paint(); }
+        close(); handleScan(r.data);
       })(0);
     }).catch(function () { close(); toast('无法打开相机，请在系统设置中允许 FLA 使用相机'); });
   };

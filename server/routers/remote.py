@@ -51,6 +51,31 @@ def cleanup_expired():
         SESSIONS.pop(k, None)
 
 
+# ---- iOS 整屏投屏: 广播扩展(ReplayKit)没有界面, 按设备 identifierForVendor 取主 App 登记的会话
+IOS_REG: Dict[str, dict] = {}
+
+
+@router.post("/ios/register")
+def ios_register(body: dict):
+    vid = str(body.get("vid") or "")[:64]
+    sid, code = str(body.get("sid") or ""), str(body.get("code") or "")
+    if len(vid) < 8 or sid not in SESSIONS or SESSIONS[sid].get("code") != code:
+        raise HTTPException(400, "bad request")
+    now = time.time()
+    for k in [k for k, v in IOS_REG.items() if now - v["t"] > 43200]:
+        IOS_REG.pop(k, None)
+    IOS_REG[vid] = {"sid": sid, "code": code, "t": now}
+    return {"ok": True}
+
+
+@router.get("/ios/session")
+def ios_session(vid: str = ""):
+    r = IOS_REG.get(vid)
+    if not r or r["sid"] not in SESSIONS:
+        raise HTTPException(404, "no session")
+    return {"sid": r["sid"], "code": r["code"]}
+
+
 @router.post("/create")
 def create_session(req: CreateSessionReq, request: Request):
     cleanup_expired()
