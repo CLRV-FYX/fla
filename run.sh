@@ -163,11 +163,21 @@ case "${1:-help}" in
       fi
     fi
     if [ "$UPDATED" = "0" ]; then
-      if command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
-        echo "  (通过官方代码包快速同步代码)"
-        curl -sL "https://github.com/CLRV-FYX/fla/archive/refs/heads/${TARGET_BRANCH}.tar.gz" | tar -xz --strip-components=1 && UPDATED=1
-      elif command -v wget >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
-        wget -qO- "https://github.com/CLRV-FYX/fla/archive/refs/heads/${TARGET_BRANCH}.tar.gz" | tar -xz --strip-components=1 && UPDATED=1
+      echo "  (无 git 仓库, 下载代码包)"
+      TGZ=/tmp/fla-src.tgz; rm -f "$TGZ"
+      for U in "https://codeload.github.com/CLRV-FYX/fla/tar.gz/refs/heads/${TARGET_BRANCH}" \
+               "https://github.com/CLRV-FYX/fla/archive/refs/heads/${TARGET_BRANCH}.tar.gz" \
+               "https://gh-proxy.com/https://github.com/CLRV-FYX/fla/archive/refs/heads/${TARGET_BRANCH}.tar.gz"; do
+        echo "  下载: $U"
+        if command -v curl >/dev/null 2>&1; then curl -fL --connect-timeout 15 --max-time 600 -o "$TGZ" "$U" || rm -f "$TGZ"
+        else wget -T 15 -O "$TGZ" "$U" || rm -f "$TGZ"; fi
+        if [ -s "$TGZ" ] && tar -tzf "$TGZ" >/dev/null 2>&1; then break; fi
+        echo "  ✘ 失败, 换下一个地址"; rm -f "$TGZ"
+      done
+      if [ -s "$TGZ" ] && tar -xzf "$TGZ" --strip-components=1; then
+        UPDATED=1
+        echo "  ✔ 代码已更新 ($(grep -oP 'CURRENT_VERSION = "\K[^"]+' server/routers/desktop.py 2>/dev/null))"
+        date '+tgz %Y-%m-%d %H:%M' > server/BUILD
       fi
     fi
     if [ -d .git ]; then
