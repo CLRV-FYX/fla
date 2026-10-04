@@ -78,6 +78,8 @@ class NoCacheStatic(StaticFiles):
         except Exception:
             versioned = False
         r.headers["Cache-Control"] = "public, max-age=31536000, immutable" if versioned else "no-cache"
+        if path.endswith("cast.html"):
+            r.headers["Cache-Control"] = "no-store"   # 主屏「FLA 投屏」必须每次取最新
         return r
 
 
