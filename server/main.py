@@ -16,6 +16,16 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
                    allow_headers=["*"], expose_headers=["Content-Disposition", "Content-Range"])
 
 
+@app.get("/api/version")
+def version():
+    from .routers.desktop import CURRENT_VERSION
+    try:
+        build = open(os.path.join(os.path.dirname(__file__), "BUILD"), encoding="utf-8").read().strip()
+    except Exception:
+        build = ""
+    return {"version": CURRENT_VERSION, "build": build}
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True, "service": "fla"}

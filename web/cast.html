@@ -190,7 +190,6 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
   <button class="x" id="scanClose"><svg class="i"><use href="#i-x"/></svg></button>
 </div>
 <div id="msg"></div>
-<div id="ver" style="position:fixed;right:8px;bottom:calc(4px + env(safe-area-inset-bottom));font-size:10px;opacity:.35;pointer-events:none">v3.4.2-ios</div>
 
 <script>/*__LAN_WS_PORT__*/</script>
 <script>
@@ -673,5 +672,7 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
   pull();
 })();
 </script>
+<div id="flaVer" style="position:fixed;left:0;right:0;bottom:calc(2px + env(safe-area-inset-bottom));text-align:center;font-size:10px;opacity:.4;pointer-events:none;z-index:9999;font-family:system-ui,sans-serif"></div>
+<script>fetch('/api/version').then(function(r){return r.json()}).then(function(d){document.getElementById('flaVer').textContent='FLA v'+d.version+(d.build?' · '+d.build:'')}).catch(function(){});</script>
 </body>
 </html>

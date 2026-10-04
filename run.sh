@@ -154,7 +154,9 @@ case "${1:-help}" in
     echo ">> 同步最新代码 (分支 $TARGET_BRANCH) ..."
     UPDATED=0
     if [ -d .git ] && command -v git >/dev/null 2>&1; then
-      if git fetch origin "$TARGET_BRANCH" 2>/dev/null && git reset --hard "origin/$TARGET_BRANCH" 2>/dev/null; then
+      OLD_C=$(git rev-parse --short HEAD 2>/dev/null)
+      # 注意: 必须用 FETCH_HEAD; origin/<分支> 在单分支克隆里不会更新, 会"假装更新成功"
+      if git fetch origin "$TARGET_BRANCH" 2>/dev/null && git reset --hard FETCH_HEAD 2>/dev/null; then
         UPDATED=1
       elif git fetch https://github.com/CLRV-FYX/fla.git "$TARGET_BRANCH" 2>/dev/null && git reset --hard FETCH_HEAD 2>/dev/null; then
         UPDATED=1
@@ -168,6 +170,11 @@ case "${1:-help}" in
         wget -qO- "https://github.com/CLRV-FYX/fla/archive/refs/heads/${TARGET_BRANCH}.tar.gz" | tar -xz --strip-components=1 && UPDATED=1
       fi
     fi
+    if [ -d .git ]; then
+      echo "  代码版本: ${OLD_C:-?} -> $(git log --oneline -1 2>/dev/null)"
+      git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' > server/BUILD 2>/dev/null || true
+    fi
+    [ "$UPDATED" = "0" ] && echo "  ✘ 代码同步失败 (请检查服务器能否访问 github.com)"
     # 重新 exec 本脚本，防止 bash 内存缓存/文件偏移导致未执行新版指令
     exec bash "$0" apply-update
     ;;

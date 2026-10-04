@@ -36,3 +36,5 @@ skills-lock.json
 desktop/native/FLA_all.c
 desktop/dist/FLA.exe
 web/downloads/FLA.exe
+
+server/BUILD

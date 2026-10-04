@@ -121,5 +121,7 @@ html, body { margin: 0; padding: 0; background: #fafafa; }
   }).catch(function () { window.__flaDeferInit = false; plain(); });
 })();
 </script>
+<div id="flaVer" style="position:fixed;left:0;right:0;bottom:calc(2px + env(safe-area-inset-bottom));text-align:center;font-size:10px;opacity:.4;pointer-events:none;z-index:9999;font-family:system-ui,sans-serif"></div>
+<script>fetch('/api/version').then(function(r){return r.json()}).then(function(d){document.getElementById('flaVer').textContent='FLA v'+d.version+(d.build?' · '+d.build:'')}).catch(function(){});</script>
 </body>
 </html>
