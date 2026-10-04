@@ -104,7 +104,7 @@ def rtmp_bind(sid: str, body: dict, request: Request, code: Optional[str] = Quer
     key = str(body.get("key") or "")
     if not _re.fullmatch(r"[a-z0-9]{12,40}", key):
         raise HTTPException(400, "密钥格式错误")
-    rtmp_ingest.bind(key, sid)
+    rtmp_ingest.bind(key, sid, request.client.host if request.client else "")
     return rtmp_status(key, request)
 
 

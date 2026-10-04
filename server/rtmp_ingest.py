@@ -28,8 +28,14 @@ BINDINGS: dict = {}
 LIVE: dict = {}
 
 
-def bind(key: str, sid: str):
+# 手机公网 IP → 会话 (老师在 PRISM 里只填通用地址时, 按「刚扫码的那台手机的 IP」自动对上电脑)
+IP_BINDINGS: dict = {}
+
+
+def bind(key: str, sid: str, ip: str = ""):
     BINDINGS[key] = {"sid": sid, "t": time.time()}
+    if ip:
+        IP_BINDINGS[ip] = {"sid": sid, "t": time.time(), "key": key}
 
 
 def status(key: str) -> dict:
@@ -274,6 +280,13 @@ class Conn:
         self.dec = None
         self.codec = ""
         self.t0 = time.time()
+        self.app = ""
+        try:
+            self.ip = (w.get_extra_info("peername") or ("",))[0]
+            if self.ip.startswith("::ffff:"):
+                self.ip = self.ip[7:]
+        except Exception:
+            self.ip = ""
 
     async def read(self, n):
         d = await self.r.readexactly(n)
@@ -350,6 +363,10 @@ class Conn:
             return
         name, tid = a[0], a[1] if len(a) > 1 else 0
         if name == "connect":
+            try:
+                self.app = str((a[2] or {}).get("app") or "")
+            except Exception:
+                self.app = ""
             self.send(2, 5, 0, struct.pack(">I", 2500000))
             self.send(2, 6, 0, struct.pack(">IB", 2500000, 2))
             self.send(2, 1, 0, struct.pack(">I", self.out_chunk))
@@ -363,10 +380,17 @@ class Conn:
             else:
                 self.cmd(0, "_result", tid, None, None)
         elif name == "publish":
-            key = str(a[3] if len(a) > 3 else "").split("?")[0].strip("/")
-            if not key or key not in BINDINGS:
+            name_ = str(a[3] if len(a) > 3 else "").split("?")[0].strip("/")
+            cands = [name_] + [x for x in self.app.split("?")[0].split("/") if x]
+            key = next((c for c in cands if c in BINDINGS), None)
+            if not key:
+                # 通用地址: 按手机 IP 找最近 6 小时内扫码的会话
+                ib = IP_BINDINGS.get(self.ip)
+                if ib and time.time() - ib["t"] < 6 * 3600:
+                    key = ib["key"]
+            if not key:
                 self.cmd(1, "onStatus", 0.0, None, {"level": "error", "code": "NetStream.Publish.BadName",
-                                                    "description": "unknown key, scan the QR in FLA first"})
+                                                    "description": "scan the QR in FLA first"})
                 await self.w.drain()
                 raise ConnectionError("bad key")
             self.key = key

@@ -174,6 +174,25 @@ case "${1:-help}" in
   apply-update)
     echo ">> 清理旧中间层容器 (释放 8306 端口归还给 fla 容器) ..."
     docker rm -f nginx 2>/dev/null || true
+    echo ">> 放行 iPhone 整屏投屏端口 ${RTMP_PORT:-1935}/tcp ..."
+    RP="${RTMP_PORT:-1935}"
+    if systemctl is-active firewalld >/dev/null 2>&1; then
+      if ! firewall-cmd --query-port="$RP/tcp" >/dev/null 2>&1; then
+        firewall-cmd --permanent --add-port="$RP/tcp" >/dev/null 2>&1 && firewall-cmd --reload >/dev/null 2>&1
+        # firewalld reload 会清空 docker 的 iptables 规则 → 重启 docker 恢复 (随后容器会被重建)
+        systemctl restart docker 2>/dev/null || true
+        echo "  ✔ firewalld 已放行 $RP/tcp"
+      else
+        echo "  ✔ firewalld 已放行过 $RP/tcp"
+      fi
+    fi
+    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+      ufw allow "$RP/tcp" >/dev/null 2>&1 && echo "  ✔ ufw 已放行 $RP/tcp"
+    fi
+    if command -v iptables >/dev/null 2>&1 && ! iptables -C INPUT -p tcp --dport "$RP" -j ACCEPT 2>/dev/null; then
+      iptables -I INPUT -p tcp --dport "$RP" -j ACCEPT 2>/dev/null && echo "  ✔ iptables 已放行 $RP/tcp"
+    fi
+    echo "  (云服务器还需在控制台「安全组/防火墙」放行 TCP $RP, 脚本无法代劳)"
     echo ">> 重建并拉起 fla 容器 ($PORT->$PORT) ..."
     if [ -n "$DC" ] && [ -f "$CF" ]; then
       $DC $DCP -f "$CF" up -d --remove-orphans --force-recreate

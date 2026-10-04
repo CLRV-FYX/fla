@@ -249,9 +249,8 @@ class CastController(QObject):
             urls = [u["ws"] for u in self.link.lan_urls]
             threading.Thread(target=lambda: self._safe(lambda: _http(
                 "POST", f"/api/remote/{sid}/lan?code={code}", json.dumps({"urls": urls}).encode())), daemon=True).start()
-            self.qr_mode = "lan"
-            self.panel.seg.setCurrentItem("lan")
-            self.set_qr_mode("lan")
+            # 默认二维码走服务器 (任何网络都能扫); 手机与电脑同网时 App/网页会自动改走局域网直连
+            self.panel.seg.setCurrentItem(self.qr_mode)
         else:
             self.panel.seg.setEnabled(False)
         threading.Thread(target=self._poll_loop, args=(gen, sid), daemon=True).start()
