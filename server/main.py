@@ -54,6 +54,12 @@ def _ensure_admin():
 
 
 @app.on_event("startup")
+async def _start_rtmp():
+    from . import rtmp_ingest
+    await rtmp_ingest.start()
+
+
+@app.on_event("startup")
 def startup():
     db.init_db()
     _ensure_admin()

@@ -76,6 +76,38 @@ def ios_session(vid: str = ""):
     return {"sid": r["sid"], "code": r["code"]}
 
 
+# ---- iPhone 整屏投屏 (App Store 推流 App → 内置 RTMP 接收端)
+import re as _re
+
+
+def _rtmp_host(request: Request) -> str:
+    h = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip()
+    return h.rsplit(":", 1)[0] if h.count(":") == 1 else h
+
+
+@router.get("/rtmp/status")
+def rtmp_status(key: str, request: Request):
+    from .. import rtmp_ingest
+    if not _re.fullmatch(r"[a-z0-9]{12,40}", key or ""):
+        raise HTTPException(400, "密钥格式错误")
+    d = rtmp_ingest.status(key)
+    d["url"] = "rtmp://%s:%d/live" % (_rtmp_host(request), rtmp_ingest.RTMP_PORT)
+    d["running"] = rtmp_ingest._server is not None
+    return d
+
+
+@router.post("/{sid}/rtmp-bind")
+def rtmp_bind(sid: str, body: dict, request: Request, code: Optional[str] = Query(None)):
+    """手机扫码连上电脑后, 把老师的个人推流密钥绑定到这台电脑 (之后推流画面自动出现在这台电脑上)"""
+    from .. import rtmp_ingest
+    _auth(sid, code)
+    key = str(body.get("key") or "")
+    if not _re.fullmatch(r"[a-z0-9]{12,40}", key):
+        raise HTTPException(400, "密钥格式错误")
+    rtmp_ingest.bind(key, sid)
+    return rtmp_status(key, request)
+
+
 @router.post("/create")
 def create_session(req: CreateSessionReq, request: Request):
     cleanup_expired()

@@ -9,6 +9,7 @@ services:
     command: ["sh", "-c", "exec uvicorn server.main:app --host 0.0.0.0 --port \"$${PORT:-8306}\" --workers 1 --proxy-headers --forwarded-allow-ips '*'"]
     ports:
       - "${PORT:-8306}:${PORT:-8306}"
+      - "${RTMP_PORT:-1935}:1935"   # iPhone 整屏投屏 (RTMP)
     environment:
       - PORT=${PORT:-8306}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}

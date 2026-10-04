@@ -1171,7 +1171,7 @@ function iosGuide() {
   } else if (tier === 'none') {
     body = '<p class="s">你的系统 iOS ' + ver + ' 已被苹果修复漏洞，<b>不存在</b>既不用电脑、又不用证书的正规安装方式。</p>' +
       '<div class="mc-grid">' +
-      '<div class="mc-card"><h3>现在就能用：免安装版</h3><p>安装描述文件，主屏出现「FLA 投屏」：扫码、观看电脑并批注、摄像头/照片投屏（没有整屏投屏）。</p><div class="act"><a class="w" href="/api/app/ios.mobileconfig">安装描述文件</a></div></div>' +
+      '<div class="mc-card"><h3>推荐：描述文件 + PRISM 整屏投屏</h3><p>① 安装描述文件，主屏出现「FLA 投屏」；② App Store 免费下载「PRISM Live Studio」并注册；③ 在 FLA 投屏里点「整个手机屏幕投到电脑」，按提示复制地址和密钥到 PRISM（只需一次）。之后每节课扫码 → PRISM 开始直播，整屏画面自动上大屏。</p><div class="act"><a class="w" href="/api/app/ios.mobileconfig">安装描述文件</a></div></div>' +
       '<div class="mc-card"><h3>根本解决：TestFlight</h3><p>学校/开发者开通苹果开发者账号（688 元/年）后，老师只需从 App Store 装「TestFlight」，点邀请链接即可安装完整版，<b>不用电脑、不用证书、所有 iOS 版本都能用</b>。</p></div>' +
       '<div class="mc-card"><h3>关于 B站「共享证书」方法</h3><p>那类方法（轻松签/全能签 + 网上公开的企业证书）用的是别人泄露的证书：随时被苹果吊销导致 App 闪退，签名工具还能往 App 里注入代码，不建议用在教师手机上，所以本站不提供。</p></div>' +
       '</div>';

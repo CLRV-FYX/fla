@@ -91,6 +91,16 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
 #scan .t{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 110px);text-align:center;color:#eee;font-size:14px}
 #scan .x{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 34px);transform:translateX(-50%);width:58px;height:58px;border-radius:50%;border:0;background:rgba(255,255,255,.18);color:#fff;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(10px)}
 #msg{position:fixed;top:calc(env(safe-area-inset-top) + 64px);left:50%;transform:translateX(-50%);background:rgba(255,255,255,.96);color:#000;padding:9px 16px;border-radius:12px;display:none;z-index:40;font-size:13.5px;font-weight:500;box-shadow:0 8px 30px rgba(0,0,0,.4);max-width:86vw;text-align:center}
+#iosPane{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center}
+#iosPane.hidden{display:none!important}
+.ip-box{background:var(--card,#1c1c1e);color:inherit;width:100%;max-width:520px;max-height:88vh;overflow:auto;border-radius:20px 20px 0 0;padding:20px 18px calc(18px + env(safe-area-inset-bottom))}
+.ip-box h3{margin:0 0 4px;font-size:19px}.ip-st{color:var(--mut,#999);font-size:13px;margin:0 0 12px}
+.ip-step{display:flex;gap:12px;margin-bottom:14px;font-size:14px;line-height:1.6}
+.ip-step>b{flex:none;width:24px;height:24px;border-radius:50%;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;font-size:13px;margin-top:2px}
+.ip-step small{color:var(--mut,#999);display:block;margin-top:4px}.ip-step .btn{margin-top:6px;display:inline-block;text-decoration:none}
+.ip-kv{display:flex;align-items:center;gap:8px;margin-top:8px;background:var(--card2,#2c2c2e);border-radius:10px;padding:8px 10px}
+.ip-kv span{flex:none;color:var(--mut,#999);font-size:12px}.ip-kv code{flex:1;word-break:break-all;font-size:13px}.ip-kv .btn{margin:0;flex:none;padding:6px 12px}
+#rClose{width:100%;margin-top:4px}
 </style>
 </head>
 <body>
@@ -571,6 +581,57 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
         if (!document.hidden && Date.now() - t < 2500 && confirm('还没有安装 FLA 手机端 App，现在下载？')) location.href = base + '/api/app/android';
       }, 1500);
     };
+  } else if (/iPhone|iPad|Macintosh.*Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform))) {
+    /* iPhone 整屏投屏: App Store 免费推流 App (PRISM Live Studio) 屏幕直播 → 服务器 RTMP → 电脑。
+       个人密钥只生成一次, 填进 PRISM 后永久不变; 每次扫码连接电脑时自动把密钥绑定到这台电脑。 */
+    var RK = localStorage.getItem('fla_rtmp_key');
+    if (!/^[a-z0-9]{12,40}$/.test(RK || '')) {
+      RK = ''; var al = 'abcdefghijkmnpqrstuvwxyz23456789', rb = new Uint8Array(16); crypto.getRandomValues(rb);
+      for (var ri = 0; ri < 16; ri++) RK += al[rb[ri] % al.length];
+      localStorage.setItem('fla_rtmp_key', RK);
+    }
+    var rUrl = 'rtmp://' + location.hostname + ':1935/live', rLive = false;
+    function rBind() {
+      fetch('/api/remote/' + sid + '/rtmp-bind?code=' + code, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: RK }) })
+        .then(function (r) { return r.json(); }).then(function (d) { if (d.url) { rUrl = d.url; $('rUrl').textContent = rUrl; } }).catch(function () { });
+    }
+    function rPoll() {
+      fetch('/api/remote/rtmp/status?key=' + RK).then(function (r) { return r.json(); }).then(function (d) {
+        rLive = !!d.live;
+        $('appBtn').querySelector('b').textContent = rLive ? '正在整屏投屏 ✓' : '整个手机屏幕投到电脑';
+        $('appSub').textContent = rLive ? ('电脑已收到画面' + (d.fps ? '（' + d.fps + ' 帧/秒）' : '') + '，停止请点屏幕顶部红色条') : '用免费 App「PRISM」屏幕直播，首次需设置 1 分钟';
+        $('rState').textContent = rLive ? '● 电脑已收到你的手机画面' : (d.running === false ? '服务器未开启 1935 端口，请联系管理员' : '等待推流…');
+        $('rState').style.color = rLive ? '#34c759' : '';
+      }).catch(function () { });
+    }
+    function cp(t, b) {
+      var ok = function () { var o = b.textContent; b.textContent = '已复制 ✓'; setTimeout(function () { b.textContent = o; }, 1500); };
+      if (navigator.clipboard) navigator.clipboard.writeText(t).then(ok, function () { prompt('长按复制', t); });
+      else prompt('长按复制', t);
+    }
+    var pane = document.createElement('div');
+    pane.id = 'iosPane'; pane.className = 'hidden';
+    pane.innerHTML =
+      '<div class="ip-box"><h3>iPhone 整屏投屏</h3><p class="ip-st" id="rState">等待推流…</p>' +
+      '<div class="ip-step"><b>1</b><div>首次：在 App Store 免费下载 <b>PRISM Live Studio</b> 并注册登录。<br><a class="btn" id="rStore" href="https://apps.apple.com/cn/search?term=PRISM%20Live%20Studio">去 App Store 下载</a></div></div>' +
+      '<div class="ip-step"><b>2</b><div>首次：PRISM 里选「屏幕直播 / Screencast」→「自定义 RTMP（Custom RTMP）」，粘贴下面两项，以后不用再填：' +
+      '<div class="ip-kv"><span>地址</span><code id="rUrl"></code><button class="btn" id="rCpU">复制</button></div>' +
+      '<div class="ip-kv"><span>密钥</span><code id="rKey"></code><button class="btn" id="rCpK">复制</button></div>' +
+      '<small>画质建议 720p / 30 帧 / H.264。密钥是你个人专用，勿外传。</small></div></div>' +
+      '<div class="ip-step"><b>3</b><div>每节课：用本页扫码连上电脑 → 打开 PRISM 点「开始直播」（或 控制中心 长按录屏键 → 选 PRISM → 开始直播）。画面会自动出现在<b>刚扫码的这台电脑</b>上。</div></div>' +
+      '<button class="btn pri" id="rClose">知道了</button></div>';
+    document.body.appendChild(pane);
+    $('rUrl').textContent = rUrl; $('rKey').textContent = RK;
+    $('rCpU').onclick = function () { cp(rUrl, this); };
+    $('rCpK').onclick = function () { cp(RK, this); };
+    $('rStore').onclick = function (e) { e.preventDefault(); location.href = 'itms-apps://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?media=software&term=' + encodeURIComponent('PRISM Live Studio'); };
+    $('rClose').onclick = function () { pane.classList.add('hidden'); };
+    $('appBtn').classList.remove('hidden');
+    $('appSub').textContent = '用免费 App「PRISM」屏幕直播，首次需设置 1 分钟';
+    $('appBtn').onclick = function () { pane.classList.remove('hidden'); rPoll(); };
+    rBind(); rPoll();
+    setInterval(function () { if (!document.hidden) rPoll(); }, 3000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { rBind(); rPoll(); } });
   }
 
   setMode(q.get('tab') === 'cast' ? 'cast' : 'watch');
