@@ -170,7 +170,8 @@ case "${1:-help}" in
                "https://gh-proxy.com/https://github.com/CLRV-FYX/fla/archive/refs/heads/${TARGET_BRANCH}.tar.gz"; do
         echo "  下载: $U"
         if command -v curl >/dev/null 2>&1; then curl -fL --connect-timeout 15 --max-time 600 -o "$TGZ" "$U" || rm -f "$TGZ"
-        else wget -T 15 -O "$TGZ" "$U" || rm -f "$TGZ"; fi
+        elif command -v wget >/dev/null 2>&1; then wget -T 15 -O "$TGZ" "$U" || rm -f "$TGZ"
+        else python3 -c "import sys,urllib.request;urllib.request.urlretrieve(sys.argv[1],sys.argv[2])" "$U" "$TGZ" 2>&1 | tail -1 || rm -f "$TGZ"; fi
         if [ -s "$TGZ" ] && tar -tzf "$TGZ" >/dev/null 2>&1; then break; fi
         echo "  ✘ 失败, 换下一个地址"; rm -f "$TGZ"
       done
