@@ -273,9 +273,9 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
         if (inSession) {
           $('appBtn').querySelector('b').textContent = live ? '正在整屏投屏 ✓' : '整个手机屏幕投到电脑';
           $('appSub').textContent = live ? ('电脑已收到画面' + (d.fps ? '（' + d.fps + ' 帧/秒）' : '') + '，停止请点屏幕顶部红色条')
-            : (localStorage.getItem('fla_rtmp_ok') ? '打开 PRISM 点「开始直播」即可，画面自动到这台电脑' : '首次需在免费 App「PRISM」里粘贴一次地址');
+            : (localStorage.getItem('fla_rtmp_ok') ? '打开推流 App 点「开始直播」（或 控制中心 长按录屏 → 选该 App）即可，画面自动到这台电脑' : '首次需在推流 App 里粘贴一次地址');
         }
-        $('rState').textContent = live ? '● 电脑已收到你的手机画面' : (d.running === false ? '服务器 1935 端口未开启，请联系管理员' : (inSession ? '已绑定这台电脑，等待 PRISM 开始直播…' : '设置完成后，扫码连接电脑即可投屏'));
+        $('rState').textContent = live ? '● 电脑已收到你的手机画面' : (d.running === false ? '服务器 1935 端口未开启，请联系管理员' : (inSession ? '已绑定这台电脑，等待推流 App 开始直播…' : '设置完成后，扫码连接电脑即可投屏'));
         $('rState').style.color = live ? '#34c759' : '';
       }).catch(function () { });
     }
@@ -288,16 +288,16 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
     pane.id = 'iosPane'; pane.className = 'hidden';
     pane.innerHTML =
       '<div class="ip-box"><h3>iPhone 整屏投屏</h3><p class="ip-st" id="rState">…</p>' +
-      '<div class="ip-step"><b>1</b><div>在 App Store 免费下载 <b>PRISM Live Studio</b>，打开并注册登录。<br><a class="btn" id="rStore" href="#">去 App Store 下载</a></div></div>' +
-      '<div class="ip-step"><b>2</b><div>点下面按钮复制地址 → 回到 PRISM：点「屏幕直播 / Screencast」→「自定义 RTMP（Custom RTMP）」→ <b>URL 处粘贴</b>，<b>串流密钥填 1</b> → 保存。<b>只需设置这一次</b>。' +
+      '<div class="ip-step"><b>1</b><div>在 App Store 下载一个支持「<b>屏幕直播 + 自定义 RTMP</b>」的推流 App（如 小熊录屏、Go Live 等；PRISM 已限制中国地区）。<br><a class="btn" id="rStore" href="#">去 App Store 下载</a></div></div>' +
+      '<div class="ip-step"><b>2</b><div>点下面按钮复制地址 → 回到推流 App：选「屏幕直播」→「自定义 RTMP」→ <b>推流地址处粘贴</b>；如果还要求填「密钥 / 串流码」，<b>填 1</b> → 保存。<b>只需设置这一次</b>。' +
       '<div class="ip-kv"><code id="rUrl"></code></div><button class="btn pri" id="rCpU" style="width:100%;margin-top:8px">复制地址</button>' +
       '<small>画质建议 720p · 30 帧。地址含你的个人密钥，请勿外传。</small></div></div>' +
-      '<div class="ip-step"><b>3</b><div>以后每节课：用「FLA 投屏」扫电脑上的码 → 打开 PRISM 点「开始直播」。画面自动出现在<b>刚扫码的这台电脑</b>上，换教室也不用改设置。</div></div>' +
+      '<div class="ip-step"><b>3</b><div>以后每节课：用「FLA 投屏」扫电脑上的码 → 打开推流 App 点「开始直播」（或 控制中心 长按录屏 → 选该 App）。画面自动出现在<b>刚扫码的这台电脑</b>上，换教室也不用改设置。</div></div>' +
       '<button class="btn" id="rClose" style="width:100%">关闭</button></div>';
     document.body.appendChild(pane);
     $('rUrl').textContent = rUrl;
     $('rCpU').onclick = function () { cp(rUrl, this); };
-    $('rStore').onclick = function (e) { e.preventDefault(); location.href = 'itms-apps://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?media=software&term=' + encodeURIComponent('PRISM Live Studio'); };
+    $('rStore').onclick = function (e) { e.preventDefault(); location.href = 'itms-apps://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?media=software&term=' + encodeURIComponent('RTMP 推流 录屏直播'); };
     $('rClose').onclick = function () { pane.classList.add('hidden'); };
     function openPane() { pane.classList.remove('hidden'); rPoll(); }
     if (inSession) {
