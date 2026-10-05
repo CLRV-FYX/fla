@@ -626,6 +626,18 @@ fi
 for F in deploy/docker-compose.yml deploy/docker-compose.lite.yml deploy/docker-compose.direct.yml; do
   [ -f "$F" ] && try $DC -f "$F" --profile full --profile ds down --remove-orphans
 done
+# ---- docker 容器内 DNS 自检: 失败则给 docker 配置公共 DNS (常见: 宿主机 resolv.conf 指向 127.0.0.53) ----
+if ! timeout 25 docker run --rm python:3.11-slim-bookworm python -c "import socket;socket.gethostbyname('deb.debian.org')" >/dev/null 2>&1; then
+  log "  容器内 DNS 解析失败, 为 docker 配置公共 DNS (223.5.5.5 / 8.8.8.8) ..."
+  if [ ! -s /etc/docker/daemon.json ]; then
+    mkdir -p /etc/docker && echo '{"dns": ["223.5.5.5", "119.29.29.29", "8.8.8.8"]}' > /etc/docker/daemon.json
+    systemctl restart docker && sleep 3
+  elif ! grep -q '"dns"' /etc/docker/daemon.json; then
+    python3 - <<'PY' 2>/dev/null && systemctl restart docker && sleep 3
+import json; p="/etc/docker/daemon.json"; d=json.load(open(p)); d["dns"]=["223.5.5.5","119.29.29.29","8.8.8.8"]; json.dump(d,open(p,"w"),indent=2)
+PY
+  fi
+fi
 echo "$COMPOSE_FILE" > deploy/.compose_file
 echo "$PROFILE" > deploy/.compose_profile
 
