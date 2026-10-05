@@ -2,6 +2,7 @@
 # FLA 宝塔面板 / 非 Docker 部署脚本
 #   首次安装:  bash bt.sh install          (装系统依赖 + Python 虚拟环境 + 开机自启服务)
 #   更新代码:  bash bt.sh pull [分支]       (默认 arena/01a0d6ff-fla, 更新后自动重启)
+#   宝塔Python项目模式: bash bt.sh deps (只装系统依赖) ; bash bt.sh pull (只更新代码, 然后在宝塔点重启)
 #   其它:      bash bt.sh start|stop|restart|status|logs|passwd 新密码
 # 进程由 systemd 守护 (fla.service, 崩溃自动重启/开机自启); 宝塔负责 Nginx 反代、SSL、防火墙。
 set -u
@@ -154,12 +155,20 @@ case "${1:-status}" in
     echo "初始管理员密码: $(cat "$(getenv FLA_DATA_DIR)/initial_admin_password.txt" 2>/dev/null || echo '见 bash bt.sh logs')"
     echo "下一步: 宝塔 → 网站 → 添加站点 → 反向代理到 http://127.0.0.1:$PORT (见 docs/宝塔部署.md)"
     ;;
+  deps)
+    # 宝塔 Python 项目模式: 只装系统依赖 (Python 依赖由宝塔按 requirements.txt 安装)
+    pkg_install
+    open_ports
+    echo "✔ 系统依赖已安装。接下来在 宝塔 → 网站 → Python项目 添加项目 (见 docs/宝塔部署.md)"
+    ;;
   pull|update)
     download_code "${2:-}" || exit 1
-    [ -x "$VENV/bin/python" ] && pip_install >/dev/null 2>&1
-    write_service
-    systemctl restart $SVC
-    health
+    if [ -f /etc/systemd/system/$SVC.service ]; then
+      [ -x "$VENV/bin/python" ] && pip_install >/dev/null 2>&1
+      write_service; systemctl restart $SVC; health
+    else
+      echo "✔ 代码已更新。请到 宝塔 → 网站 → Python项目 → FLA 点「重启」(依赖有变化时先点「模块」安装 requirements.txt)"
+    fi
     ;;
   start|stop|restart) systemctl "$1" $SVC; [ "$1" = stop ] || health ;;
   status) systemctl status $SVC --no-pager -l | head -15; curl -s "http://127.0.0.1:$PORT/api/version"; echo ;;
