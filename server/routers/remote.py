@@ -96,6 +96,22 @@ def rtmp_status(key: str, request: Request):
     return d
 
 
+@router.get("/rtmp/debug")
+def rtmp_debug(request: Request):
+    """排错: 仅本机访问 (curl http://127.0.0.1:8306/api/remote/rtmp/debug)"""
+    from .. import rtmp_ingest
+    if not request.client or request.client.host not in ("127.0.0.1", "::1"):
+        raise HTTPException(403, "仅限服务器本机访问")
+    try:
+        import av  # noqa
+        pyav = getattr(av, "__version__", "yes")
+    except Exception as e:
+        pyav = "未安装: %s" % e
+    import shutil
+    return {"running": rtmp_ingest._server is not None, "pyav": pyav, "ffmpeg": shutil.which("ffmpeg"),
+            "live": rtmp_ingest.debug(), "bindings": len(rtmp_ingest.BINDINGS)}
+
+
 @router.post("/{sid}/rtmp-bind")
 def rtmp_bind(sid: str, body: dict, request: Request, code: Optional[str] = Query(None)):
     """手机扫码连上电脑后, 把老师的个人推流密钥绑定到这台电脑 (之后推流画面自动出现在这台电脑上)"""

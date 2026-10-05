@@ -268,14 +268,20 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
     function rPoll() {
       fetch('/api/remote/rtmp/status?key=' + RK).then(function (r) { return r.json(); }).then(function (d) {
         if (d.url) setUrl(d.url);
-        var live = !!d.live;
+        var live = !!d.live, why = '';
+        if (live) {
+          if (!d.video) why = '推流 App 已连接，但还没发来视频（请确认选的是「屏幕直播」并已开始）';
+          else if (!d.decoded) why = '收到视频但解码失败' + (d.decoder ? '（' + d.decoder + '）' : '') + (d.err ? '：' + d.err : '') + '。请在推流 App 里把编码改为 H.264';
+          else if (!d.pc_online) why = '电脑端没有连上服务器：请在电脑上重新打开「手机」面板再扫码';
+          if (why) live = false;
+        }
         if (live) localStorage.setItem('fla_rtmp_ok', '1');
         if (inSession) {
           $('appBtn').querySelector('b').textContent = live ? '正在整屏投屏 ✓' : '整个手机屏幕投到电脑';
-          $('appSub').textContent = live ? ('电脑已收到画面' + (d.fps ? '（' + d.fps + ' 帧/秒）' : '') + '，停止请点屏幕顶部红色条')
+          $('appSub').textContent = why ? ('⚠ ' + why) : live ? ('电脑已收到画面' + (d.fps ? '（' + d.fps + ' 帧/秒）' : '') + '，停止请点屏幕顶部红色条')
             : (localStorage.getItem('fla_rtmp_ok') ? '打开推流 App 点「开始直播」（或 控制中心 长按录屏 → 选该 App）即可，画面自动到这台电脑' : '首次需在推流 App 里粘贴一次地址');
         }
-        $('rState').textContent = live ? '● 电脑已收到你的手机画面' : (d.running === false ? '服务器 1935 端口未开启，请联系管理员' : (inSession ? '已绑定这台电脑，等待推流 App 开始直播…' : '设置完成后，扫码连接电脑即可投屏'));
+        $('rState').textContent = live ? '● 电脑已收到你的手机画面' : why ? ('⚠ ' + why) : (d.running === false ? '服务器 1935 端口未开启，请联系管理员' : (inSession ? '已绑定这台电脑，等待推流 App 开始直播…' : '设置完成后，扫码连接电脑即可投屏'));
         $('rState').style.color = live ? '#34c759' : '';
       }).catch(function () { });
     }

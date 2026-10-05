@@ -38,11 +38,35 @@ def bind(key: str, sid: str, ip: str = ""):
         IP_BINDINGS[ip] = {"sid": sid, "t": time.time(), "key": key}
 
 
+def debug() -> list:
+    out = []
+    for k, st in LIVE.items():
+        b = BINDINGS.get(k) or {}
+        d = {x: y for x, y in st.items() if x != "dec"}
+        dec = st.get("dec")
+        d["decoder"] = dec.kind if dec else "未收到视频头"
+        d["err"] = dec.err if dec else ""
+        d["key"] = k[:4] + "…"
+        d["sid"] = b.get("sid")
+        out.append(d)
+    return out
+
+
 def status(key: str) -> dict:
-    st = LIVE.get(key)
+    st = LIVE.get(key) or {}
     b = BINDINGS.get(key)
-    return {"live": bool(st), "fps": st.get("fps", 0) if st else 0, "codec": st.get("codec", "") if st else "",
-            "bound": bool(b), "sid": b["sid"] if b else None}
+    dec = st.get("dec")
+    h = {}
+    try:
+        from .routers import remote
+        h = remote.HUBS.get(b["sid"], {}) if b else {}
+    except Exception:
+        pass
+    return {"live": bool(st), "fps": st.get("fps", 0), "codec": st.get("codec", ""),
+            "bound": bool(b), "sid": b["sid"] if b else None,
+            "video": st.get("vmsg", 0), "decoded": st.get("decoded", 0), "sent": st.get("sent", 0),
+            "pc_online": len(h.get("pc", ())) if h else 0,
+            "decoder": (dec.kind if dec else ("" if not st else "未收到视频头")), "err": dec.err if dec else ""}
 
 
 # ---------------------------------------------------------------- AMF0
@@ -122,6 +146,8 @@ class Decoder(threading.Thread):
         self.need_key = False
         self.last = 0.0
         self.frames = 0
+        self.kind = ""
+        self.err = ""
 
     def feed(self, data: bytes, key: bool):
         if self.need_key and not key:
@@ -162,6 +188,7 @@ class Decoder(threading.Thread):
         except Exception:
             av = None
         if av is not None:
+            self.kind = "pyav"
             self._run_av(av)
         else:
             self._run_ffmpeg()
@@ -182,6 +209,7 @@ class Decoder(threading.Thread):
                     if time.time() - self.last >= 1.0 / FPS:
                         self._emit(fr.to_image())
             except Exception as e:
+                self.err = "decode: %s" % e
                 log.debug("decode: %s", e)
 
     def _run_ffmpeg(self):
@@ -194,8 +222,11 @@ class Decoder(threading.Thread):
                                   "-vf", "scale='min(%d,iw)':-2" % MAX_SIDE, "-q:v", "6", "-f", "mjpeg", "pipe:1"],
                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         except Exception as e:
+            self.kind = "none"
+            self.err = "PyAV 和 ffmpeg 都不可用: %s" % e
             log.warning("ffmpeg 不可用: %s", e)
             return
+        self.kind = "ffmpeg"
 
         def reader():
             buf = b""
@@ -357,6 +388,14 @@ class Conn:
             await self.on_cmd(amf_all(m[1:] if typ == 17 else m))
         elif typ == 9 and self.key:
             self.on_video(m)
+        elif typ == 22 and self.key:          # Aggregate: 内含多个 FLV tag
+            i = 0
+            while i + 11 <= len(m):
+                t = m[i]; n = int.from_bytes(m[i + 1:i + 4], "big")
+                body = m[i + 11:i + 11 + n]
+                if t == 9:
+                    self.on_video(body)
+                i += 11 + n + 4
 
     async def on_cmd(self, a: list):
         if not a:
@@ -400,6 +439,11 @@ class Conn:
         await self.w.drain()
 
     def on_video(self, m: bytes):
+        st = LIVE.get(self.key)
+        if st is not None:
+            st["vmsg"] = st.get("vmsg", 0) + 1
+            if st["vmsg"] <= 3:
+                st.setdefault("hdr", []).append(m[:6].hex())
         if len(m) < 2:
             return
         b0 = m[0]
@@ -432,6 +476,7 @@ class Conn:
         LIVE.get(self.key, {})["codec"] = codec
         self.dec = Decoder(codec, cfg, self.on_jpeg, asyncio.get_running_loop())
         self.dec.start()
+        LIVE.get(self.key, {})["dec"] = self.dec
 
     def on_jpeg(self, jpg: bytes):
         b = BINDINGS.get(self.key)
@@ -439,14 +484,20 @@ class Conn:
         if st is not None and self.dec:
             dt = max(1.0, time.time() - self.t0)
             st["fps"] = round(self.dec.frames / dt, 1)
+            st["decoded"] = self.dec.frames
         if not b:
             return
         try:
             from .routers import remote
             h = remote.HUBS.get(b["sid"])
             if not h:
+                if st is not None:
+                    st["pcs"] = 0
                 return
             data = b"C" + jpg
+            if st is not None:
+                st["pcs"] = len(h.get("pc", ()))
+                st["sent"] = st.get("sent", 0) + 1
             for ws in list(h.get("pc", ())):
                 asyncio.create_task(remote._hub_safe(ws, data, True))
         except Exception as e:
