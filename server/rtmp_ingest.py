@@ -38,6 +38,14 @@ def bind(key: str, sid: str, ip: str = ""):
         IP_BINDINGS[ip] = {"sid": sid, "t": time.time(), "key": key}
 
 
+def _pc_polling(sid: str) -> bool:
+    try:
+        from .routers import remote
+        return time.time() - (remote.SESSIONS.get(sid) or {}).get("pc_poll", 0) < 20
+    except Exception:
+        return False
+
+
 def debug() -> list:
     out = []
     for k, st in LIVE.items():
@@ -65,7 +73,7 @@ def status(key: str) -> dict:
     return {"live": bool(st), "fps": st.get("fps", 0), "codec": st.get("codec", ""),
             "bound": bool(b), "sid": b["sid"] if b else None,
             "video": st.get("vmsg", 0), "decoded": st.get("decoded", 0), "sent": st.get("sent", 0),
-            "pc_online": len(h.get("pc", ())) if h else 0,
+            "pc_online": (len(h.get("pc", ())) if h else 0) + (1 if b and _pc_polling(b["sid"]) else 0),
             "decoder": (dec.kind if dec else ("" if not st else "未收到视频头")), "err": dec.err if dec else ""}
 
 
@@ -489,6 +497,13 @@ class Conn:
             return
         try:
             from .routers import remote
+            # 1) 存为会话的「手机画面」: 电脑端 WebSocket 连不上 (反代未开 WebSocket 等) 时走 HTTP 轮询也能拿到
+            sess = remote.SESSIONS.get(b["sid"])
+            if sess is not None:
+                frames = sess.setdefault("frames", {})
+                frames["phone"] = (frames.get("phone", (0, b"", 0))[0] + 1, jpg, time.time())
+                sess["last_active"] = time.time()
+            # 2) 电脑在 WebSocket 中继上: 直接推送 (更低延迟)
             h = remote.HUBS.get(b["sid"])
             if not h:
                 if st is not None:

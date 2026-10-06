@@ -294,6 +294,8 @@ async def put_frame(sid: str, ch: str, request: Request, code: Optional[str] = Q
 @router.get("/{sid}/frame/{ch}")
 def get_frame(sid: str, ch: str, code: Optional[str] = Query(None), after: int = 0):
     session = _auth(sid, code)
+    if ch == "phone":
+        session["pc_poll"] = time.time()      # 电脑端在 HTTP 轮询手机画面
     f = session.get("frames", {}).get(ch)
     if not f or f[0] <= after:
         return Response(status_code=204, headers={"Cache-Control": "no-store"})
