@@ -117,6 +117,8 @@ download_code() {
   echo ">> 同步代码 (分支 $B)"
   if command -v git >/dev/null 2>&1; then
     # 增量更新: 首次把目录变成 git 仓库, 之后每次只下载变化的部分 (几十 KB), 不再整包 33MB
+    # 宝塔目录属主是 www, root 操作会被 git 拒绝 (dubious ownership) → 加入信任
+    git config --global --get-all safe.directory 2>/dev/null | grep -qx "$DIR" || git config --global --add safe.directory "$DIR"
     [ -d .git ] || { git init -q . && echo "  (首次: 初始化增量更新)"; }
     git config http.lowSpeedLimit 20000; git config http.lowSpeedTime 20   # 低于 20KB/s 持续 20 秒 → 换下一个源
     OLD=$(git rev-parse --short HEAD 2>/dev/null)
