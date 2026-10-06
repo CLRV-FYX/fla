@@ -11,8 +11,9 @@ from server.desktop_dist import ensure_desktop_exe
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
 
-CURRENT_VERSION = "3.4.2"
+CURRENT_VERSION = "3.4.3"
 CHANGELOG = [
+    "v3.4.3: 课件库可直接上传课件(按钮/拖拽), 首页一键打开网页端 课件库/聊天/论坛/个人中心(免登录)",
     "v3.4.2: 手机投屏二维码默认走服务器, 任何网络都能扫 (同一 Wi-Fi 仍自动直连)",
     "v3.4.1: 修复手机批注与电脑显示位置不一致/出现两条线 (PPT 放映区域、多显示器、缩放屏幕)",
     "v3.4.1: 自动更新: 每次启动自动检查并在后台下载新版, 可立即重启或退出时自动安装",

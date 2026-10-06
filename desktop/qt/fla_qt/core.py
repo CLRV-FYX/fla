@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-VERSION = "3.4.2"
+VERSION = "3.4.3"
 APP_NAME = "FLA 课堂助手"
 DEFAULT_SERVER = "https://t.clrv.top"
 SERVERS = [("https://t.clrv.top", "t.clrv.top（主线路）"), ("https://t.fyx.best", "t.fyx.best（备用线路）")]
@@ -116,6 +116,44 @@ def api(method: str, path: str, body=None, timeout: float = 15):
         with urllib.request.urlopen(req, timeout=timeout, context=_CTX) as r:
             raw = r.read()
             status = r.status
+    except urllib.error.HTTPError as e:
+        raw, status = e.read(), e.code
+    except Exception as e:
+        return 0, {"detail": str(e)}
+    try:
+        return status, json.loads(raw.decode("utf-8") or "null")
+    except Exception:
+        return status, {"detail": raw[:200].decode("utf-8", "ignore")}
+
+
+def upload(path: str, progress=None, timeout: float = 600):
+    """上传课件到云端课件库. 返回 (status, data). progress(done, total)"""
+    import io
+    import uuid
+    name = os.path.basename(path)
+    b = "----FLA" + uuid.uuid4().hex
+    with open(path, "rb") as f:
+        content = f.read()
+    q = name.replace('"', "'").replace("\r", "").replace("\n", "")
+    head = (f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="{q}"\r\n'
+            f'Content-Type: application/octet-stream\r\n\r\n').encode("utf-8")
+    body = head + content + f"\r\n--{b}--\r\n".encode()
+    total = len(body)
+
+    class _R(io.BytesIO):
+        def read(self, n=-1):
+            chunk = super().read(65536 if n is None or n < 0 else min(n, 65536))
+            if progress:
+                progress(self.tell(), total)
+            return chunk
+    headers = {"User-Agent": f"FLA-Desktop/{VERSION}", "Accept": "application/json",
+               "Content-Type": "multipart/form-data; boundary=" + b, "Content-Length": str(total)}
+    if cfg.token:
+        headers["Authorization"] = "Bearer " + cfg.token
+    req = urllib.request.Request(full_url("/api/files/upload"), data=_R(body), headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout, context=_CTX) as r:
+            raw, status = r.read(), r.status
     except urllib.error.HTTPError as e:
         raw, status = e.read(), e.code
     except Exception as e:

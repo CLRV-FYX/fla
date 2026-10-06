@@ -22,6 +22,16 @@ class _Sig(QObject):
     done = pyqtSignal(object, object)
 
 
+def open_web(to: str = ""):
+    """用浏览器打开网页端; 已登录则带 token 免登录"""
+    import urllib.parse
+    base = cfg.server.rstrip("/")
+    if cfg.token:
+        webbrowser.open(f"{base}/#/auth?token={urllib.parse.quote(cfg.token)}&to={urllib.parse.quote(to)}")
+    else:
+        webbrowser.open(f"{base}/#/{to}" if to else base)
+
+
 def run_async(fn, cb=None):
     """在线程里跑 fn(), 完成后回到 UI 线程调用 cb(result)"""
     s = _Sig()
@@ -109,7 +119,7 @@ class HomePage(Page):
         b1 = PrimaryPushButton(FIF.EDIT, "打开放映工具盒")
         b1.clicked.connect(win.stage.start)
         b2 = PushButton(FIF.GLOBE, "打开网页端")
-        b2.clicked.connect(lambda: webbrowser.open(cfg.server))
+        b2.clicked.connect(lambda: open_web(""))
         b3 = PushButton(FIF.STOP_WATCH, "计时器")
         b3.clicked.connect(win.stage.timer.popup)
         b4 = PushButton(FIF.PHONE, "手机投屏 / 观看")
@@ -118,6 +128,14 @@ class HomePage(Page):
             row.addWidget(b)
         row.addStretch(1)
         self.lay.addLayout(row)
+        row2 = QHBoxLayout()
+        for ic, t, to in ((FIF.LIBRARY, "网页课件库", "library"), (FIF.PEOPLE, "聊天", "chat"),
+                          (FIF.EDIT, "论坛", "forum"), (FIF.INFO, "个人中心", "profile")):
+            b = PushButton(ic, t)
+            b.clicked.connect(lambda _=False, to=to: open_web(to))
+            row2.addWidget(b)
+        row2.addStretch(1)
+        self.lay.addLayout(row2)
         tip = BodyLabel("使用方法：在网页端课件库点「本地打开」，或在本客户端「课件库」双击课件，"
                         "会自动下载并用 PowerPoint / WPS 全屏放映，同时弹出底部工具盒（翻页、画笔、激光笔、白板、计时）。\n"
                         "画布快捷键：Esc 退出批注 · Ctrl+Z 撤销 · 右键切回鼠标 · ←/→ 翻页")
@@ -153,9 +171,14 @@ class LibraryPage(Page):
         self.search.setFixedWidth(260)
         rb = PushButton(FIF.SYNC, "刷新")
         rb.clicked.connect(self.load)
+        ub = PrimaryPushButton(FIF.CLOUD, "上传课件")
+        ub.clicked.connect(self.pick_upload)
         bar.addWidget(self.search)
         bar.addStretch(1)
+        bar.addWidget(ub)
         bar.addWidget(rb)
+        self.setAcceptDrops(True)
+        self._uploading = False
         self.lay.addLayout(bar)
         self.tip = CaptionLabel("")
         self.lay.addWidget(self.tip)
@@ -192,9 +215,75 @@ class LibraryPage(Page):
                 self.tip.setText("加载失败：" + str((data or {}).get("detail", "无法连接服务器") if isinstance(data, dict) else st))
                 return
             self.files = data
-            self.tip.setText(f"共 {len(data)} 个课件" if data else "云端还没有课件 — 到网页端上传后点「刷新」")
+            self.tip.setText(f"共 {len(data)} 个课件" if data else "云端还没有课件 — 点右上「上传课件」或把文件拖进来")
             self.fill()
         run_async(lambda: core.api("GET", "/api/files"), done)
+
+    # ---------- 上传 ----------
+    def dragEnterEvent(self, e):
+        if e.mimeData().hasUrls():
+            e.acceptProposedAction()
+
+    def dropEvent(self, e):
+        paths = [u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()]
+        paths = [p for p in paths if os.path.isfile(p)]
+        if paths:
+            self.upload(paths)
+
+    def pick_upload(self):
+        from PyQt5.QtWidgets import QFileDialog
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "选择要上传的课件", os.path.expanduser("~"),
+            "课件 (*.ppt *.pptx *.pps *.ppsx *.pdf *.doc *.docx *.xls *.xlsx *.key *.odp *.png *.jpg *.jpeg *.mp4 *.mp3);;所有文件 (*.*)")
+        if paths:
+            self.upload(paths)
+
+    def upload(self, paths):
+        if not cfg.token:
+            self.tip.setText("请先到「设置」登录账号再上传")
+            return
+        if self._uploading:
+            self.tip.setText("正在上传，请稍候…")
+            return
+        self._uploading = True
+        state = {"i": 0, "done": 0, "total": 1, "ok": 0, "err": []}
+        self.prog.setValue(0)
+        self.prog.show()
+        timer = QTimer(self)
+
+        def tick():
+            i = min(state["i"], len(paths) - 1)
+            pct = int(state["done"] * 100 / max(1, state["total"]))
+            self.prog.setValue(pct)
+            self.tip.setText(f"上传中 ({i + 1}/{len(paths)}) {os.path.basename(paths[i])} … {pct}%")
+        timer.timeout.connect(tick)
+        timer.start(200)
+
+        def prog(d, t):
+            state["done"], state["total"] = d, t
+
+        def work():
+            for i, p in enumerate(paths):
+                state["i"], state["done"] = i, 0
+                st, data = core.upload(p, prog)
+                if st == 200:
+                    state["ok"] += 1
+                else:
+                    det = data.get("detail") if isinstance(data, dict) else st
+                    state["err"].append(f"{os.path.basename(p)}：{det or '无法连接服务器'}")
+            return state
+
+        def done(_r):
+            timer.stop()
+            self._uploading = False
+            self.prog.hide()
+            ok, err = state["ok"], state["err"]
+            msg = f"已上传 {ok} 个课件" + (f"，{len(err)} 个失败" if err else "")
+            (InfoBar.success if not err else InfoBar.warning)(
+                "上传完成" if not err else "部分失败", msg + ("\n" + "\n".join(err[:5]) if err else ""),
+                parent=self.win, position=InfoBarPosition.TOP, duration=6000 if err else 3000)
+            self.load()
+        run_async(work, done)
 
     def visible(self):
         q = self.search.text().strip().lower()
