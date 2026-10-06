@@ -81,7 +81,7 @@ async function initApp() {
     const inApp = /FLA-App/.test(navigator.userAgent) || navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
     if (inApp) {
       const a = document.createElement('a');
-      a.href = /FLA-App/.test(navigator.userAgent) ? 'https://app.fla/' : '/cast.html';
+      a.href = /FLA-App/.test(navigator.userAgent) ? 'https://app.fla/home.html' : '/cast.html';
       a.id = 'fla-cast-fab';
       a.textContent = '投屏';
       a.style.cssText = 'position:fixed;right:16px;bottom:calc(22px + env(safe-area-inset-bottom));z-index:9998;background:#000;color:#fff;border-radius:999px;padding:12px 18px;font-size:15px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.3);text-decoration:none';

@@ -27,7 +27,7 @@ h1{font-size:26px;margin:18px 0 4px}
 .codes input{position:absolute;inset:0;opacity:0;font-size:16px}
 .btn{width:100%;max-width:380px;border-radius:14px;padding:14px;font-size:15px;background:var(--card2);font-weight:600}
 .feat{width:100%;max-width:380px;margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;text-align:left}
+.card{color:inherit;text-decoration:none;display:block;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;text-align:left}
 .card svg{margin-bottom:8px;color:#fff}
 .card b{display:block;font-size:14px}.card small{color:var(--mut);font-size:12px}
 .foot{margin-top:auto;padding-top:26px;color:#4d4d54;font-size:12px;text-align:center}
@@ -66,6 +66,13 @@ h1{font-size:26px;margin:18px 0 4px}
     <div class="card"><svg class="i"><use href="#i-pen"/></svg><b>手机批注翻页</b><small>画笔·激光笔·遥控</small></div>
     <div class="card"><svg class="i"><use href="#i-cam"/></svg><b>实物展台</b><small>摄像头/照片投屏</small></div>
   </div>
+  <div class="feat" id="site" style="margin-top:14px">
+    <div style="grid-column:1/-1;color:var(--mut);font-size:13px;text-align:left">网站功能</div>
+    <a class="card" data-to="library"><svg class="i"><use href="#i-mon"/></svg><b>课件库</b><small>查看 · 上传 · 放映</small></a>
+    <a class="card" data-to="chat"><svg class="i"><use href="#i-pen"/></svg><b>聊天</b><small>同事消息</small></a>
+    <a class="card" data-to="forum"><svg class="i"><use href="#i-phone"/></svg><b>论坛</b><small>公告与讨论</small></a>
+    <a class="card" data-to="profile"><svg class="i"><use href="#i-cam"/></svg><b>个人中心</b><small>账号 · 存储空间</small></a>
+  </div>
   <div class="foot" id="ver">FLA</div>
 </div>
 <div id="scan">
@@ -86,6 +93,9 @@ h1{font-size:26px;margin:18px 0 4px}
   function paintLine() { [].forEach.call($('line').children, function (b) { b.classList.toggle('on', +b.dataset.i === li); }); }
   [].forEach.call($('line').children, function (b) { b.onclick = function () { li = +b.dataset.i; localStorage.setItem('line', li); paintLine(); }; });
   paintLine();
+  [].forEach.call(document.querySelectorAll('#site a[data-to]'), function (a) {
+    a.onclick = function () { location.href = SERVERS[li] + '/#/' + a.dataset.to; };
+  });
   if (N.version) $('ver').textContent = 'FLA 手机端 v' + N.version();
 
   var pi = $('pi'), boxes = $('codes').children;

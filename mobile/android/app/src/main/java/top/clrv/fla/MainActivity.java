@@ -42,7 +42,7 @@ import java.util.ArrayList;
  */
 public class MainActivity extends Activity {
     static final String HOME = "https://app.fla/home.html";
-    static final String VERSION = "1.2.0";
+    static final String VERSION = "1.3.0";
     static final int VERSION_CODE = 3;
     static final String[] SERVERS = {"https://t.clrv.top", "https://t.fyx.best"};
     static final int REQ_CAPTURE = 7, REQ_CAM = 8, REQ_FILE = 9;
@@ -123,6 +123,12 @@ public class MainActivity extends Activity {
                     toastJs("网络连接失败，请检查网络或切换线路");
                     v.loadUrl(HOME);
                 }
+            }
+        });
+        // 网站里的文件下载 (课件等) → 交给系统浏览器/下载器
+        web.setDownloadListener(new android.webkit.DownloadListener() {
+            @Override public void onDownloadStart(String url, String ua, String cd, String mime, long len) {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); } catch (Exception e) { toastJs("无法打开下载"); }
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
@@ -265,6 +271,9 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         String u = curUrl == null ? "" : curUrl;
         if (u.startsWith(HOME)) { moveTaskToBack(true); return; }
+        // 在网站页面 (课件库/聊天/论坛...) 时: 返回键 = 网页后退
+        if (!u.contains("/cast.html") && web.canGoBack()) { web.goBack(); return; }
+        if (!u.contains("/cast.html")) { web.loadUrl(HOME); return; }
         new AlertDialog.Builder(this).setMessage("断开与电脑的连接并返回首页？")
             .setPositiveButton("返回首页", new android.content.DialogInterface.OnClickListener() {
                 @Override public void onClick(android.content.DialogInterface d, int w) { goHome(); }
