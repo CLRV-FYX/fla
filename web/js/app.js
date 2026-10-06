@@ -67,6 +67,27 @@ function updateDesktopStatusUI() {
  * ================================================================ */
 async function initApp() {
   window.addEventListener('hashchange', route);
+  // 客户端(Windows/安卓)免登录跳转: #/auth?token=...&to=library  (token 只在 hash 里, 不会发给服务器日志)
+  try {
+    const m = /^#\/auth\?(.*)$/.exec(location.hash || '');
+    if (m) {
+      const q = new URLSearchParams(m[1]);
+      if (q.get('token')) API.setToken(q.get('token'));
+      history.replaceState(null, '', location.pathname + '#/' + (q.get('to') || 'library').replace(/[^a-z0-9/_-]/gi, ''));
+    }
+  } catch (e) { }
+  // 手机 App / 主屏「FLA」里: 右下角常驻「投屏」按钮, 随时回到投屏/连接电脑
+  try {
+    const inApp = /FLA-App/.test(navigator.userAgent) || navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+    if (inApp) {
+      const a = document.createElement('a');
+      a.href = /FLA-App/.test(navigator.userAgent) ? 'https://app.fla/' : '/cast.html';
+      a.id = 'fla-cast-fab';
+      a.textContent = '投屏';
+      a.style.cssText = 'position:fixed;right:16px;bottom:calc(22px + env(safe-area-inset-bottom));z-index:9998;background:#000;color:#fff;border-radius:999px;padding:12px 18px;font-size:15px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.3);text-decoration:none';
+      document.body.appendChild(a);
+    }
+  } catch (e) { }
   if (API.token) {
     try {
       App.user = await API.get('/api/auth/me');
@@ -1171,7 +1192,7 @@ function iosGuide() {
   } else if (tier === 'none') {
     body = '<p class="s">你的系统 iOS ' + ver + ' 已被苹果修复漏洞，<b>不存在</b>既不用电脑、又不用证书的正规安装方式。</p>' +
       '<div class="mc-grid">' +
-      '<div class="mc-card"><h3>推荐：描述文件 + 推流 App 整屏投屏</h3><p>① 安装描述文件，主屏出现「FLA 投屏」；② App Store 下载支持「屏幕直播 + 自定义 RTMP」的 App（如 小熊录屏、Go Live）；③ 在 FLA 投屏里点「iPhone 整屏投屏」，复制地址粘贴到该 App（只需一次）。之后每节课扫码 → 开始直播，整屏画面自动上大屏。</p><div class="act"><a class="w" href="/api/app/ios.mobileconfig">安装描述文件</a></div></div>' +
+      '<div class="mc-card"><h3>推荐：描述文件 + GRecord 整屏投屏</h3><p>① 安装描述文件，主屏出现「FLA」；② App Store 免费下载「GRecord」；③ 在 FLA 投屏里点「iPhone 整屏投屏」，复制地址粘贴到 GRecord（只需一次）。之后每节课扫码 → 开始直播，整屏画面自动上大屏。</p><div class="act"><a class="w" href="/api/app/ios.mobileconfig">安装描述文件</a></div></div>' +
       '<div class="mc-card"><h3>根本解决：TestFlight</h3><p>学校/开发者开通苹果开发者账号（688 元/年）后，老师只需从 App Store 装「TestFlight」，点邀请链接即可安装完整版，<b>不用电脑、不用证书、所有 iOS 版本都能用</b>。</p></div>' +
       '<div class="mc-card"><h3>关于 B站「共享证书」方法</h3><p>那类方法（轻松签/全能签 + 网上公开的企业证书）用的是别人泄露的证书：随时被苹果吊销导致 App 闪退，签名工具还能往 App 里注入代码，不建议用在教师手机上，所以本站不提供。</p></div>' +
       '</div>';
@@ -1256,7 +1277,7 @@ function viewMobileCenter() {
       '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>安卓 / 鸿蒙 4.x 及以下</h3><p>安装「FLA 手机端」App（约 100 KB）。功能最全：<b>整屏投屏</b> + 扫码连接 + 观看批注。安装时提示“未知来源”请选择允许。</p><div class="act"><a class="w" href="/api/app/android">下载 APK</a></div></div>' +
       '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>鸿蒙 NEXT（纯血鸿蒙 5.x）</h3><p>在华为应用市场安装<b>「卓易通」</b>（或「出境易」），在其中导入 FLA-cast.apk 即可运行全部功能。</p><div class="act"><a class="w" href="/api/app/android">下载 APK</a><a href="/cast.html">网页版</a></div></div>' +
       '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>iPhone / iPad · 完整版 App</h3><p>支持<b>整屏投屏</b>。iOS 14 – 15.4 可免电脑、免证书永久安装（TrollStore）；用 iPhone 的 Safari 打开本页会按系统版本显示方法。</p><div class="act"><a class="w" href="#mc-ios-guide" onclick="document.getElementById(\'mc-ios-guide\').scrollIntoView({behavior:\'smooth\'});return false;">查看安装方法</a><a href="/api/app/ios.ipa">下载 IPA</a></div></div>' +
-      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>iPhone / iPad · 免安装版</h3><p>Safari 打开本页 → 安装描述文件 → 「设置」顶部「已下载描述文件」→ 安装。主屏出现「FLA 投屏」：扫码、观看批注、摄像头/照片投屏（不含整屏投屏）。</p><div class="act"><a class="w" href="/api/app/ios.mobileconfig">安装描述文件</a><a href="/cast.html">网页版</a></div></div>' +
+      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>iPhone / iPad · 免安装版</h3><p>Safari 打开本页 → 安装描述文件 → 「设置」顶部「已下载描述文件」→ 安装。主屏出现「FLA」：课件库、上传、聊天、论坛等网站功能 + 扫码投屏、观看批注；配合 GRecord 可整屏投屏。</p><div class="act"><a class="w" href="/api/app/ios.mobileconfig">安装描述文件</a><a href="/cast.html">网页版</a></div></div>' +
     '</div></section>' +
     iosGuide() +
     '<section class="mc-sec"><h2>三步连接</h2><p class="s">第一次用也只要十秒</p><div class="mc-steps">' +

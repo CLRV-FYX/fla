@@ -101,6 +101,10 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
 .ip-kv{display:flex;align-items:center;gap:8px;margin-top:8px;background:var(--card2,#2c2c2e);border-radius:10px;padding:8px 10px}
 .ip-kv span{flex:none;color:var(--mut,#999);font-size:12px}.ip-kv code{flex:1;word-break:break-all;font-size:13px}.ip-kv .btn{margin:0;flex:none;padding:6px 12px}
 #rClose{width:100%;margin-top:4px}
+.site{width:100%;max-width:380px;margin-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.site h4{grid-column:1/-1;margin:0;font-size:13px;color:var(--mut);font-weight:500;text-align:left}
+.site a{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;text-align:left;color:inherit;text-decoration:none;display:block}
+.site a .i{width:20px;height:20px;margin-bottom:6px}.site a b{display:block;font-size:14px}.site a small{color:var(--mut);font-size:12px}
 </style>
 </head>
 <body>
@@ -181,6 +185,13 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
   <div class="codes" id="codes"><span></span><span></span><span></span><span></span><input id="pairInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code"></div>
   <button class="btn pri" id="pairBtn">连接</button>
   <div class="help">手机与电脑在同一 Wi-Fi 时自动走局域网直连<br>观看电脑屏幕 · 远程翻页 · 在电脑上批注 · 投屏到大屏</div>
+  <div class="site" id="siteGrid">
+    <h4>网站功能</h4>
+    <a href="/#/library"><svg class="i"><use href="#i-img"/></svg><b>课件库</b><small>查看 · 上传 · 放映</small></a>
+    <a href="/#/chat"><svg class="i"><use href="#i-pen"/></svg><b>聊天</b><small>同事消息</small></a>
+    <a href="/#/forum"><svg class="i"><use href="#i-board"/></svg><b>论坛</b><small>公告与讨论</small></a>
+    <a href="/#/profile"><svg class="i"><use href="#i-phone"/></svg><b>个人中心</b><small>账号 · 存储空间</small></a>
+  </div>
 </div>
 
 <div id="scan">
@@ -279,7 +290,7 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
         if (inSession) {
           $('appBtn').querySelector('b').textContent = live ? '正在整屏投屏 ✓' : '整个手机屏幕投到电脑';
           $('appSub').textContent = why ? ('⚠ ' + why) : live ? ('电脑已收到画面' + (d.fps ? '（' + d.fps + ' 帧/秒）' : '') + '，停止请点屏幕顶部红色条')
-            : (localStorage.getItem('fla_rtmp_ok') ? '打开推流 App 点「开始直播」（或 控制中心 长按录屏 → 选该 App）即可，画面自动到这台电脑' : '首次需在推流 App 里粘贴一次地址');
+            : (localStorage.getItem('fla_rtmp_ok') ? '打开推流 App 点「开始直播」（或 控制中心 长按录屏 → 选该 App）即可，画面自动到这台电脑' : '首次需在 GRecord 里粘贴一次地址');
         }
         $('rState').textContent = live ? '● 电脑已收到你的手机画面' : why ? ('⚠ ' + why) : (d.running === false ? '服务器 1935 端口未开启，请联系管理员' : (inSession ? '已绑定这台电脑，等待推流 App 开始直播…' : '设置完成后，扫码连接电脑即可投屏'));
         $('rState').style.color = live ? '#34c759' : '';
@@ -294,7 +305,7 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
     pane.id = 'iosPane'; pane.className = 'hidden';
     pane.innerHTML =
       '<div class="ip-box"><h3>iPhone 整屏投屏</h3><p class="ip-st" id="rState">…</p>' +
-      '<div class="ip-step"><b>1</b><div>在 App Store 下载一个支持「<b>屏幕直播 + 自定义 RTMP</b>」的推流 App（如 小熊录屏、Go Live 等；PRISM 已限制中国地区）。<br><a class="btn" id="rStore" href="#">去 App Store 下载</a></div></div>' +
+      '<div class="ip-step"><b>1</b><div>在 App Store 下载 <b>GRecord</b>（推荐，支持屏幕直播 + 自定义 RTMP）。<br><a class="btn" id="rStore" href="#">去 App Store 下载</a></div></div>' +
       '<div class="ip-step"><b>2</b><div>点下面按钮复制地址 → 回到推流 App：选「屏幕直播」→「自定义 RTMP」→ <b>推流地址处粘贴</b>；如果还要求填「密钥 / 串流码」，<b>填 1</b> → 保存。<b>只需设置这一次</b>。' +
       '<div class="ip-kv"><code id="rUrl"></code></div><button class="btn pri" id="rCpU" style="width:100%;margin-top:8px">复制地址</button>' +
       '<small>画质建议 720p · 30 帧。地址含你的个人密钥，请勿外传。</small></div></div>' +
@@ -303,7 +314,7 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
     document.body.appendChild(pane);
     $('rUrl').textContent = rUrl;
     $('rCpU').onclick = function () { cp(rUrl, this); };
-    $('rStore').onclick = function (e) { e.preventDefault(); location.href = 'itms-apps://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?media=software&term=' + encodeURIComponent('RTMP 推流 录屏直播'); };
+    $('rStore').onclick = function (e) { e.preventDefault(); location.href = 'itms-apps://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?media=software&term=' + encodeURIComponent('GRecord'); };
     $('rClose').onclick = function () { pane.classList.add('hidden'); };
     function openPane() { pane.classList.remove('hidden'); rPoll(); }
     if (inSession) {
@@ -360,6 +371,7 @@ footer{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bo
     $('scanBtn').onclick = function () { openScan(function (p) { if (p.sid) goSession(p.sid, p.code, p.url); else { pi.value = p.code; paint(); } }); };
     if (q.get('scan') === '1') $('scanBtn').click();
     if (IOS) iosSetup(false);
+    if (LAN) $('siteGrid').style.display = 'none';
     return;
   }
 

@@ -72,9 +72,9 @@ def _profile(base: str) -> bytes:
 <key>IgnoreManifestScope</key><true/>
 <key>IsRemovable</key><true/>
 {icon_xml}
-<key>Label</key><string>FLA 投屏</string>
-<key>PayloadDescription</key><string>在主屏幕添加 FLA 投屏 / 遥控</string>
-<key>PayloadDisplayName</key><string>FLA 投屏</string>
+<key>Label</key><string>FLA</string>
+<key>PayloadDescription</key><string>在主屏幕添加 FLA (课件库 · 上传 · 聊天 · 投屏 · 遥控)</string>
+<key>PayloadDisplayName</key><string>FLA</string>
 <key>PayloadIdentifier</key><string>top.clrv.fla.webclip</string>
 <key>PayloadType</key><string>com.apple.webClip.managed</string>
 <key>PayloadUUID</key><string>{cid}</string>
@@ -82,8 +82,8 @@ def _profile(base: str) -> bytes:
 <key>Precomposed</key><true/>
 <key>URL</key><string>{url}</string>
 </dict></array>
-<key>PayloadDescription</key><string>安装后主屏幕会出现「FLA 投屏」图标，可随时在 设置-通用-VPN与设备管理 中删除。本描述文件只添加一个网页图标，不收集任何数据。</string>
-<key>PayloadDisplayName</key><string>FLA 投屏 ({_esc(host)})</string>
+<key>PayloadDescription</key><string>安装后主屏幕会出现「FLA」图标，可随时在 设置-通用-VPN与设备管理 中删除。本描述文件只添加一个网页图标，不收集任何数据。</string>
+<key>PayloadDisplayName</key><string>FLA ({_esc(host)})</string>
 <key>PayloadIdentifier</key><string>top.clrv.fla.profile</string>
 <key>PayloadOrganization</key><string>FLA</string>
 <key>PayloadRemovalDisallowed</key><false/>
