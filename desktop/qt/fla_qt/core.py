@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-VERSION = "3.4.3"
+VERSION = "3.4.4"
 APP_NAME = "FLA 课堂助手"
 DEFAULT_SERVER = "https://t.clrv.top"
 SERVERS = [("https://t.clrv.top", "t.clrv.top（主线路）"), ("https://t.fyx.best", "t.fyx.best（备用线路）")]
@@ -126,9 +126,10 @@ def api(method: str, path: str, body=None, timeout: float = 15):
         return status, {"detail": raw[:200].decode("utf-8", "ignore")}
 
 
-def upload(path: str, progress=None, timeout: float = 600):
+def upload(path: str, progress=None, timeout: float = 600, url: str = "/api/files/upload", fields=None):
     """上传课件到云端课件库. 返回 (status, data). progress(done, total)"""
     import io
+    import mimetypes
     import uuid
     name = os.path.basename(path)
     b = "----FLA" + uuid.uuid4().hex
@@ -136,8 +137,10 @@ def upload(path: str, progress=None, timeout: float = 600):
         content = f.read()
     q = name.replace('"', "'").replace("\r", "").replace("\n", "")
     head = (f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="{q}"\r\n'
-            f'Content-Type: application/octet-stream\r\n\r\n').encode("utf-8")
-    body = head + content + f"\r\n--{b}--\r\n".encode()
+            f'Content-Type: {mimetypes.guess_type(name)[0] or "application/octet-stream"}\r\n\r\n').encode("utf-8")
+    extra = b"".join(f'--{b}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode("utf-8")
+                     for k, v in (fields or {}).items())
+    body = extra + head + content + f"\r\n--{b}--\r\n".encode()
     total = len(body)
 
     class _R(io.BytesIO):
@@ -150,7 +153,7 @@ def upload(path: str, progress=None, timeout: float = 600):
                "Content-Type": "multipart/form-data; boundary=" + b, "Content-Length": str(total)}
     if cfg.token:
         headers["Authorization"] = "Bearer " + cfg.token
-    req = urllib.request.Request(full_url("/api/files/upload"), data=_R(body), headers=headers, method="POST")
+    req = urllib.request.Request(full_url(url), data=_R(body), headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout, context=_CTX) as r:
             raw, status = r.read(), r.status
@@ -162,6 +165,19 @@ def upload(path: str, progress=None, timeout: float = 600):
         return status, json.loads(raw.decode("utf-8") or "null")
     except Exception:
         return status, {"detail": raw[:200].decode("utf-8", "ignore")}
+
+
+def fetch_bytes(path: str, timeout: float = 20):
+    """带登录 GET 二进制 (头像/聊天图片). 失败返回 None"""
+    headers = {"User-Agent": f"FLA-Desktop/{VERSION}"}
+    if cfg.token:
+        headers["Authorization"] = "Bearer " + cfg.token
+    try:
+        req = urllib.request.Request(full_url(path), headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout, context=_CTX) as r:
+            return r.read()
+    except Exception:
+        return None
 
 
 def download(url: str, dest: str, token: str = "", progress=None, timeout: float = 30) -> bool:

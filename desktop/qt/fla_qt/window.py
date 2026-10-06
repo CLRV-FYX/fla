@@ -129,10 +129,10 @@ class HomePage(Page):
         row.addStretch(1)
         self.lay.addLayout(row)
         row2 = QHBoxLayout()
-        for ic, t, to in ((FIF.LIBRARY, "网页课件库", "library"), (FIF.PEOPLE, "聊天", "chat"),
-                          (FIF.EDIT, "论坛", "forum"), (FIF.INFO, "个人中心", "profile")):
+        for ic, t, to in ((FIF.LIBRARY, "课件库", "library"), (FIF.MESSAGE, "聊天", "chat"),
+                          (FIF.CHAT, "论坛", "forum"), (FIF.PEOPLE, "个人中心", "profile")):
             b = PushButton(ic, t)
-            b.clicked.connect(lambda _=False, to=to: open_web(to))
+            b.clicked.connect(lambda _=False, to=to: win.switchTo(getattr(win, to)))
             row2.addWidget(b)
         row2.addStretch(1)
         self.lay.addLayout(row2)
@@ -457,8 +457,15 @@ class MainWindow(FluentWindow):
         self.home = HomePage(self)
         self.library = LibraryPage(self)
         self.settings = SettingsPage(self)
+        from .social import ChatPage, ForumPage, ProfilePage
+        self.chat = ChatPage(self)
+        self.forum = ForumPage(self)
+        self.profile = ProfilePage(self)
         self.addSubInterface(self.home, FIF.HOME, "首页")
         self.addSubInterface(self.library, FIF.LIBRARY, "课件库")
+        self.addSubInterface(self.chat, FIF.MESSAGE, "聊天")
+        self.addSubInterface(self.forum, FIF.CHAT, "论坛")
+        self.addSubInterface(self.profile, FIF.PEOPLE, "个人中心", NavigationItemPosition.BOTTOM)
         self.addSubInterface(self.settings, FIF.SETTING, "设置", NavigationItemPosition.BOTTOM)
         self.navigationInterface.setExpandWidth(180)
         self.stackedWidget.currentChanged.connect(lambda _: self.library.load()
