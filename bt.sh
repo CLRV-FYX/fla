@@ -108,25 +108,43 @@ health() {
   echo "✘ 30 秒内未就绪, 查看日志: bash bt.sh logs"; return 1
 }
 
+REPO_PATH="CLRV-FYX/fla"
+# 代码源: 直连 GitHub 慢/断时自动换加速镜像 (按顺序尝试)
+SOURCES="https://github.com https://gh-proxy.com/https://github.com https://ghfast.top/https://github.com https://gh.llkk.cc/https://github.com"
+
 download_code() {
   B="${1:-$BRANCH_DEFAULT}"
   echo ">> 同步代码 (分支 $B)"
-  if [ -d .git ] && command -v git >/dev/null 2>&1; then
+  if command -v git >/dev/null 2>&1; then
+    # 增量更新: 首次把目录变成 git 仓库, 之后每次只下载变化的部分 (几十 KB), 不再整包 33MB
+    [ -d .git ] || { git init -q . && echo "  (首次: 初始化增量更新)"; }
+    git config http.lowSpeedLimit 20000; git config http.lowSpeedTime 20   # 低于 20KB/s 持续 20 秒 → 换下一个源
     OLD=$(git rev-parse --short HEAD 2>/dev/null)
-    if git fetch https://github.com/CLRV-FYX/fla.git "$B" && git reset --hard FETCH_HEAD; then
-      echo "  代码版本: ${OLD:-?} -> $(git log --oneline -1)"
-      git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' > server/BUILD
-      return 0
-    fi
+    for S in $SOURCES; do
+      echo "  git: $S/$REPO_PATH"
+      rm -f .git/FETCH_HEAD
+      if timeout 900 git fetch -q --depth 1 "$S/$REPO_PATH.git" "$B" && git rev-parse -q --verify FETCH_HEAD >/dev/null \
+         && [ "$(git log -1 --format=%ct FETCH_HEAD)" -ge "$(git log -1 --format=%ct HEAD 2>/dev/null || echo 0)" ] \
+         && git reset -q --hard FETCH_HEAD; then
+        echo "  ✔ 代码版本: ${OLD:-首次} -> $(git log --oneline -1)"
+        git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' > server/BUILD
+        return 0
+      fi
+      echo "  ✘ 失败或太慢, 换下一个源"
+    done
   fi
-  T=/tmp/fla-src.tgz; rm -f "$T"
-  for U in "https://codeload.github.com/CLRV-FYX/fla/tar.gz/refs/heads/$B" \
-           "https://gh-proxy.com/https://github.com/CLRV-FYX/fla/archive/refs/heads/$B.tar.gz"; do
-    echo "  下载: $U"
-    if command -v curl >/dev/null 2>&1; then curl -fL --connect-timeout 15 -o "$T" "$U" || rm -f "$T"
-    else python3 -c "import sys,urllib.request;urllib.request.urlretrieve(sys.argv[1],sys.argv[2])" "$U" "$T" || rm -f "$T"; fi
+  T=/tmp/fla-src.tgz
+  for S in $SOURCES; do
+    U="$S/$REPO_PATH/archive/refs/heads/$B.tar.gz"
+    [ "$S" = "https://github.com" ] && U="https://codeload.github.com/$REPO_PATH/tar.gz/refs/heads/$B"
+    echo "  下载: $U"; rm -f "$T"
+    if command -v curl >/dev/null 2>&1; then
+      curl -fL --connect-timeout 15 --speed-limit 20000 --speed-time 20 -o "$T" "$U" || rm -f "$T"
+    else
+      timeout 900 python3 -c "import sys,urllib.request;urllib.request.urlretrieve(sys.argv[1],sys.argv[2])" "$U" "$T" || rm -f "$T"
+    fi
     [ -s "$T" ] && tar -tzf "$T" >/dev/null 2>&1 && break
-    rm -f "$T"; echo "  ✘ 失败, 换下一个地址"
+    rm -f "$T"; echo "  ✘ 失败或太慢, 换下一个地址"
   done
   [ -s "$T" ] || { echo "✘ 代码下载失败"; return 1; }
   tar -xzf "$T" --strip-components=1 || return 1
