@@ -1404,7 +1404,7 @@ async function viewDesktopCenter() {
  *  10. 官方门户 / 官网主页 (viewHome)
  * ================================================================ */
 function viewHome() {
-  document.title = 'FLA · 现代化多媒体互动教学系统';
+  document.title = 'FLA · 轻量 · 高效 · 帮助';
   const u = App.user;
   const navUserSection = u
     ? '<a href="#/library" class="btn primary sm home-nav-dl">' + UI.icon('folder', 14) + ' <span>进入控制台</span></a>'
@@ -1415,13 +1415,13 @@ function viewHome() {
   const heroActions = u
     ? '<a href="/api/desktop/download" class="btn primary lg home-btn-dl">' +
         UI.icon('download', 18) +
-        '<span><strong>立即下载 Windows 客户端</strong><small>单文件 EXE · 免安装 · 启动自动更新</small></span>' +
+        '<span><strong>下载 Windows 客户端</strong></span>' +
       '</a>' +
       '<a href="#/library" class="btn lg home-btn-portal">' + UI.icon('folder', 16) + ' 进入课件工作台</a>' +
       '<a href="#/remote" class="btn soft lg home-btn-reg">' + UI.icon('qr', 15) + ' 手机扫码遥控</a>'
     : '<a href="/api/desktop/download" class="btn primary lg home-btn-dl">' +
         UI.icon('download', 18) +
-        '<span><strong>立即下载 Windows 客户端</strong><small>单文件 EXE · 免安装 · 启动自动更新</small></span>' +
+        '<span><strong>下载 Windows 客户端</strong></span>' +
       '</a>' +
       '<a href="#/login" class="btn lg home-btn-portal">' + UI.icon('external', 16) + ' 登录网页控制台</a>' +
       '<a href="#/register" class="btn soft lg home-btn-reg">注册新账号</a>' +
@@ -1435,12 +1435,11 @@ function viewHome() {
             '<div class="home-logo">' + UI.icon('board', 22) + '</div>' +
             '<div class="home-title-box">' +
               '<span class="home-title">FLA</span>' +
-              '<span class="home-badge">智慧互动教学系统</span>' +
+              
             '</div>' +
           '</a>' +
           '<div class="home-nav-links">' +
-            '<a href="#features" class="home-link" id="nav-features-link">核心功能</a>' +
-            '<a href="#/desktop" class="home-link">桌面端中心</a>' +
+                        '<a href="#/desktop" class="home-link">桌面端中心</a>' +
             '<a href="#/mobile" class="home-link">手机端中心</a>' +
             '<a href="#/remote" class="home-link">手机遥控</a>' +
             navUserSection +
@@ -1449,84 +1448,17 @@ function viewHome() {
       '</header>' +
 
       '<main class="home-main">' +
-        '<section class="home-hero">' +
-          '<div class="home-hero-badge"><span class="home-pulse"></span> 全新 v1.36.0 智慧教学互动套件正式发布</div>' +
-          '<h1 class="home-hero-title">新一代智慧多媒体教学终端<br>专为高效课堂与互动授课而生</h1>' +
-          '<p class="home-hero-desc">无缝打通云端课件库、纯净在线预览、希沃白板5智能拦截、PPT随页板书联动与手机多维无线遥控。<br>单文件免安装，支持服务端检测原地静默升级。</p>' +
+        '<section class="home-hero" style="min-height:62vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">' +
+          '<h1 class="home-hero-title" style="font-size:56px;letter-spacing:2px">FLA</h1>' +
+          '<p class="home-hero-desc" style="font-size:20px;letter-spacing:6px;margin:6px 0 30px">轻量 · 高效 · 帮助</p>' +
           '<div class="home-hero-actions">' + heroActions + '</div>' +
-          '<div class="home-hero-meta">' +
-            '<span>' + UI.icon('check', 14) + ' 免登录直接下载</span>' +
-            '<span>' + UI.icon('check', 14) + ' 希沃白板5自动拦截压制</span>' +
-            '<span>' + UI.icon('check', 14) + ' 画布随 PPT 翻页严格同步</span>' +
-            '<span>' + UI.icon('check', 14) + ' 手机无线扫码投屏与遥控</span>' +
-          '</div>' +
         '</section>' +
-
-        '<section class="home-section" id="features">' +
-          '<div class="home-sec-head">' +
-            '<h2>卓越教学特性</h2>' +
-            '<p>聚焦教学授课核心需求，剔除臃肿与干扰，提供极简、顺畅的软硬件协同体验</p>' +
-          '</div>' +
-          '<div class="home-grid">' +
-            '<div class="home-card">' +
-              '<div class="home-card-icon">' + UI.icon('lock', 22) + '</div>' +
-              '<h3>希沃白板5 智能静默拦截</h3>' +
-              '<p>毫秒级检测并抑制希沃白板5强制注入的多余浮动工具栏与广告干扰，替代为 FLA 极简专业工具条与专属防伪水印。</p>' +
-            '</div>' +
-            '<div class="home-card">' +
-              '<div class="home-card-icon">' + UI.icon('board', 22) + '</div>' +
-              '<h3>板书笔迹与幻灯片翻页严格联动</h3>' +
-              '<p>深度挂接 Office COM 接口，精准捕捉放映页码。板书随翻页按页独立隔离保存，翻页前进后退永不错位。</p>' +
-            '</div>' +
-            '<div class="home-card">' +
-              '<div class="home-card-icon">' + UI.icon('qr', 22) + '</div>' +
-              '<h3>手机扫码无线遥控与投屏</h3>' +
-              '<p>无需安装任何 App，教师手机扫码即可成为掌上遥控器。支持激光笔触控板、幻灯片步进、全屏黑屏与课堂白板。</p>' +
-            '</div>' +
-            '<div class="home-card">' +
-              '<div class="home-card-icon">' + UI.icon('eye', 22) + '</div>' +
-              '<h3>轻量纯净的 Office 在线预览</h3>' +
-              '<p>去除所有冗余编辑栏，专心呈现课件预览。同时支持在网页端一键直连调起本地系统默认 PowerPoint / WPS 原生演示。</p>' +
-            '</div>' +
-            '<div class="home-card">' +
-              '<div class="home-card-icon">' + UI.icon('refresh', 22) + '</div>' +
-              '<h3>单 EXE 运行与原地静默更新</h3>' +
-              '<p>纯净轻量单文件设计，双击直接运行。每次启动自动比对服务端版本并原地静默替换，彻底告别手动去官网重新下载。</p>' +
-            '</div>' +
-            '<div class="home-card">' +
-              '<div class="home-card-icon">' + UI.icon('users', 22) + '</div>' +
-              '<h3>微信级群组交流与课件互动</h3>' +
-              '<p>内置微信级课堂交流、课件点对点分享、@提醒、随机抽人点名与倒计时闹钟，一站式赋能智慧互动课堂。</p>' +
-            '</div>' +
-          '</div>' +
-        '</section>' +
-
-        '<section class="home-section">' +
-          '<div class="home-dl-box">' +
-            '<div class="home-dl-left">' +
-              '<h2>立即体验 Windows 桌面端</h2>' +
-              '<p>轻量无捆绑 · 专为多媒体教室与多功能一体机定制优化 · 极低资源占用</p>' +
-              '<div class="home-dl-tags">' +
-                '<span class="home-dl-tag">Windows 10 / 11 兼容</span>' +
-                '<span class="home-dl-tag">Microsoft Office / WPS 自动识别</span>' +
-                '<span class="home-dl-tag">支持本地 8307 网页直接唤起</span>' +
-              '</div>' +
-            '</div>' +
-            '<div class="home-dl-right">' +
-              '<a href="/api/desktop/download" class="btn primary lg home-btn-dl-pulse">' +
-                UI.icon('download', 20) + ' 免费免登录直接下载 (FLA.exe)' +
-              '</a>' +
-              '<a href="/api/desktop/version" target="_blank" class="home-ver-link">查看服务端版本更新日志 (JSON)</a>' +
-            '</div>' +
-          '</div>' +
-        '</section>' +
-        mobileDownloadSection() +
       '</main>' +
 
       '<footer class="home-footer">' +
         '<div class="home-footer-inner">' +
-          '<div class="home-footer-brand">' + UI.icon('board', 18) + ' FLA 智慧教学互动系统</div>' +
-          '<p>© ' + new Date().getFullYear() + ' FLA Project. 保留所有权利 · 专为教育教学优化</p>' +
+          '<div class="home-footer-brand">' + UI.icon('board', 18) + ' FLA</div>' +
+          '<p>© ' + new Date().getFullYear() + ' FLA · 轻量 · 高效 · 帮助</p>' +
           '<div class="home-footer-links">' +
             '<a href="#/login">用户登录</a>' +
             '<a href="#/register">注册账号</a>' +
@@ -1558,7 +1490,7 @@ function viewLogin() {
   $('#app').innerHTML =
     '<div class="auth-bg"><div class="auth-card modal" style="max-width:380px;margin:auto;padding:32px 28px;background:#fff;border-radius:18px;box-shadow:var(--shadow-xl);">' +
     '<div class="auth-logo" style="text-align:center;margin-bottom:12px;color:var(--brand);">' + UI.icon('board', 38) + '</div>' +
-    '<h1 style="text-align:center;font-size:24px;margin-bottom:4px;">FLA</h1><p class="sub" style="text-align:center;color:var(--mut);font-size:13.5px;margin-bottom:20px;">教学课件与互动白板系统</p>' +
+    '<h1 style="text-align:center;font-size:24px;margin-bottom:4px;">FLA</h1><p class="sub" style="text-align:center;color:var(--mut);font-size:13.5px;margin-bottom:20px;">轻量 · 高效 · 帮助</p>' +
     '<div class="auth-tabs view-toggle" style="margin-bottom:18px;"><button class="view-toggle-btn active" id="lt-pw" style="flex:1;">密码登录</button><button class="view-toggle-btn" id="lt-qr" style="flex:1;">' + UI.icon('qr', 14) + ' 扫码登录</button></div>' +
     '<form id="f">' +
     '<label>用户名<input name="username" autocomplete="username" required></label>' +
@@ -1851,19 +1783,27 @@ async function openLocalFile(f) {
   }
 }
 
-/* 站点背景 */
-(function () {
-  fetch('/api/auth/config').then(r => r.json()).then(c => {
-    if (!c || !c.site_bg) return;
-    if (/^#/.test(c.site_bg)) document.body.style.backgroundColor = c.site_bg;
-    else if (/^(https?:\/\/|\/)/.test(c.site_bg)) {
-      document.body.style.backgroundImage = 'url("' + c.site_bg + '")';
-      document.body.style.backgroundSize = 'cover';
-      document.body.style.backgroundPosition = 'center';
-      document.body.style.backgroundAttachment = 'fixed';
-    }
-  }).catch(() => { });
-})();
+/* 站点外观: 背景 / 登录页背景 / 界面透明度 (管理员在后台或客户端设置) */
+window.applyTheme = applyTheme;
+function applyTheme(c) {
+  if (!c) return;
+  const css = v => /^#[0-9a-f]{3,8}$/i.test(v) ? v : (/^(https?:\/\/|\/)/.test(v) ? 'url("' + v.replace(/"/g, '') + '") center/cover fixed no-repeat' : '');
+  const op = Math.max(30, Math.min(100, +c.ui_opacity || 100)) / 100;
+  const site = css(c.site_bg || ''), login = css(c.login_bg || '') || site;
+  let t = '';
+  if (site) t += 'html,body{background:' + site + ' !important}.home-portal,.home-main{background:transparent !important}';
+  if (login) t += '.auth-bg{background:' + login + ' !important}';
+  if (op < 1 || site || login) {
+    const w = 'rgba(255,255,255,' + op + ')';
+    t += ':root{--paper:' + w + '}.topbar,.home-nav,.home-footer{background:rgba(255,255,255,' + Math.min(op, .92) + ') !important}' +
+      '.auth-card{background:' + w + ' !important;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}' +
+      '.card,.modal,.nav,.side,.sidebar{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}';
+  }
+  let el = document.getElementById('fla-theme');
+  if (!el) { el = document.createElement('style'); el.id = 'fla-theme'; document.head.appendChild(el); }
+  el.textContent = t;
+}
+fetch('/api/auth/config').then(r => r.json()).then(c => { App.config = c; applyTheme(c); }).catch(() => { });
 
 function loadScript(src) {
   return new Promise((res, rej) => {
@@ -1895,7 +1835,53 @@ async function refreshAnnBadge() {
     App.ann = r;
     const dot = $('#ann-dot');
     if (dot) dot.classList.toggle('hidden', !r.unread);
+    popupAnns(r.items || []);
   } catch (e) { }
+}
+
+/* 未读公告自动弹出: 重要公告需等 5 秒才能关闭, 普通公告可立即关闭 */
+let annPopping = false;
+function popupAnns(items) {
+  if (annPopping) return;
+  const seen = JSON.parse(sessionStorage.getItem('fla_ann_popped') || '[]');
+  const q = items.filter(a => !a.read && seen.indexOf(a.id) < 0)
+    .sort((a, b) => (b.level === 'imp') - (a.level === 'imp'));
+  if (!q.length) return;
+  annPopping = true;
+  const next = () => {
+    const a = q.shift();
+    if (!a) { annPopping = false; const d = $('#ann-dot'); if (d) d.classList.add('hidden'); return; }
+    seen.push(a.id); sessionStorage.setItem('fla_ann_popped', JSON.stringify(seen));
+    const imp = a.level === 'imp';
+    const ov = document.createElement('div');
+    ov.className = 'ann-pop-ov';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:480px;width:100%;padding:24px 24px 18px;box-shadow:0 20px 60px rgba(0,0,0,.3)">' +
+      '<div style="font-size:12px;font-weight:700;color:' + (imp ? '#c62828' : '#666') + ';margin-bottom:6px">' + (imp ? '重要公告' : (a.level === 'warn' ? '注意' : '公告')) + '</div>' +
+      '<h3 style="font-size:19px;margin-bottom:10px">' + UI.esc(a.title) + '</h3>' +
+      '<div style="font-size:14.5px;line-height:1.65;max-height:50vh;overflow:auto;color:#333">' + UI.esc(a.content || '').replace(/\n/g, '<br>') + '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px"><span style="font-size:12px;color:#999">' + UI.fmtDate(a.created_at) + '</span>' +
+      '<button class="btn primary" id="ann-pop-ok">我知道了</button></div></div>';
+    document.body.appendChild(ov);
+    const btn = ov.querySelector('#ann-pop-ok');
+    const close = () => {
+      ov.remove();
+      API.post('/api/announcements/read', { ids: [a.id] }).catch(() => { });
+      next();
+    };
+    if (imp) {
+      let n = 5; btn.disabled = true; btn.textContent = '请阅读 ' + n + ' 秒';
+      const t = setInterval(() => {
+        n--;
+        if (n > 0) btn.textContent = '请阅读 ' + n + ' 秒';
+        else { clearInterval(t); btn.disabled = false; btn.textContent = '我知道了'; btn.onclick = close; }
+      }, 1000);
+    } else {
+      btn.onclick = close;
+      ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    }
+  };
+  next();
 }
 
 async function openAnnPanel() {

@@ -11,8 +11,9 @@ from server.desktop_dist import ensure_desktop_exe
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
 
-CURRENT_VERSION = "3.4.4"
+CURRENT_VERSION = "3.5.0"
 CHANGELOG = [
+    "v3.5.0: 公告单独一栏并自动弹出(重要公告需阅读5秒); 管理员可在客户端管理用户/邀请码/公告/板块/设置; 客户端背景与透明度可由管理员设置",
     "v3.4.4: 客户端内置 聊天 / 论坛 / 个人中心 (发消息、图片文件、发帖回帖、改资料密码、公告), 不再跳浏览器",
     "v3.4.3: 课件库可直接上传课件(按钮/拖拽), 首页一键打开网页端 课件库/聊天/论坛/个人中心(免登录)",
     "v3.4.2: 手机投屏二维码默认走服务器, 任何网络都能扫 (同一 Wi-Fi 仍自动直连)",

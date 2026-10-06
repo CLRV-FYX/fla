@@ -289,6 +289,9 @@ def get_settings(request: Request):
         "registration_open": db.get_setting("registration_open", "1") == "1",
         "public_base_url": db.get_setting("public_base_url", ""),
         "site_bg": db.get_setting("site_bg", ""),
+        "login_bg": db.get_setting("login_bg", ""),
+        "client_bg": db.get_setting("client_bg", ""),
+        "ui_opacity": int(db.get_setting("ui_opacity", "100") or 100),
         "forum_enabled": db.get_setting("forum_enabled", "1") == "1",
         "chat_enabled": db.get_setting("chat_enabled", "1") == "1",
         "allow_group_create": db.get_setting("allow_group_create", "0") == "1",
@@ -302,6 +305,9 @@ class SettingsIn(BaseModel):
     registration_open: bool | None = None
     public_base_url: str | None = None
     site_bg: str | None = None
+    login_bg: str | None = None
+    client_bg: str | None = None
+    ui_opacity: int | None = None           # 3.5: 界面面板不透明度 30-100
     forum_enabled: bool | None = None      # v1.26: 论坛开关
     chat_enabled: bool | None = None       # v1.26: 聊天开关
     allow_group_create: bool | None = None  # v1.26: 允许用户创建群组
@@ -330,11 +336,15 @@ def put_settings(body: SettingsIn, request: Request):
         if len(v) > 200:
             raise HTTPException(400, "公开访问地址过长")
         db.set_setting("public_base_url", v)
-    if body.site_bg is not None:
-        v2 = body.site_bg.strip()
-        if len(v2) > 500:
-            raise HTTPException(400, "背景设置过长(最多500字符)")
-        db.set_setting("site_bg", v2)
+    for key in ("site_bg", "login_bg", "client_bg"):
+        val = getattr(body, key)
+        if val is not None:
+            v2 = val.strip()
+            if len(v2) > 500:
+                raise HTTPException(400, "背景设置过长(最多500字符)")
+            db.set_setting(key, v2)
+    if body.ui_opacity is not None:
+        db.set_setting("ui_opacity", str(max(30, min(100, int(body.ui_opacity)))))
     if body.forum_enabled is not None:
         db.set_setting("forum_enabled", "1" if body.forum_enabled else "0")
     if body.chat_enabled is not None:
@@ -342,6 +352,38 @@ def put_settings(body: SettingsIn, request: Request):
     if body.allow_group_create is not None:
         db.set_setting("allow_group_create", "1" if body.allow_group_create else "0")
     return get_settings(request)
+
+
+# ================================ 3.5 外观: 背景图上传 ================================
+THEME_SLOTS = ("site_bg", "login_bg", "client_bg")
+THEME_EXT = {"png", "jpg", "jpeg", "webp", "gif", "bmp"}
+
+
+@router.post("/theme/{slot}")
+async def upload_theme(slot: str, request: Request, file: UploadFile = File(...)):
+    """上传背景图 → 保存到 data/theme, 并直接设为该位置的背景"""
+    require_admin(request)
+    if slot not in THEME_SLOTS:
+        raise HTTPException(400, "未知位置")
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    if ext not in THEME_EXT:
+        raise HTTPException(400, "只支持 png / jpg / webp / gif / bmp 图片")
+    data = await file.read()
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(400, "图片最大 15MB")
+    d = db.DATA / "theme"
+    d.mkdir(parents=True, exist_ok=True)
+    old = db.get_setting(slot, "")
+    name = f"{slot}_{secrets.token_hex(6)}.{ext}"
+    (d / name).write_bytes(data)
+    if old.startswith("/api/auth/theme/"):
+        try:
+            (d / Path(old).name).unlink()
+        except Exception:
+            pass
+    url = "/api/auth/theme/" + name
+    db.set_setting(slot, url)
+    return {"ok": True, "url": url}
 
 
 # ================================ v1.26 公告管理 ================================

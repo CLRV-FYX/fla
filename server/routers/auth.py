@@ -36,11 +36,27 @@ class QrApproveIn(BaseModel):
     ticket: str
 
 
+@router.get("/theme/{name}")
+def theme_file(name: str):
+    """管理员上传的背景图(公开, 登录页也要用)"""
+    import re as _re
+    from fastapi.responses import FileResponse
+    if not _re.match(r"^[A-Za-z0-9_.-]+$", name):
+        raise HTTPException(404, "不存在")
+    p = db.DATA / "theme" / name
+    if not p.is_file():
+        raise HTTPException(404, "不存在")
+    return FileResponse(str(p), headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
 @router.get("/config")
 def config():
     return {
         "registration_open": db.get_setting("registration_open", "1") == "1",
         "site_bg": db.get_setting("site_bg", ""),
+        "login_bg": db.get_setting("login_bg", ""),
+        "client_bg": db.get_setting("client_bg", ""),
+        "ui_opacity": int(db.get_setting("ui_opacity", "100") or 100),
         "toolbar_keep": db.get_setting("toolbar_keep", "1") == "1",
     }
 

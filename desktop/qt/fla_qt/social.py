@@ -428,6 +428,13 @@ class ForumPage(QWidget):
         back.clicked.connect(lambda: (self.stack.setCurrentIndex(0), self.load_threads(self.page)))
         dt.addWidget(back)
         dt.addStretch(1)
+        self.adm = []
+        for t, fn in (("置顶/取消", self.adm_pin), ("锁定/解锁", self.adm_lock), ("删除帖子", self.adm_del)):
+            b = PushButton(t)
+            b.clicked.connect(fn)
+            b.hide()
+            dt.addWidget(b)
+            self.adm.append(b)
         dv.addLayout(dt)
         self.detail = TextBrowser()
         self.detail.setOpenExternalLinks(True)
@@ -524,6 +531,10 @@ class ForumPage(QWidget):
             if data.get("pages", 1) > 1:
                 h.append(f"<p class='sys'>第 {data['page']}/{data['pages']} 页（显示最新一页回复）</p>")
             self.detail.setHtml("".join(h))
+            self.cur_t = data
+            is_admin = (getattr(self.win, "me", None) or {}).get("role") == "admin"
+            for b in self.adm:
+                b.setVisible(is_admin or (b is self.adm[2] and data.get("mine")))
             locked = data.get("locked")
             self.reply.setEnabled(not locked)
             self.rb.setEnabled(not locked)
@@ -534,6 +545,36 @@ class ForumPage(QWidget):
                 sb = self.detail.verticalScrollBar()
                 QTimer.singleShot(0, lambda: sb.setValue(sb.maximum() if page > 1 or data.get("posts") else 0))
         run_async(lambda: core.api("GET", f"/api/forum/threads/{tid}?page={page}"), done)
+
+    def adm_pin(self):
+        t = getattr(self, "cur_t", None)
+        if t:
+            run_async(lambda: core.api("PATCH", f"/api/forum/threads/{t['id']}", {"pinned": not t.get("pinned")}),
+                      lambda r: (toast(self, r[0] == 200, "已更新" if r[0] == 200 else _err(r[1], r[0])),
+                                 self.open_thread(t["id"])))
+
+    def adm_lock(self):
+        t = getattr(self, "cur_t", None)
+        if t:
+            run_async(lambda: core.api("PATCH", f"/api/forum/threads/{t['id']}", {"locked": not t.get("locked")}),
+                      lambda r: (toast(self, r[0] == 200, "已更新" if r[0] == 200 else _err(r[1], r[0])),
+                                 self.open_thread(t["id"])))
+
+    def adm_del(self):
+        from qfluentwidgets import MessageBox
+        t = getattr(self, "cur_t", None)
+        if not t:
+            return
+        m = MessageBox("删除帖子", f"删除「{t.get('title')}」及全部回复？", self.window())
+        m.yesButton.setText("删除")
+        m.cancelButton.setText("取消")
+        if m.exec():
+            def done(r):
+                toast(self, r[0] == 200, "已删除" if r[0] == 200 else _err(r[1], r[0]))
+                if r[0] == 200:
+                    self.stack.setCurrentIndex(0)
+                    self.load()
+            run_async(lambda: core.api("DELETE", f"/api/forum/threads/{t['id']}"), done)
 
     def send_reply(self):
         t = self.reply.toPlainText().strip()
@@ -579,7 +620,7 @@ class ForumPage(QWidget):
 # ============================================================== 个人中心
 class ProfilePage(Page):
     def __init__(self, win):
-        super().__init__("profile", "个人中心", "账号资料 · 存储空间 · 公告")
+        super().__init__("profile", "个人中心")
         self.win = win
         card = CardWidget()
         cv = QVBoxLayout(card)
@@ -630,11 +671,6 @@ class ProfilePage(Page):
         v3.addLayout(h3)
         self.lay.addWidget(c3)
 
-        self.lay.addWidget(StrongBodyLabel("公告"))
-        self.ann = BodyLabel("")
-        self.ann.setWordWrap(True)
-        self.ann.setTextFormat(Qt.RichText)
-        self.lay.addWidget(self.ann)
         self.lay.addStretch(1)
 
     def showEvent(self, e):
@@ -668,21 +704,6 @@ class ProfilePage(Page):
                 self.qtext.setText(f"已用 {fmt_size(used)}（不限）")
         run_async(lambda: core.api("GET", "/api/auth/me"), done)
 
-        def ann(r):
-            st, data = r
-            items = (data or {}).get("items") or [] if st == 200 else []
-            if not items:
-                self.ann.setText("<span style='color:#888'>暂无公告</span>")
-                return
-            self.ann.setText("".join(
-                f"<p><b>{'【重要】' if a.get('level') == 'imp' else ''}{_esc(a.get('title'))}</b>"
-                f"{'' if a.get('read') else ' <span style=color:#c62828>●</span>'}"
-                f"<br><span style='color:#888'>{_short(a.get('created_at'))}</span><br>{_esc(a.get('content'))}</p>"
-                for a in items[:20]))
-            ids = [a["id"] for a in items if not a.get("read")]
-            if ids:
-                run_async(lambda: core.api("POST", "/api/announcements/read", {"ids": ids}), lambda _r: None)
-        run_async(lambda: core.api("GET", "/api/announcements"), ann)
 
     def save(self):
         body = {"nickname": self.nick.text().strip(), "signature": self.sig.text()}
@@ -706,3 +727,144 @@ class ProfilePage(Page):
                 self.old.clear()
                 self.new.clear()
         run_async(lambda: core.api("POST", "/api/auth/change_password", body), done)
+
+
+# ============================================================== 公告
+LV = {"info": "公告", "warn": "注意", "imp": "重要"}
+
+
+class AnnDialog(MessageBoxBase):
+    """公告弹窗: 重要公告 5 秒后才能关闭"""
+
+    def __init__(self, parent, a):
+        super().__init__(parent)
+        imp = a.get("level") == "imp"
+        tag = CaptionLabel(LV.get(a.get("level"), "公告") + ("公告" if imp else ""))
+        tag.setTextColor("#c62828" if imp else "#666666", "#ef9a9a" if imp else "#aaaaaa")
+        self.viewLayout.addWidget(tag)
+        self.viewLayout.addWidget(SubtitleLabel(a.get("title") or ""))
+        body = TextBrowser()
+        body.setOpenExternalLinks(True)
+        body.document().setDefaultStyleSheet(CSS)
+        body.setHtml(_esc(a.get("content")) or "<span class='sys'>（无正文）</span>")
+        body.setMinimumHeight(180)
+        self.viewLayout.addWidget(body)
+        self.viewLayout.addWidget(CaptionLabel(_short(a.get("created_at"))))
+        self.cancelButton.hide()
+        self.buttonLayout.insertStretch(0, 1)
+        self.yesButton.setText("我知道了")
+        self.widget.setMinimumWidth(520)
+        self.left = 5 if imp else 0
+        if self.left:
+            self.yesButton.setEnabled(False)
+            self.yesButton.setText(f"请阅读 {self.left} 秒")
+            self.t = QTimer(self)
+            self.t.timeout.connect(self._tick)
+            self.t.start(1000)
+
+    def _tick(self):
+        self.left -= 1
+        if self.left > 0:
+            self.yesButton.setText(f"请阅读 {self.left} 秒")
+        else:
+            self.t.stop()
+            self.yesButton.setEnabled(True)
+            self.yesButton.setText("我知道了")
+
+    def keyPressEvent(self, e):
+        if e.key() == Qt.Key_Escape and self.left > 0:
+            return
+        super().keyPressEvent(e)
+
+    def reject(self):
+        if self.left > 0:
+            return
+        super().reject()
+
+
+class AnnPage(QWidget):
+    def __init__(self, win):
+        super().__init__()
+        self.setObjectName("anns")
+        self.win = win
+        self.items = []
+        self.popped = set()
+        self._popping = False
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 20, 24, 16)
+        top = QHBoxLayout()
+        top.addWidget(TitleLabel("公告"))
+        top.addStretch(1)
+        self.tip = CaptionLabel("")
+        top.addWidget(self.tip)
+        rb = TransparentToolButton(FIF.SYNC)
+        rb.clicked.connect(self.load)
+        top.addWidget(rb)
+        root.addLayout(top)
+        self.view = TextBrowser()
+        self.view.setOpenExternalLinks(True)
+        self.view.document().setDefaultStyleSheet(CSS)
+        root.addWidget(self.view, 1)
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(lambda: self.load(popup=True))
+        self.timer.start(60000)
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self.load()
+
+    def load(self, popup=True):
+        if not cfg.token:
+            self.view.setHtml("<p class='sys'>请先到「设置」登录账号</p>")
+            self.win.set_ann_badge(0)
+            return
+
+        def done(r):
+            st, data = r
+            if st != 200:
+                self.tip.setText(_err(data, st))
+                return
+            self.tip.setText("")
+            self.items = data.get("items") or []
+            self.render()
+            self.win.set_ann_badge(sum(1 for a in self.items if not a.get("read")))
+            if popup:
+                self.popup()
+        run_async(lambda: core.api("GET", "/api/announcements"), done)
+
+    def render(self):
+        if not self.items:
+            self.view.setHtml("<p class='sys' align='center'>暂无公告</p>")
+            return
+        h = []
+        for a in self.items:
+            imp = a.get("level") == "imp"
+            h.append(f"<div class='post'><p class='who'>"
+                     f"<span style='color:{'#c62828' if imp else '#666'};font-weight:bold'>{LV.get(a.get('level'), '公告')}</span>"
+                     f"{' · 专属' if a.get('personal') else ''} · {_short(a.get('created_at'))}"
+                     f"{'' if a.get('read') else ' <span style=color:#c62828>● 未读</span>'}</p>"
+                     f"<h2>{_esc(a.get('title'))}</h2>{_esc(a.get('content'))}</div>")
+        self.view.setHtml("".join(h))
+
+    def popup(self):
+        if self._popping:
+            return
+        q = [a for a in self.items if not a.get("read") and a["id"] not in self.popped]
+        q.sort(key=lambda a: a.get("level") != "imp")
+        if not q:
+            return
+        self._popping = True
+        try:
+            for a in q:
+                self.popped.add(a["id"])
+                win = self.win
+                if win.isMinimized() or not win.isVisible():
+                    win.bring_up() if hasattr(win, "bring_up") else win.show()
+                AnnDialog(win, a).exec()
+                a["read"] = True
+                aid = a["id"]
+                run_async(lambda aid=aid: core.api("POST", "/api/announcements/read", {"ids": [aid]}), lambda _r: None)
+        finally:
+            self._popping = False
+        self.render()
+        self.win.set_ann_badge(sum(1 for a in self.items if not a.get("read")))

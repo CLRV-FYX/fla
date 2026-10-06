@@ -107,7 +107,7 @@ class StatusCard(CardWidget):
 # ================================================================== 首页
 class HomePage(Page):
     def __init__(self, win):
-        super().__init__("home", "FLA 课堂助手", f"版本 {core.VERSION} · 一键放映课件、批注、计时、屏蔽希沃工具条")
+        super().__init__("home", "FLA", f"轻量 · 高效 · 帮助　v{core.VERSION}")
         self.win = win
         self.c_server = StatusCard(FIF.GLOBE, "服务器")
         self.c_bridge = StatusCard(FIF.LINK, "网页联动 (127.0.0.1:8307)")
@@ -136,11 +136,6 @@ class HomePage(Page):
             row2.addWidget(b)
         row2.addStretch(1)
         self.lay.addLayout(row2)
-        tip = BodyLabel("使用方法：在网页端课件库点「本地打开」，或在本客户端「课件库」双击课件，"
-                        "会自动下载并用 PowerPoint / WPS 全屏放映，同时弹出底部工具盒（翻页、画笔、激光笔、白板、计时）。\n"
-                        "画布快捷键：Esc 退出批注 · Ctrl+Z 撤销 · 右键切回鼠标 · ←/→ 翻页")
-        tip.setWordWrap(True)
-        self.lay.addWidget(tip)
         self.lay.addStretch(1)
 
     def refresh(self, bridge_ok):
@@ -161,7 +156,7 @@ class HomePage(Page):
 # ================================================================== 课件库
 class LibraryPage(Page):
     def __init__(self, win):
-        super().__init__("library", "课件库", "双击课件 → 下载并全屏放映")
+        super().__init__("library", "课件库")
         self.win = win
         self.files = []
         bar = QHBoxLayout()
@@ -457,7 +452,13 @@ class MainWindow(FluentWindow):
         self.home = HomePage(self)
         self.library = LibraryPage(self)
         self.settings = SettingsPage(self)
-        from .social import ChatPage, ForumPage, ProfilePage
+        from .social import AnnPage, ChatPage, ForumPage, ProfilePage
+        from .adminpage import AdminPage
+        self.me = {}
+        self._bg = None
+        self._op = 100
+        self.anns = AnnPage(self)
+        self.admin = AdminPage(self)
         self.chat = ChatPage(self)
         self.forum = ForumPage(self)
         self.profile = ProfilePage(self)
@@ -465,6 +466,9 @@ class MainWindow(FluentWindow):
         self.addSubInterface(self.library, FIF.LIBRARY, "课件库")
         self.addSubInterface(self.chat, FIF.MESSAGE, "聊天")
         self.addSubInterface(self.forum, FIF.CHAT, "论坛")
+        self.addSubInterface(self.anns, FIF.MEGAPHONE, "公告")
+        self.addSubInterface(self.admin, FIF.CERTIFICATE, "管理", NavigationItemPosition.BOTTOM)
+        self.navigationInterface.widget(self.admin.objectName()).setVisible(False)
         self.addSubInterface(self.profile, FIF.PEOPLE, "个人中心", NavigationItemPosition.BOTTOM)
         self.addSubInterface(self.settings, FIF.SETTING, "设置", NavigationItemPosition.BOTTOM)
         self.navigationInterface.setExpandWidth(180)
@@ -475,6 +479,7 @@ class MainWindow(FluentWindow):
         self.move(r.center().x() - self.width() // 2, r.center().y() - self.height() // 2)
         self.refresh_all()
         QTimer.singleShot(2500, lambda: self.check_update(manual=False))
+        QTimer.singleShot(300, self.load_theme)
 
     # ---- 托盘: 关窗口 = 最小化到托盘, 桥接继续工作
     def _tray(self):
@@ -523,7 +528,78 @@ class MainWindow(FluentWindow):
         (InfoBar.success if ok else InfoBar.error)("", text, parent=self, position=InfoBarPosition.TOP,
                                                    duration=2500 if ok else 4000)
 
+    # ---- 账号 / 公告 / 外观
+    def refresh_me(self):
+        if not cfg.token:
+            self.me = {}
+            self.navigationInterface.widget(self.admin.objectName()).setVisible(False)
+            return
+
+        def done(r):
+            st, d = r
+            self.me = d if st == 200 and isinstance(d, dict) else {}
+            self.navigationInterface.widget(self.admin.objectName()).setVisible(self.me.get("role") == "admin")
+            self.anns.load(popup=True)
+        run_async(lambda: core.api("GET", "/api/auth/me"), done)
+
+    def set_ann_badge(self, n):
+        try:
+            w = self.navigationInterface.widget(self.anns.objectName())
+            w.setText(f"公告 ({n})" if n else "公告")
+        except Exception:
+            pass
+
+    def load_theme(self):
+        def work():
+            st, c = core.api("GET", "/api/auth/config")
+            if st != 200 or not isinstance(c, dict):
+                return None
+            bg = c.get("client_bg") or ""
+            data = core.fetch_bytes(bg) if bg.startswith(("/", "http")) else None
+            return c, bg, data
+
+        def done(r):
+            if not r:
+                return
+            c, bg, data = r
+            from PyQt5.QtGui import QColor, QPixmap
+            self._op = int(c.get("ui_opacity") or 100)
+            self._bg = None
+            if data:
+                pm = QPixmap()
+                if pm.loadFromData(data):
+                    self._bg = pm
+            elif bg.startswith("#"):
+                self._bg = QColor(bg)
+            self._apply_bg()
+        run_async(work, done)
+
+    def apply_theme_preview(self, op):
+        self._op = op
+        self._apply_bg()
+
+    def _apply_bg(self):
+        on = self._bg is not None or self._op < 100
+        self.stackedWidget.setStyleSheet("background: transparent;" if on else "")
+        self.update()
+
+    def paintEvent(self, e):
+        super().paintEvent(e)
+        if self._bg is None:
+            return
+        from PyQt5.QtGui import QColor, QPainter, QPixmap
+        p = QPainter(self)
+        r = self.rect()
+        if isinstance(self._bg, QPixmap):
+            pm = self._bg.scaled(r.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+            p.drawPixmap((r.width() - pm.width()) // 2, (r.height() - pm.height()) // 2, pm)
+        else:
+            p.fillRect(r, self._bg)
+        p.fillRect(r, QColor(243, 243, 243, int(255 * self._op / 100)))
+        p.end()
+
     def refresh_all(self):
+        self.refresh_me()
         self.home.refresh(self.bridge_ok)
         self.settings.sync()
         if self.stackedWidget.currentWidget() is self.library:

@@ -326,6 +326,10 @@ async function loadInvites() {
 }
 
 /* ---------- 设置 ---------- */
+function bgRow(id, label, v) {
+  return '<label>' + label + '<div style="display:flex;gap:8px"><input id="' + id + '" type="text" style="flex:1" placeholder="留空=默认; #颜色; 或图片链接" value="' + UI.esc(v || '') + '">' +
+    '<button type="button" class="btn sm" data-bgup="' + id + '">上传图片</button><button type="button" class="btn sm ghost" data-bgclr="' + id + '">清除</button></div></label>';
+}
 async function secSettings() {
   const main = $('#adm-main');
   let s;
@@ -335,7 +339,9 @@ async function secSettings() {
     '<label>单文件上传上限 (MB)<input id="sm" type="number" min="1" max="1000000" value="' + s.max_upload_mb + '"></label>' +
     '<label class="switch-row"><span>开放注册（注册始终需要邀请码）</span><input type="checkbox" id="sr"' + (s.registration_open ? ' checked' : '') + '></label>' +
     '<label>公开访问地址（域名，供微软在线放映抓取）<input id="spb" type="text" placeholder="例: http://t.fyx.best" value="' + UI.esc(s.public_base_url || '') + '"><p class="muted">微软 Office 放映要求域名+80/443 端口。填了它，即使用 IP 打开 FLA，直链也走此域名；留空则按当前浏览器地址生成</p></label>' +
-    '<label>站点背景（登录页 / 前台 / 后台通用）<input id="sbg" type="text" placeholder="留空=默认; #1a2233; 或图片URL" value="' + UI.esc(s.site_bg || '') + '"><p class="muted">填 #颜色 或 http(s):// 图片链接；保存后刷新生效</p></label>' +
+    '<hr><h4>外观</h4>' +
+    bgRow('sbg', '站点背景', s.site_bg) + bgRow('slbg', '登录页背景（留空=同站点背景）', s.login_bg) + bgRow('scbg', 'Windows 客户端背景', s.client_bg) +
+    '<label>界面不透明度 <b id="sopv">' + (s.ui_opacity || 100) + '%</b><input id="sop" type="range" min="30" max="100" value="' + (s.ui_opacity || 100) + '"><p class="muted">有背景图时调低可透出背景（网站与客户端通用）</p></label>' +
     '<hr><h4>课件放映与白板</h4>' +
     '<label class="switch-row"><span>放映时工具栏常驻显示（不自动收回，便于翻页与板书）</span><input type="checkbox" id="stb"' + (s.toolbar_keep ? ' checked' : '') + '><p class="muted">开启后全屏放映时底栏与顶栏始终显示，避免上课时找不到画笔或翻页键</p></label>' +
     '<hr><h4>社区权限</h4>' +
@@ -343,19 +349,38 @@ async function secSettings() {
     '<label class="switch-row"><span>开启聊天区</span><input type="checkbox" id="schat"' + (s.chat_enabled ? ' checked' : '') + '></label>' +
     '<label class="switch-row"><span>允许用户创建群组（官方大厅不受影响）</span><input type="checkbox" id="sgrp"' + (s.allow_group_create ? ' checked' : '') + '></label>' +
     '<button class="btn primary" id="ssave">保存设置</button></div>';
+  $('#sop').oninput = () => { $('#sopv').textContent = $('#sop').value + '%'; };
+  $$('[data-bgup]').forEach(b => b.onclick = () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = async () => {
+      if (!inp.files[0]) return;
+      const fd = new FormData(); fd.append('file', inp.files[0]);
+      const slot = { sbg: 'site_bg', slbg: 'login_bg', scbg: 'client_bg' }[b.dataset.bgup];
+      try {
+        const r = await fetch('/api/admin/theme/' + slot, { method: 'POST', body: fd, headers: { Authorization: 'Bearer ' + API.token } });
+        const j = await r.json(); if (!r.ok) throw new Error(j.detail || '上传失败');
+        $('#' + b.dataset.bgup).value = j.url; toast('已上传并生效');
+        if (window.applyTheme) fetch('/api/auth/config').then(r => r.json()).then(applyTheme);
+      } catch (e) { toast(e.message, 'err'); }
+    };
+    inp.click();
+  });
+  $$('[data-bgclr]').forEach(b => b.onclick = () => { $('#' + b.dataset.bgclr).value = ''; });
   $('#ssave').onclick = async () => {
     try {
       await API.put('/api/admin/settings', {
         default_quota_mb: +$('#sq').value, max_upload_mb: +$('#sm').value,
         registration_open: $('#sr').checked,
         public_base_url: $('#spb').value.trim(),
-        site_bg: $('#sbg').value.trim(),
+        site_bg: $('#sbg').value.trim(), login_bg: $('#slbg').value.trim(), client_bg: $('#scbg').value.trim(),
+        ui_opacity: +$('#sop').value,
         toolbar_keep: $('#stb').checked,
         forum_enabled: $('#sforum').checked,
         chat_enabled: $('#schat').checked,
         allow_group_create: $('#sgrp').checked,
       });
       toast('设置已保存');
+      if (window.applyTheme) fetch('/api/auth/config').then(r => r.json()).then(applyTheme);
     } catch (e) { toast(e.message, 'err'); }
   };
 }
