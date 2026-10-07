@@ -3100,3 +3100,19 @@ body.present-body { background: #000000; }
 .board-row input { flex: 1; min-width: 0; }
 .eu-cert-preview { display: grid; place-items: center; padding: 10px 0; }
 .tbl-row-chk { width: 15px; height: 15px; accent-color: #09090b; cursor: pointer; }
+
+/* 黑底按钮里的文字一律白色 (修复下载按钮黑字) */
+.btn.primary, .btn.primary * { color: #fff !important; }
+.btn.primary small { opacity: .75; }
+
+/* 手机: 顶栏两行, 导航横向滑动, 不撑破页面 */
+@media (max-width: 760px) {
+  .topbar { height: auto; flex-wrap: wrap; padding: 8px 12px 0; gap: 4px; }
+  .topbar > div:first-child { width: 100%; flex-wrap: wrap; gap: 0 !important; }
+  .topbar .nav { order: 3; width: 100%; overflow-x: auto; flex-wrap: nowrap; white-space: nowrap; scrollbar-width: none; padding-bottom: 6px; }
+  .topbar .nav::-webkit-scrollbar { display: none; }
+  .topbar .nav a { flex: 0 0 auto; white-space: nowrap; }
+  .topbar .top-right { position: absolute; right: 10px; top: 8px; gap: 6px; }
+  .topbar .top-right > a.btn, .topbar .top-right .uchip b, .topbar .top-right .cert, .topbar .top-right [class*="desk"] { display: none !important; }
+  .page { overflow-x: hidden; }
+}

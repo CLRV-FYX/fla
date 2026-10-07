@@ -469,7 +469,7 @@ function shell(content, active) {
   return '<header class="topbar">' +
     '<div style="display:flex;align-items:center;gap:18px;">' +
       '<a class="brand" href="#/home" title="返回官网首页">' +
-        UI.icon('board', 24) + '<span>FLA</span><span class="brand-pill">v1.36</span>' +
+        UI.icon('board', 24) + '<span>FLA</span>' +
       '</a>' +
       '<nav class="nav">' +
         '<a class="' + (active === 'library' ? 'on' : '') + '" href="#/library">' + UI.icon('folder', 15) + ' 课件库</a>' +
@@ -504,7 +504,6 @@ async function viewLibrary() {
     '<div class="lib-hero">' +
       '<div class="lib-hero-left">' +
         '<h2>我的课件</h2>' +
-        '<p>现代化教学资源管理 · 一键多端联动放映 · 原生Office高速预览</p>' +
       '</div>' +
       '<div class="lib-hero-actions">' +
         '<div class="storage-card" id="storage"></div>' +
@@ -1216,7 +1215,7 @@ function viewMobileCenter() {
   const ua = navigator.userAgent, isIOS = /iPhone|iPad/i.test(ua), isAnd = /Android|Harmony/i.test(ua);
   const css = '<style>' +
     '.mc{min-height:100vh;background:#0b0b0c;color:#f5f5f7;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}' +
-    '.mc a{color:inherit;text-decoration:none}' +
+    '.mc a{color:inherit;text-decoration:none}.mc h1,.mc h2,.mc h3,.mc h4{color:#f5f5f7}' +
     '.mc-top{max-width:1120px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:18px 22px}' +
     '.mc-top .b{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px}' +
     '.mc-top .b i{width:34px;height:34px;border-radius:10px;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;letter-spacing:-.5px}' +
@@ -1256,43 +1255,15 @@ function viewMobileCenter() {
   const iosBtn = '<a class="mc-btn' + (isIOS ? ' w' : '') + '" href="/api/app/ios.mobileconfig">' + UI.icon('download', 18) + ' 安装到 iPhone 主屏</a>';
   const webBtn = '<a class="mc-btn" href="/cast.html">打开网页版</a>';
   $('#app').innerHTML = css + '<div class="mc">' +
-    (wx ? '<div class="mc-wx" onclick="this.remove()"><div>点右上角 <b>···</b><br>选择「在浏览器中打开」<br>才能下载安装 ↗</div></div>' : '') +
-    '<div class="mc-top"><a class="b" href="#/home"><i>FLA</i>手机端中心</a><nav><a href="#/home">官网首页</a><a href="#/desktop">桌面端中心</a><a href="/cast.html">网页版</a><a href="#mc-faq" onclick="document.getElementById(\'mc-faq\').scrollIntoView({behavior:\'smooth\'});return false;">常见问题</a></nav></div>' +
-    '<section class="mc-hero"><div class="l">' +
-      '<span class="mc-tag"><span style="width:7px;height:7px;border-radius:50%;background:#34c759"></span> 扫码即连 · 同一 Wi-Fi 自动直连</span>' +
-      '<h1>手机，就是你的<br>第二块讲台<span>。</span></h1>' +
-      '<p>整个手机屏幕实时投到教室大屏；在手机上高清观看电脑画面，直接批注、翻页、激光笔指点；摄像头秒变实物展台。</p>' +
-      '<div class="mc-btns">' + (isIOS ? iosBtn + webBtn : andBtn + iosBtn) + '</div>' +
-    '</div>' +
-    '<div class="mc-qr">' + (qr || '<div style="width:184px;height:184px;display:flex;align-items:center;justify-content:center">二维码加载失败</div>') +
-      '<b>手机扫码下载</b><span>自动识别 安卓 / 鸿蒙 / iPhone</span></div>' +
+    (wx ? '<div class="mc-wx" onclick="this.remove()"><div>点右上角 <b>···</b><br>选择「在浏览器中打开」</div></div>' : '') +
+    '<div class="mc-top"><a class="b" href="#/home"><i>FLA</i>手机端</a></div>' +
+    '<section class="mc-hero" style="justify-content:center;text-align:center;flex-direction:column;gap:22px">' +
+      '<h1 style="margin:0">FLA 手机端</h1>' +
+      '<p style="margin:0 auto;letter-spacing:4px">轻量 · 高效 · 帮助</p>' +
+      '<div class="mc-btns" style="justify-content:center;margin-top:6px">' + (isIOS ? iosBtn + webBtn : isAnd ? andBtn + webBtn : andBtn + iosBtn + webBtn) + '</div>' +
+      (isIOS || isAnd ? '' : '<div class="mc-qr" style="margin-top:10px">' + (qr || '') + '<b>手机扫码</b></div>') +
     '</section>' +
-    '<section class="mc-sec"><h2>能做什么</h2><p class="s">一个 App 搞定课堂上所有手机与电脑的互动</p><div class="mc-grid">' +
-      '<div class="mc-card"><div class="ic">' + ic('mobile') + '</div><h3>整屏投到电脑</h3><p>PPT、相册、视频、任何 App 实时显示在大屏，不依赖学校的无线投屏设备，有网就能用。</p></div>' +
-      '<div class="mc-card"><div class="ic">' + ic('laptop') + '</div><h3>高清观看电脑</h3><p>电脑画面静止时自动补发原画质，双指放大看清小字，走到教室后排也能操作。</p></div>' +
-      '<div class="mc-card"><div class="ic">' + ic('edit') + '</div><h3>手机批注 · 遥控翻页</h3><p>画笔、荧光笔、激光笔、橡皮，笔迹实时出现在电脑上；上一页/下一页/黑屏/白板一键操作。</p></div>' +
-      '<div class="mc-card"><div class="ic">' + ic('image') + '</div><h3>实物展台</h3><p>摄像头实时投屏展示作业与实验，或拍一张高清照片发到大屏。</p></div>' +
-    '</div></section>' +
-    '<section class="mc-sec"><h2>下载安装</h2><p class="s">按你的手机系统选择</p><div class="mc-grid">' +
-      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>安卓 / 鸿蒙 4.x 及以下</h3><p>安装「FLA 手机端」App（约 100 KB）。功能最全：<b>整屏投屏</b> + 扫码连接 + 观看批注。安装时提示“未知来源”请选择允许。</p><div class="act"><a class="w" href="/api/app/android">下载 APK</a></div></div>' +
-      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>鸿蒙 NEXT（纯血鸿蒙 5.x）</h3><p>在华为应用市场安装<b>「卓易通」</b>（或「出境易」），在其中导入 FLA-cast.apk 即可运行全部功能。</p><div class="act"><a class="w" href="/api/app/android">下载 APK</a><a href="/cast.html">网页版</a></div></div>' +
-      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>iPhone / iPad · 完整版 App</h3><p>支持<b>整屏投屏</b>。iOS 14 – 15.4 可免电脑、免证书永久安装（TrollStore）；用 iPhone 的 Safari 打开本页会按系统版本显示方法。</p><div class="act"><a class="w" href="#mc-ios-guide" onclick="document.getElementById(\'mc-ios-guide\').scrollIntoView({behavior:\'smooth\'});return false;">查看安装方法</a><a href="/api/app/ios.ipa">下载 IPA</a></div></div>' +
-      '<div class="mc-card"><div class="ic">' + ic('download') + '</div><h3>iPhone / iPad · 免安装版</h3><p>Safari 打开本页 → 安装描述文件 → 「设置」顶部「已下载描述文件」→ 安装。主屏出现「FLA」：课件库、上传、聊天、论坛等网站功能 + 扫码投屏、观看批注；配合 GRecord 可整屏投屏。</p><div class="act"><a class="w" href="/api/app/ios.mobileconfig">安装描述文件</a><a href="/cast.html">网页版</a></div></div>' +
-    '</div></section>' +
-    iosGuide() +
-    '<section class="mc-sec"><h2>三步连接</h2><p class="s">第一次用也只要十秒</p><div class="mc-steps">' +
-      '<div><b>电脑端打开「手机」</b>FLA 桌面端工具栏点「手机」，屏幕上出现二维码和 4 位配对码。</div>' +
-      '<div><b>手机扫码</b>打开 FLA 手机端点「扫码连接」（或用系统相机扫码），也可直接输入配对码。</div>' +
-      '<div><b>开始互动</b>「观看电脑」里批注翻页；「投屏到电脑」里一键整屏投屏或摄像头投屏。</div>' +
-    '</div></section>' +
-    '<section class="mc-sec mc-faq" id="mc-faq"><h2>常见问题</h2><p class="s"></p>' +
-      '<details><summary>整屏投屏需要学校有无线投屏设备吗？</summary><p>不需要。安卓 App 自己录制屏幕，通过网络（同一 Wi-Fi 时局域网直连，否则经服务器中转）发到电脑上的 FLA，学校网络只要能上网即可。</p></details>' +
-      '<details><summary>iPhone 怎么整屏投屏？</summary><p>按上方「iPhone 完整版安装」装好 App → 扫码连接电脑 →「投屏到电脑」→「整个手机屏幕投到电脑」→ 在系统面板选「FLA 投屏」点「开始直播」。之后切到任何 App 都会实时显示在电脑上；点左上角红色计时条可停止。也可从控制中心长按「屏幕录制」选择 FLA 投屏。</p></details>' +
-      '<details><summary>App 会自动更新吗？</summary><p>安卓 App 每次打开自动检查新版本并在后台下载，下载完弹窗一键安装；电脑端同样每次启动自动下载新版，可立即重启或退出时自动安装。iOS 版界面随网站自动更新。</p></details>' +
-      '<details><summary>观看电脑画面不够清晰？</summary><p>新版电脑端在画面静止时会自动补发一帧原画质；手机上双指放大、双击还原。同一 Wi-Fi 下走局域网直连，清晰度和流畅度最高。</p></details>' +
-      '<details><summary>微信里点下载没反应？</summary><p>微信/QQ 会拦截安装包下载，请点右上角「···」→「在浏览器中打开」。</p></details>' +
-    '</section>' +
-    '<div class="mc-foot">© ' + new Date().getFullYear() + ' FLA · <a href="#/home">返回官网</a></div>' +
+    (isIOS ? iosGuide() : '') +
   '</div>';
   fetch('/api/app/info').then(r => r.json()).then(d => {
     const el = document.getElementById('mc-apk');
@@ -1455,20 +1426,7 @@ function viewHome() {
         '</section>' +
       '</main>' +
 
-      '<footer class="home-footer">' +
-        '<div class="home-footer-inner">' +
-          '<div class="home-footer-brand">' + UI.icon('board', 18) + ' FLA</div>' +
-          '<p>© ' + new Date().getFullYear() + ' FLA · 轻量 · 高效 · 帮助</p>' +
-          '<div class="home-footer-links">' +
-            '<a href="#/login">用户登录</a>' +
-            '<a href="#/register">注册账号</a>' +
-            '<a href="#/desktop">桌面端中心</a>' +
-            '<a href="#/remote">手机遥控</a>' +
-            '<a href="/api/desktop/download">客户端下载</a>' +
-            '<a href="#/mobile">手机端中心</a>' +
-          '</div>' +
-        '</div>' +
-      '</footer>' +
+
     '</div>';
 
   const fLink = $('#nav-features-link');
