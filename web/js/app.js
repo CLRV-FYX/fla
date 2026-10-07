@@ -152,6 +152,7 @@ function route() {
     if (window.Remote) return window.Remote.view();
   }
   if (parts[0] === 'mobile') return viewMobileCenter();
+  if (parts[0] === 'desktop' && !App.user) return viewDesktopCenter();
   if (!App.user) {
     if (parts[0] === 'login') return viewLogin();
     if (parts[0] === 'register') return viewRegister();
@@ -462,38 +463,50 @@ window.bindLogout = bindLogout;
  * ================================================================ */
 function shell(content, active) {
   const u = App.user;
-  const deskStatus = App.desktopReady
-    ? '<a class="btn sm soft" id="top-desktop-status" href="#/desktop" title="桌面端已连接 (8307)"><span class="dh-dot online" style="display:inline-block;margin-right:5px;"></span>客户端就绪</a>'
-    : '<a class="btn sm ghost" id="top-desktop-status" href="#/desktop" title="下载/连接桌面端">' + UI.icon('laptop', 14) + ' <span>桌面端</span></a>';
-
-  return '<header class="topbar">' +
-    '<div style="display:flex;align-items:center;gap:18px;">' +
-      '<a class="brand" href="#/home" title="返回官网首页">' +
-        UI.icon('board', 24) + '<span>FLA</span>' +
-      '</a>' +
-      '<nav class="nav">' +
-        '<a class="' + (active === 'library' ? 'on' : '') + '" href="#/library">' + UI.icon('folder', 15) + ' 课件库</a>' +
-        '<a class="' + (active === 'desktop' ? 'on' : '') + '" href="#/desktop">' + UI.icon('laptop', 15) + ' 桌面端中心</a>' +
-        '<a href="#/mobile">' + UI.icon('mobile', 15) + ' 手机端中心</a>' +
-        '<a class="' + (active === 'chat' ? 'on' : '') + '" href="#/chat">' + UI.icon('chat', 15) +
-          ' 聊天<i class="nav-badge hidden" id="chat-badge"></i></a>' +
-        '<a class="' + (active === 'forum' ? 'on' : '') + '" href="#/forum">' + UI.icon('forum', 15) + ' 论坛</a>' +
-        '<a class="' + (active === 'profile' ? 'on' : '') + '" href="#/profile">' + UI.icon('users', 15) + ' 个人中心</a>' +
-        (u.role === 'admin' ? '<a class="' + (active === 'admin' ? 'on' : '') + '" href="#/admin">' + UI.icon('gear', 15) + ' 管理后台</a>' : '') +
-      '</nav>' +
-    '</div>' +
-    '<div class="top-right">' +
-      deskStatus +
-      '<a class="btn sm ghost" href="#/remote" title="手机扫码遥控与投屏">' + UI.icon('qr', 14) + ' 手机遥控</a>' +
-      '<button class="icon-btn" id="top-ann" title="公告"><i class="ann-dot hidden" id="ann-dot"></i>' + UI.icon('horn', 16) + '</button>' +
+  const on = k => (active === k ? 'on' : '');
+  const touch = /Android|iPhone|iPad|Harmony|FLA-App/i.test(navigator.userAgent);
+  const castHref = /FLA-App/.test(navigator.userAgent) ? 'https://app.fla/home.html' : '/cast.html';
+  const nav =
+    '<a class="' + on('home') + '" href="#/home">' + UI.icon('board', 15) + ' 首页</a>' +
+    (u ? '<a class="' + on('library') + '" href="#/library">' + UI.icon('folder', 15) + ' 课件库</a>' : '') +
+    (u ? '<a class="' + on('chat') + '" href="#/chat">' + UI.icon('chat', 15) + ' 聊天<i class="nav-badge hidden" id="chat-badge"></i></a>' : '') +
+    (u ? '<a class="' + on('forum') + '" href="#/forum">' + UI.icon('forum', 15) + ' 论坛</a>' : '') +
+    (touch ? '<a href="' + castHref + '">' + UI.icon('mobile', 15) + ' 投屏</a>' : '') +
+    '<a class="' + on('remote') + '" href="#/remote">' + UI.icon('qr', 15) + ' 遥控</a>' +
+    '<a class="' + on('desktop') + '" href="#/desktop">' + UI.icon('laptop', 15) + ' 桌面端</a>' +
+    '<a class="' + on('mobile') + '" href="#/mobile">' + UI.icon('mobile', 15) + ' 手机端</a>' +
+    (u ? '<a class="' + on('profile') + '" href="#/profile">' + UI.icon('users', 15) + ' 我的</a>' : '') +
+    (u && u.role === 'admin' ? '<a class="' + on('admin') + '" href="#/admin">' + UI.icon('gear', 15) + ' 管理</a>' : '');
+  const right = u
+    ? '<button class="icon-btn" id="top-ann" title="公告"><i class="ann-dot hidden" id="ann-dot"></i>' + UI.icon('horn', 16) + '</button>' +
       '<button class="icon-btn" id="top-qr" title="扫码登录其他设备">' + UI.icon('qr', 16) + '</button>' +
       certHTML(u) +
       '<span class="uchip">' + avatarHTML(u, 26) + '<b>' + UI.esc(u.nickname) + '</b></span>' +
-      '<button class="btn sm ghost" id="logout" title="退出登录">' + UI.icon('logout', 15) + '</button>' +
+      '<button class="btn sm ghost" id="logout" title="退出登录">' + UI.icon('logout', 15) + '</button>'
+    : '<a class="btn sm ghost auth-btn" href="#/login">登录</a><a class="btn sm primary auth-btn" href="#/register">注册</a>';
+  return '<header class="topbar">' +
+    '<div style="display:flex;align-items:center;gap:18px;">' +
+      '<a class="brand" href="#/home">' + UI.icon('board', 24) + '<span>FLA</span></a>' +
+      '<nav class="nav">' + nav + '</nav>' +
     '</div>' +
+    '<div class="top-right">' + right + '</div>' +
     '</header>' +
     '<div class="page">' + content + '</div>';
 }
+window.shell = shell;
+
+/* 导航栏常驻: 除放映/观看页、遥控进行中外, 任何页面渲染后若没有顶栏就自动补上 */
+function ensureNav() {
+  const app = document.getElementById('app');
+  if (!app || app.querySelector(':scope > .topbar')) return;
+  const h = location.hash || '';
+  if (/^#\/view\//.test(h) || (/^#\/remote/.test(h) && /[?&](sid|code)=/.test(h))) return;
+  if (!app.firstElementChild) return;
+  const parts = h.replace(/^#\/?/, '').split(/[/?]/);
+  app.insertAdjacentHTML('afterbegin', shell('', parts[0] || 'home').replace('<div class="page"></div>', ''));
+  bindLogout();
+}
+new MutationObserver(ensureNav).observe(document.getElementById('app') || document.body, { childList: true });
 
 /* ================================================================
  *  6. 课件库工作台 (搜索/分类/排序/双视图/批量管理/侧边抽屉)
@@ -1207,168 +1220,61 @@ function iosGuide() {
   return '<section class="mc-sec" id="mc-ios-guide"><h2>iPhone 完整版安装（整屏投屏）</h2>' + body + '</section>';
 }
 
-function viewMobileCenter() {
-  document.title = '手机端中心 - FLA';
-  const origin = location.origin;
-  const qr = UI.qrSvgString(origin + '/api/app/get', 184);
-  const wx = /[?&]wx=1/.test(location.hash) || /MicroMessenger| QQ\//i.test(navigator.userAgent);
-  const ua = navigator.userAgent, isIOS = /iPhone|iPad/i.test(ua), isAnd = /Android|Harmony/i.test(ua);
-  const css = '<style>' +
-    '.mc{min-height:100vh;background:#0b0b0c;color:#f5f5f7;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}' +
-    '.mc a{color:inherit;text-decoration:none}.mc h1,.mc h2,.mc h3,.mc h4{color:#f5f5f7}' +
-    '.mc-top{max-width:1120px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:18px 22px}' +
-    '.mc-top .b{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px}' +
-    '.mc-top .b i{width:34px;height:34px;border-radius:10px;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;letter-spacing:-.5px}' +
-    '.mc-top nav{display:flex;gap:18px;font-size:14px;color:#a1a1a8}.mc-top nav a:hover{color:#fff}' +
-    '.mc-hero{max-width:1120px;margin:0 auto;padding:46px 22px 30px;display:flex;gap:40px;align-items:center;flex-wrap:wrap}' +
-    '.mc-hero .l{flex:1;min-width:300px}' +
-    '.mc-tag{display:inline-flex;gap:8px;align-items:center;padding:6px 12px;border:1px solid rgba(255,255,255,.12);border-radius:99px;font-size:12.5px;color:#a1a1a8}' +
-    '.mc-hero h1{font-size:46px;line-height:1.12;margin:18px 0 14px;letter-spacing:-.5px}' +
-    '.mc-hero h1 span{color:#8b8b93}' +
-    '.mc-hero p{color:#a1a1a8;font-size:16px;line-height:1.75;max-width:560px}' +
-    '.mc-btns{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}' +
-    '.mc-btn{display:inline-flex;align-items:center;gap:9px;padding:14px 22px;border-radius:14px;background:#1d1d20;border:1px solid rgba(255,255,255,.1);font-weight:600;font-size:15px}' +
-    '.mc-btn:hover{background:#26262a}.mc-btn.w{background:#fff;color:#000;border-color:#fff}.mc-btn.w:hover{background:#e8e8ea}' +
-    '.mc-btn small{font-weight:400;opacity:.65;font-size:12px}' +
-    '.mc-qr{background:#fff;color:#000;border-radius:24px;padding:22px 22px 16px;text-align:center;box-shadow:0 30px 80px rgba(255,255,255,.07)}' +
-    '.mc-qr b{display:block;margin-top:10px;font-size:15px}.mc-qr span{font-size:12.5px;color:#666}' +
-    '.mc-sec{max-width:1120px;margin:0 auto;padding:34px 22px}' +
-    '.mc-sec h2{font-size:28px;margin:0 0 6px}.mc-sec .s{color:#8b8b93;margin:0 0 22px}' +
-    '.mc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}' +
-    '.mc-card{background:#151518;border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:22px}' +
-    '.mc-card .ic{width:44px;height:44px;border-radius:13px;background:#232327;display:flex;align-items:center;justify-content:center;margin-bottom:14px}' +
-    '.mc-card h3{margin:0 0 6px;font-size:17px}.mc-card p{margin:0;color:#9a9aa2;font-size:13.5px;line-height:1.7}' +
-    '.mc-card .act{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}' +
-    '.mc-card .act a{padding:9px 14px;border-radius:11px;background:#232327;font-size:13.5px;font-weight:600}.mc-card .act a.w{background:#fff;color:#000}' +
-    '.mc-steps{counter-reset:s;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}' +
-    '.mc-steps div{background:#151518;border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:22px 22px 22px 66px;position:relative;color:#b5b5bb;font-size:14px;line-height:1.7}' +
-    '.mc-steps div:before{counter-increment:s;content:counter(s);position:absolute;left:20px;top:20px;width:32px;height:32px;border-radius:50%;background:#fff;color:#000;font-weight:800;display:flex;align-items:center;justify-content:center}' +
-    '.mc-steps b{color:#fff;display:block;font-size:15px}' +
-    '.mc-faq details{background:#151518;border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px 20px;margin-bottom:10px}' +
-    '.mc-faq summary{cursor:pointer;font-weight:600}.mc-faq p{color:#9a9aa2;font-size:14px;line-height:1.75;margin:10px 0 0}' +
-    '.mc-wx{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99;display:flex;justify-content:flex-end;padding:20px;color:#fff;font-size:17px;line-height:1.7;text-align:right}' +
-    '.mc-foot{text-align:center;color:#55555c;font-size:12.5px;padding:40px 0 50px}' +
-    '@media(max-width:640px){.mc-hero h1{font-size:34px}.mc-top nav{display:none}.mc-qr{display:none}}' +
-    '</style>';
-  const ic = (n) => UI.icon(n, 22);
-  const andBtn = '<a class="mc-btn w" href="/api/app/android">' + UI.icon('download', 18) + ' 下载安卓 App <small id="mc-apk">Android 7+</small></a>';
-  const iosBtn = '<a class="mc-btn' + (isIOS ? ' w' : '') + '" href="/api/app/ios.mobileconfig">' + UI.icon('download', 18) + ' 安装到 iPhone 主屏</a>';
-  const webBtn = '<a class="mc-btn" href="/cast.html">打开网页版</a>';
-  $('#app').innerHTML = css + '<div class="mc">' +
-    (wx ? '<div class="mc-wx" onclick="this.remove()"><div>点右上角 <b>···</b><br>选择「在浏览器中打开」</div></div>' : '') +
-    '<div class="mc-top"><a class="b" href="#/home"><i>FLA</i>手机端</a></div>' +
-    '<section class="mc-hero" style="justify-content:center;text-align:center;flex-direction:column;gap:22px">' +
-      '<h1 style="margin:0">FLA 手机端</h1>' +
-      '<p style="margin:0 auto;letter-spacing:4px">轻量 · 高效 · 帮助</p>' +
-      '<div class="mc-btns" style="justify-content:center;margin-top:6px">' + (isIOS ? iosBtn + webBtn : isAnd ? andBtn + webBtn : andBtn + iosBtn + webBtn) + '</div>' +
-      (isIOS || isAnd ? '' : '<div class="mc-qr" style="margin-top:10px">' + (qr || '') + '<b>手机扫码</b></div>') +
-    '</section>' +
-    (isIOS ? iosGuide() : '') +
-  '</div>';
-  fetch('/api/app/info').then(r => r.json()).then(d => {
-    const el = document.getElementById('mc-apk');
-    if (el && d.android && d.android.size) el.textContent = 'v' + (d.android.version || '') + ' · ' + Math.max(1, Math.round(d.android.size / 1024)) + ' KB';
-  }).catch(() => { });
-  window.scrollTo(0, 0);
+async function viewDesktopCenter() {
+  document.title = '桌面端 - FLA';
+  const ready = await probeDesktopClient();
+  $('#app').innerHTML = shell(
+    '<div style="max-width:560px;margin:8vh auto;text-align:center;padding:0 16px">' +
+      '<h1 style="font-size:34px;margin-bottom:6px">FLA 桌面端</h1>' +
+      '<p class="muted" style="letter-spacing:3px;margin-bottom:22px">轻量 · 高效 · 帮助</p>' +
+      '<p style="margin-bottom:22px">' + (ready ? '<span class="dh-dot online" style="display:inline-block;margin-right:6px"></span>本机客户端已运行' : '<span class="muted">Windows 10 / 11 · 单文件免安装 <span id="dk-ver"></span></span>') + '</p>' +
+      '<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">' +
+        '<a href="/api/desktop/download" class="btn primary lg">' + UI.icon('download', 18) + ' 下载 FLA.exe</a>' +
+        '<button class="btn lg" id="btn-test-desktop">' + UI.icon('refresh', 16) + ' 唤起本机客户端</button>' +
+      '</div>' +
+    '</div>', 'desktop');
+  bindLogout();
+  fetch('/api/desktop/version').then(r => r.json()).then(d => { const e = $('#dk-ver'); if (e && d.version) e.textContent = '· v' + d.version; }).catch(() => { });
+  $('#btn-test-desktop').onclick = async () => {
+    const ok = await probeDesktopClient();
+    if (ok) toast('本机客户端正在运行 ✓', 'ok');
+    else { toast('未检测到客户端，请先下载运行 FLA.exe', 'warn'); window.location.href = 'fla://open?test=1'; }
+  };
 }
 
-async function viewDesktopCenter() {
-  document.title = '桌面客户端中心 - FLA';
-  const ready = await probeDesktopClient();
-
-  const statusBadge = ready
-    ? '<div class="dh-status-badge online"><span class="dh-dot online"></span> 客户端已连接 · 127.0.0.1:8307 桥接正常</div>'
-    : '<div class="dh-status-badge offline"><span class="dh-dot offline"></span> 未检测到本地客户端运行 (即下即用，单文件免安装)</div>';
-
-  $('#app').innerHTML = shell(
-    '<div class="desktop-hub">' +
-      '<div class="dh-hero">' +
-        '<div class="dh-hero-left">' +
-          statusBadge +
-          '<h1>FLA 智慧课堂桌面助手</h1>' +
-          '<p>专为多媒体讲台与智慧黑板深度研发。智能压制希沃白板5霸屏工具栏，深度挂接 PowerPoint / WPS 翻页与随页板书移动，支持手机无线扫码投屏与双向遥控。</p>' +
-          '<div style="display:flex;gap:12px;margin-top:24px;flex-wrap:wrap;">' +
-            '<a href="/api/desktop/download" class="dh-dl-btn">' +
-              UI.icon('download', 20) + ' 立即下载 Windows 单文件版 (FLA.exe)' +
-            '</a>' +
-            '<button class="btn lg" id="btn-test-desktop" style="background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.2);">' +
-              UI.icon('refresh', 16) + ' 测试唤起本地客户端' +
-            '</button>' +
-          '</div>' +
-        '</div>' +
-        '<div class="dh-hero-actions">' +
-          '<div style="background:rgba(0,0,0,0.3);padding:18px 24px;border-radius:14px;border:1px solid rgba(255,255,255,0.1);text-align:right;">' +
-            '<div style="font-size:12px;color:#94a3b8;">当前分发版本</div>' +
-            '<div style="font-size:22px;font-weight:800;color:#ffffff;">v1.36.0</div>' +
-            '<div style="font-size:12px;color:#cbd5e1;margin-top:4px;">单文件绿色免安装 · 启动自动静默更新</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-
-      '<div>' +
-        '<h2 style="font-size:22px;margin-bottom:16px;">核心教学赋能特性</h2>' +
-        '<div class="dh-grid">' +
-          '<div class="dh-card">' +
-            '<div class="dh-card-icon">' + UI.icon('lock', 24) + '</div>' +
-            '<h3>希沃白板5 智能压制拦截</h3>' +
-            '<p>毫秒级检测并静默拦截希沃白板5（EasiNote）在 PPT 放映时强制注入的多余悬浮工具条与弹窗干扰，还给教师最纯净的原生演示体验。</p>' +
-          '</div>' +
-
-          '<div class="dh-card">' +
-            '<div class="dh-card-icon">' + UI.icon('board', 24) + '</div>' +
-            '<h3>板书笔迹与幻灯片翻页严格联动</h3>' +
-            '<p>深度挂接 Office COM 接口，精准捕捉实时页码。板书笔迹随 PPT 翻页严格按页隔离存储与移动，翻页永不错位、不串页。</p>' +
-          '</div>' +
-
-          '<div class="dh-card">' +
-            '<div class="dh-card-icon">' + UI.icon('qr', 24) + '</div>' +
-            '<h3>手机扫码双向无线遥控</h3>' +
-            '<p>老师无需安装任何 App，手机微信扫一扫即可变成激光笔遥控器。大尺寸触控板、翻页步进、黑屏与白板一键切换。</p>' +
-          '</div>' +
-
-          '<div class="dh-card">' +
-            '<div class="dh-card-icon">' + UI.icon('refresh', 24) + '</div>' +
-            '<h3>单 EXE 免安装与原地静默更新</h3>' +
-            '<p>单文件免安装即开即用，每次启动自动比对服务端版本并原地静默更新，学校管理员与教师永无需再去官网手动重复下载重装。</p>' +
-          '</div>' +
-
-          '<div class="dh-card">' +
-            '<div class="dh-card-icon">' + UI.icon('palette', 24) + '</div>' +
-            '<h3>7种专业学科背景白板与工具箱</h3>' +
-            '<p>田字格、四线三格、五线谱、坐标网格、护眼绿与纯白黑板。内置课堂倒计时、秒表、随机抽选点名神器与四向遮挡幕布。</p>' +
-          '</div>' +
-
-          '<div class="dh-card">' +
-            '<div class="dh-card-icon">' + UI.icon('external', 24) + '</div>' +
-            '<h3>网页控制台一键调起本地 Office</h3>' +
-            '<p>在网页课件库点击「本地打开」，瞬间由本地 8307 桥接服务直接调起系统默认 PowerPoint / WPS 原生全屏放映，无需重复下载。</p>' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-
-      '<div class="card" style="padding:24px;border-radius:16px;">' +
-        '<h3>使用指南与协议注册</h3>' +
-        '<div style="font-size:14px;color:var(--ink-secondary);line-height:1.7;margin-top:10px;">' +
-          '<p>1. <b>下载客户端：</b>点击上方按钮直接下载 <code>FLA.exe</code>，单文件双击即可直接运行；</p>' +
-          '<p>2. <b>右键托盘图标：</b>客户端启动后会在系统右下角托盘驻留，提供悬浮教学工具栏、开机自启、协议注册等选项；</p>' +
-          '<p>3. <b>网页联动：</b>在网页课件库点击「本地打开」，系统会自动发送命令给本地运行的 FLA.exe，瞬间放映课件。</p>' +
-        '</div>' +
-      '</div>' +
-    '</div>',
-    'desktop'
-  );
-
-  bindLogout();
-
-  $('#btn-test-desktop').onclick = async () => {
-    toast('正在测试探测本地 127.0.0.1:8307 端口…');
-    const ok = await probeDesktopClient();
-    if (ok) toast('连接成功！本地 FLA 桌面客户端正在良好运行中 ✓', 'ok');
-    else {
-      toast('未检测到本地客户端，请先下载并运行 FLA.exe', 'warn');
-      window.location.href = 'fla://open?test=1';
-    }
+function viewMobileCenter() {
+  document.title = '手机端 - FLA';
+  const wx = /[?&]wx=1/.test(location.hash) || /MicroMessenger| QQ\//i.test(navigator.userAgent);
+  const ua = navigator.userAgent, isIOS = /iPhone|iPad/i.test(ua), isAnd = /Android|Harmony/i.test(ua);
+  const qr = (isIOS || isAnd) ? '' : UI.qrSvgString(location.origin + '/api/app/get', 168);
+  const row = (title, sub, btns) =>
+    '<div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:16px 18px;margin-bottom:10px">' +
+    '<div style="flex:1;min-width:180px"><b style="font-size:15.5px">' + title + '</b><div class="muted" style="font-size:12.5px;margin-top:2px">' + sub + '</div></div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">' + btns + '</div></div>';
+  const a = (href, t, primary) => '<a class="btn sm' + (primary ? ' primary' : '') + '" href="' + href + '">' + t + '</a>';
+  const ipa = location.origin + '/api/app/ios.ipa';
+  const rows = {
+    and: row('安卓', 'Android 7+ · 整屏投屏', a('/api/app/android', '下载 APK <small id="mc-apk"></small>', true)),
+    hm: row('鸿蒙 NEXT', '应用市场装「卓易通」，导入 APK', a('/api/app/android', '下载 APK')),
+    ios: row('iPhone 主屏版', '描述文件 · 免安装', a('/api/app/ios.mobileconfig', '安装描述文件', true)),
+    ipa: row('iPhone 完整版', 'TrollStore 永久安装 · iOS 14 – 17.0', a('apple-magnifier://install?url=' + encodeURIComponent(ipa), '装到 TrollStore', true) + a('/api/app/ios.ipa', '下载 IPA')),
+    web: row('网页版', '无需安装', a('/cast.html', '打开')),
   };
+  const order = isIOS ? ['ios', 'ipa', 'web', 'and', 'hm'] : isAnd ? ['and', 'hm', 'web', 'ios', 'ipa'] : ['and', 'ios', 'ipa', 'hm', 'web'];
+  $('#app').innerHTML = shell(
+    (wx ? '<div onclick="this.remove()" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99;color:#fff;padding:24px;text-align:right;font-size:17px;line-height:1.7">点右上角 <b>···</b><br>选「在浏览器中打开」</div>' : '') +
+    '<div style="max-width:640px;margin:5vh auto 40px;padding:0 16px">' +
+      '<div style="text-align:center;margin-bottom:22px"><h1 style="font-size:32px;margin-bottom:4px">FLA 手机端</h1>' +
+      '<p class="muted" style="letter-spacing:3px">轻量 · 高效 · 帮助</p>' +
+      (qr ? '<div style="display:inline-block;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 14px 8px;margin-top:16px">' + qr + '<div class="muted" style="font-size:12px">手机扫码</div></div>' : '') +
+      '</div>' + order.map(k => rows[k]).join('') +
+      (isIOS ? '<details class="card" style="padding:14px 18px;margin-top:6px"><summary style="cursor:pointer;font-weight:600">iPhone 完整版怎么装？</summary>' + iosGuide() + '</details>' : '') +
+    '</div>', 'mobile');
+  bindLogout();
+  fetch('/api/app/info').then(r => r.json()).then(d => {
+    const el = document.getElementById('mc-apk');
+    if (el && d.android && d.android.version) el.textContent = 'v' + d.android.version;
+  }).catch(() => { });
 }
 
 /* ================================================================
@@ -1398,37 +1304,13 @@ function viewHome() {
       '<a href="#/register" class="btn soft lg home-btn-reg">注册新账号</a>' +
       '<a href="#/remote" class="btn soft lg home-btn-reg">' + UI.icon('qr', 15) + ' 手机遥控</a>';
 
-  $('#app').innerHTML =
-    '<div class="home-portal">' +
-      '<header class="home-nav">' +
-        '<div class="home-nav-inner">' +
-          '<a href="#/home" class="home-brand">' +
-            '<div class="home-logo">' + UI.icon('board', 22) + '</div>' +
-            '<div class="home-title-box">' +
-              '<span class="home-title">FLA</span>' +
-              
-            '</div>' +
-          '</a>' +
-          '<div class="home-nav-links">' +
-                        '<a href="#/desktop" class="home-link">桌面端中心</a>' +
-            '<a href="#/mobile" class="home-link">手机端中心</a>' +
-            '<a href="#/remote" class="home-link">手机遥控</a>' +
-            navUserSection +
-          '</div>' +
-        '</div>' +
-      '</header>' +
-
-      '<main class="home-main">' +
-        '<section class="home-hero" style="min-height:62vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">' +
-          '<h1 class="home-hero-title" style="font-size:56px;letter-spacing:2px">FLA</h1>' +
-          '<p class="home-hero-desc" style="font-size:20px;letter-spacing:6px;margin:6px 0 30px">轻量 · 高效 · 帮助</p>' +
-          '<div class="home-hero-actions">' + heroActions + '</div>' +
-        '</section>' +
-      '</main>' +
-
-
-    '</div>';
-
+  $('#app').innerHTML = shell(
+    '<section class="home-hero" style="min-height:66vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">' +
+      '<h1 class="home-hero-title" style="font-size:56px;letter-spacing:2px">FLA</h1>' +
+      '<p class="home-hero-desc" style="font-size:20px;letter-spacing:6px;margin:6px 0 30px">轻量 · 高效 · 帮助</p>' +
+      '<div class="home-hero-actions">' + heroActions + '</div>' +
+    '</section>', 'home');
+  bindLogout();
   const fLink = $('#nav-features-link');
   if (fLink) {
     fLink.onclick = e => {

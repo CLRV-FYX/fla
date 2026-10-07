@@ -3113,6 +3113,20 @@ body.present-body { background: #000000; }
   .topbar .nav::-webkit-scrollbar { display: none; }
   .topbar .nav a { flex: 0 0 auto; white-space: nowrap; }
   .topbar .top-right { position: absolute; right: 10px; top: 8px; gap: 6px; }
-  .topbar .top-right > a.btn, .topbar .top-right .uchip b, .topbar .top-right .cert, .topbar .top-right [class*="desk"] { display: none !important; }
+  .topbar .top-right > a.btn:not(.auth-btn), .topbar .top-right .uchip b, .topbar .top-right .cert, .topbar .top-right [class*="desk"] { display: none !important; }
   .page { overflow-x: hidden; }
 }
+
+/* iPhone 安装向导 (手机端页内) */
+#mc-ios-guide h2 { font-size: 16px; margin: 12px 0 6px; }
+#mc-ios-guide .s { color: var(--mut); font-size: 13px; margin-bottom: 10px; }
+#mc-ios-guide .mc-steps { display: grid; gap: 8px; counter-reset: s; }
+#mc-ios-guide .mc-steps div { font-size: 13px; line-height: 1.6; padding-left: 26px; position: relative; }
+#mc-ios-guide .mc-steps div:before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 1px; width: 18px; height: 18px; border-radius: 50%; background: #111; color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+#mc-ios-guide .mc-steps b { display: block; }
+#mc-ios-guide .mc-btns { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+#mc-ios-guide .mc-btn { padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+#mc-ios-guide .mc-btn.w { background: #111; color: #fff; }
+#mc-ios-guide .mc-grid { display: grid; gap: 8px; }
+#mc-ios-guide .mc-card h3 { font-size: 14px; margin: 6px 0 2px; }
+#mc-ios-guide .mc-card p { font-size: 12.5px; color: var(--ink-secondary); }
