@@ -29,7 +29,7 @@ def forum_boards(request: Request):
 
 
 @router.get("/forum/threads")
-def forum_threads(request: Request, board: int = 0, page: int = 1):
+def forum_threads(request: Request, board: int = 0, page: int = 1, q: str = ""):
     u = require_user(request)
     size = 15
     page = max(1, page)
@@ -37,6 +37,10 @@ def forum_threads(request: Request, board: int = 0, page: int = 1):
     if board:
         where = "WHERE t.board_id=?"
         args.append(board)
+    kw = (q or "").strip()[:50]
+    if kw:
+        where = (where + " AND " if where else "WHERE ") + "(t.title LIKE ? OR t.content LIKE ?)"
+        args += [f"%{kw}%", f"%{kw}%"]
     total = db.q1(f"SELECT COUNT(*) AS c FROM forum_threads t {where}", tuple(args))["c"]
     rows = db.q(
         f"SELECT t.* FROM forum_threads t {where}"

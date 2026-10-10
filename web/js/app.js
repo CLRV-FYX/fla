@@ -18,7 +18,7 @@ window.App = {
   })(),
   desktopReady: false,
   inspectingFile: null,
-  setCleanup(fn) { App._cleanup = fn; }
+  setCleanup(fn) { _cleanup = fn; }   /* v3.6 修: 原先写到 App._cleanup, 路由根本不会执行 */
 };
 
 let _cleanup = null;
@@ -172,6 +172,7 @@ function route() {
   if (parts[0] === 'profile') return viewProfile();
   if (parts[0] === 'forum') return viewForum(parts[1] ? parseInt(parts[1], 10) : 0);
   if (parts[0] === 'chat') return Chat.view();
+  if (parts[0] === 'ai') return window.AI ? AI.view() : toast('AI 模块加载中，请稍后重试', 'err');
   if (parts[0] === 'qr-approve') return viewQrApprove();
   if (parts[0] === 'admin') {
     if (App.user.role !== 'admin') { toast('需要管理员权限', 'err'); location.hash = '#/library'; return; }
@@ -471,6 +472,7 @@ function shell(content, active) {
     (u ? '<a class="' + on('library') + '" href="#/library">' + UI.icon('folder', 15) + ' 课件库</a>' : '') +
     (u ? '<a class="' + on('chat') + '" href="#/chat">' + UI.icon('chat', 15) + ' 聊天<i class="nav-badge hidden" id="chat-badge"></i></a>' : '') +
     (u ? '<a class="' + on('forum') + '" href="#/forum">' + UI.icon('forum', 15) + ' 论坛</a>' : '') +
+    (u ? '<a class="' + on('ai') + '" href="#/ai">' + UI.icon('sparkle', 15) + ' AI</a>' : '') +
     (touch ? '<a href="' + castHref + '">' + UI.icon('mobile', 15) + ' 投屏</a>' : '') +
     '<a class="' + on('remote') + '" href="#/remote">' + UI.icon('qr', 15) + ' 遥控</a>' +
     '<a class="' + on('desktop') + '" href="#/desktop">' + UI.icon('laptop', 15) + ' 桌面端</a>' +
@@ -1308,9 +1310,16 @@ function viewHome() {
     '<section class="home-hero" style="min-height:66vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">' +
       '<h1 class="home-hero-title" style="font-size:56px;letter-spacing:2px">FLA</h1>' +
       '<p class="home-hero-desc" style="font-size:20px;letter-spacing:6px;margin:6px 0 30px">轻量 · 高效 · 帮助</p>' +
+      '<div class="live-stats" id="live-stats">' +
+        '<div class="ls-item"><b data-k="users">–</b><span>注册用户</span></div>' +
+        '<div class="ls-item"><b data-k="online">–</b><span>当前在线</span></div>' +
+        '<div class="ls-item"><b data-k="hits">–</b><span>累计访问</span></div>' +
+        '<div class="ls-item"><b data-k="traffic">–</b><span>累计流量</span></div>' +
+      '</div>' +
       '<div class="home-hero-actions">' + heroActions + '</div>' +
     '</section>', 'home');
   bindLogout();
+  startLiveStats();
   const fLink = $('#nav-features-link');
   if (fLink) {
     fLink.onclick = e => {
@@ -1319,6 +1328,34 @@ function viewHome() {
       if (sec) sec.scrollIntoView({ behavior: 'smooth' });
     };
   }
+}
+
+/* v3.6: 首页实时数据 (用户数/在线/访问/流量), 每 5 秒刷新 */
+function fmtTraffic(n) {
+  n = Number(n) || 0;
+  if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' KB';
+  if (n < 1024 ** 3) return (n / 1024 / 1024).toFixed(1) + ' MB';
+  if (n < 1024 ** 4) return (n / 1024 ** 3).toFixed(2) + ' GB';
+  return (n / 1024 ** 4).toFixed(2) + ' TB';
+}
+function fmtCount(n) { return (Number(n) || 0).toLocaleString('en-US'); }
+function startLiveStats() {
+  let stopped = false;
+  const tick = async () => {
+    const box = $('#live-stats');
+    if (stopped || !box) return;
+    try {
+      const d = await API.get('/api/stats/live');
+      const set = (k, v) => { const el = box.querySelector('[data-k="' + k + '"]'); if (el) el.textContent = v; };
+      set('users', fmtCount(d.users));
+      set('online', fmtCount(d.online));
+      set('hits', fmtCount(d.hits));
+      set('traffic', fmtTraffic(d.traffic_bytes));
+    } catch (e) { }
+  };
+  tick();
+  const t = setInterval(tick, 5000);
+  App.setCleanup(() => { stopped = true; clearInterval(t); });
 }
 
 /* ================================================================
@@ -1820,7 +1857,7 @@ function viewQrApprove() {
 /* ================================================================
  *  14. 论坛 (viewForum)
  * ================================================================ */
-App.forum = { board: 0, thread: 0, page: 1 };
+App.forum = { board: 0, thread: 0, page: 1, q: '' };
 
 async function viewForum(openTid) {
   document.title = '论坛 - FLA';
@@ -1838,7 +1875,10 @@ async function renderForumList() {
   const admin = App.user.role === 'admin';
   let boards = [];
   try { boards = (await API.get('/api/forum/boards')).items; } catch (e) { toast(e.message, 'err'); return; }
-  const thUrl = App.forum.board ? ('/api/forum/threads?board=' + App.forum.board) : '/api/forum/threads';
+  const qs = [];
+  if (App.forum.board) qs.push('board=' + App.forum.board);
+  if (App.forum.q) qs.push('q=' + encodeURIComponent(App.forum.q));
+  const thUrl = '/api/forum/threads' + (qs.length ? '?' + qs.join('&') : '');
   const th = await API.get(thUrl).catch(() => null);
   const threads = th ? th.items : [];
   const boardName = id => { const b = boards.find(x => x.id === id); return b ? UI.esc(b.name) : '全站'; };
@@ -1846,7 +1886,8 @@ async function renderForumList() {
   box.innerHTML =
     '<div class="lib-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
       '<h2>教学论坛与交流</h2>' +
-      '<div class="lib-actions" style="display:flex;gap:10px;">' +
+      '<div class="lib-actions" style="display:flex;gap:10px;flex-wrap:wrap;">' +
+        '<input id="fb-q" class="inp" placeholder="搜索标题或内容" value="' + UI.esc(App.forum.q || '') + '" style="width:200px;margin:0;">' +
         '<select id="fb-sel" class="inp" style="width:auto;margin:0;">' +
           '<option value="0">全部板块</option>' + boards.map(b => '<option value="' + b.id + '"' + (App.forum.board === b.id ? ' selected' : '') + '>' + UI.esc(b.name) + '</option>').join('') +
         '</select>' +
@@ -1865,11 +1906,13 @@ async function renderForumList() {
       '</tbody></table></div>' : '<div class="empty">' + UI.icon('forum', 38) + '<p style="margin-top:12px;">还没有帖子，点击右上角「发布新帖」开始交流</p></div>');
 
   $('#fb-sel').onchange = e => { App.forum.board = parseInt(e.target.value, 10); renderForumList(); };
+  $('#fb-q').onkeydown = e => { if (e.key === 'Enter') { App.forum.q = e.target.value.trim(); renderForumList(); } };
   $$('.filter-pill[data-b]', box).forEach(b => b.onclick = () => {
     App.forum.board = App.forum.board === +b.dataset.b ? 0 : +b.dataset.b;
     renderForumList();
   });
   $('#fb-new').onclick = () => forumComposer(boards);
+  if (window.AI) AI.models().catch(() => { });
   const bm = $('#fb-boards');
   if (bm) bm.onclick = () => forumBoardsAdmin(boards);
 }
@@ -1879,7 +1922,14 @@ function forumComposer(boards) {
     body: '<label>板块<select id="fc-board">' + boards.map(b => '<option value="' + b.id + '">' + UI.esc(b.name) + '</option>').join('') + '</select></label>' +
     '<label>标题<input id="fc-title" maxlength="100" placeholder="简短清晰的标题"></label>' +
     '<label>内容<textarea id="fc-content" rows="6" placeholder="支持写下您的教学心得、课件建议或提问…"></textarea></label>' });
-  m.foot.innerHTML = '<button class="btn" id="fc-cancel">取消</button><button class="btn primary" id="fc-ok">发布</button>';
+  m.foot.innerHTML = '<button class="btn" id="fc-ai">' + UI.icon('sparkle', 14) + ' AI 起草</button><span style="flex:1"></span><button class="btn" id="fc-cancel">取消</button><button class="btn primary" id="fc-ok">发布</button>';
+  if (window.AI) {
+    AI.attach(m.body.querySelector('#fc-content'));
+    m.foot.querySelector('#fc-ai').onclick = () => AI.draftModal((title, body) => {
+      m.body.querySelector('#fc-title').value = title;
+      m.body.querySelector('#fc-content').value = body;
+    });
+  }
   m.foot.querySelector('#fc-cancel').onclick = m.close;
   m.foot.querySelector('#fc-ok').onclick = async () => {
     try {
@@ -1934,7 +1984,10 @@ async function renderForumThread(tid) {
     (t.locked && !admin ? '<div class="card" style="text-align:center;padding:18px;color:var(--mut);">该主题已锁定，暂不支持回复</div>' :
       '<div class="card ft-reply" style="padding:20px;border-radius:14px;background:#fff;border:1px solid var(--line);margin-top:20px;">' +
       '<textarea id="ft-reply-txt" rows="3" placeholder="' + (t.locked ? '主题已锁定(管理员仍可回复)' : '写下你的回复与思考…') + '"></textarea>' +
-      '<button class="btn primary" id="ft-reply-ok" style="margin-top:12px;">' + UI.icon('send', 14) + ' 提交回复</button></div>');
+      '<div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap"><button class="btn primary" id="ft-reply-ok">' + UI.icon('send', 14) + ' 提交回复</button>' +
+      '<button class="btn" id="ft-ai">' + UI.icon('sparkle', 14) + ' 让 AI 助手回复</button></div></div>');
+  if (window.AI && $('#ft-reply-txt')) AI.attach($('#ft-reply-txt'));
+  if ($('#ft-ai')) $('#ft-ai').onclick = () => AI.forumReply(tid, () => renderForumThread(tid));
 
   $('#ft-back').onclick = () => { App.forum.thread = 0; renderForumList(); };
   const reply = async () => {

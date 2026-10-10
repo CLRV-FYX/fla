@@ -62,7 +62,7 @@
     },
 
     get(p) { return API.req(p); },
-    post(p, json) { return API.req(p, { json, method: 'POST' }); },   /* v1.26 修: 无 body 也保持 POST (qr/ticket) */
+    post(p, json, timeout) { return API.req(p, { json, method: 'POST', timeout: timeout || 0 }); },   /* v3.6: 可选超时(AI 生成较慢) */   /* v1.26 修: 无 body 也保持 POST (qr/ticket) */
     put(p, json) { return API.req(p, { json, method: 'PUT' }); },
     patch(p, json) { return API.req(p, { json, method: 'PATCH' }); },   /* v1.26: 论坛/聊天/公告 */
     del(p) { return API.req(p, { method: 'DELETE' }); },

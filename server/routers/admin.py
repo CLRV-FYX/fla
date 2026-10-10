@@ -28,7 +28,8 @@ def invite_public(r):
         status = "expired"
     return {"id": r["id"], "code": r["code"], "max_uses": r["max_uses"],
             "used_count": r["used_count"], "expires_at": r["expires_at"],
-            "note": r["note"], "created_at": r["created_at"], "status": status}
+            "note": r["note"], "created_at": r["created_at"], "status": status,
+            "group_id": r["group_id"] if "group_id" in r.keys() else 1}
 
 
 # ---------------- 统计 ----------------
@@ -82,6 +83,7 @@ class AdminUserIn(BaseModel):
     cert_color: str | None = None     # v1.26: 认证颜色 (#rrggbb)
     chat_banned: bool | None = None   # v1.26: 聊天禁言
     quota_mb: int | None = None
+    group_id: int | None = None        # v3.6: 用户组
 
 
 CERT_ICONS = {"medal", "star", "crown", "award", "shield", "heart", "zap", "gem", "trophy", "flag"}
@@ -125,6 +127,10 @@ def update_user(uid: int, body: AdminUserIn, request: Request):
         db.ex("UPDATE users SET cert_color=? WHERE id=?", (cc, uid))
     if body.chat_banned is not None:
         db.ex("UPDATE users SET chat_banned=? WHERE id=?", (1 if body.chat_banned else 0, uid))
+    if body.group_id is not None:
+        if not db.q1("SELECT id FROM user_groups WHERE id=?", (body.group_id,)):
+            raise HTTPException(400, "用户组不存在")
+        db.ex("UPDATE users SET group_id=? WHERE id=?", (body.group_id, uid))
     if body.quota_mb is not None:
         if not (1 <= body.quota_mb <= 1000000):
             raise HTTPException(400, "空间配额需在 1MB - 1TB 之间")
@@ -210,6 +216,7 @@ class InviteIn(BaseModel):
     max_uses: int = 1
     duration_hours: float | None = None
     note: str = ""
+    group_id: int = 1          # v3.6: 通过该邀请码注册的用户所属组(默认: 邀请码用户组)
 
 
 @router.post("/invites")
@@ -225,9 +232,11 @@ def create_invite(body: InviteIn, request: Request):
     if not (1 <= body.max_uses <= 9999):
         raise HTTPException(400, "可用次数需在 1-9999 之间")
     expires = _expires(body.duration_hours)
-    db.ex("INSERT INTO invite_codes(code,max_uses,expires_at,note,created_by,created_at)"
-          " VALUES(?,?,?,?,?,?)",
-          (code, body.max_uses, expires, body.note.strip()[:100], me["id"], db.now()))
+    if not db.q1("SELECT id FROM user_groups WHERE id=?", (body.group_id,)):
+        raise HTTPException(400, "用户组不存在")
+    db.ex("INSERT INTO invite_codes(code,max_uses,expires_at,note,created_by,created_at,group_id)"
+          " VALUES(?,?,?,?,?,?,?)",
+          (code, body.max_uses, expires, body.note.strip()[:100], me["id"], db.now(), body.group_id))
     return invite_public(db.q1("SELECT * FROM invite_codes WHERE code=?", (code,)))
 
 
@@ -237,6 +246,7 @@ class BatchIn(BaseModel):
     duration_hours: float | None = None
     note: str = ""
     prefix: str = ""
+    group_id: int = 1
 
 
 @router.post("/invites/batch")
@@ -250,6 +260,8 @@ def batch_invite(body: BatchIn, request: Request):
     if prefix and not re.match(r"^[A-Z0-9-]{1,12}$", prefix):
         raise HTTPException(400, "前缀仅限 1-12 位大写字母/数字/-")
     expires = _expires(body.duration_hours)
+    if not db.q1("SELECT id FROM user_groups WHERE id=?", (body.group_id,)):
+        raise HTTPException(400, "用户组不存在")
     items = []
     for _ in range(body.count):
         for _try in range(20):
@@ -258,9 +270,9 @@ def batch_invite(body: BatchIn, request: Request):
                 break
         else:
             continue
-        db.ex("INSERT INTO invite_codes(code,max_uses,expires_at,note,created_by,created_at)"
-              " VALUES(?,?,?,?,?,?)",
-              (code, body.max_uses, expires, body.note.strip()[:100], me["id"], db.now()))
+        db.ex("INSERT INTO invite_codes(code,max_uses,expires_at,note,created_by,created_at,group_id)"
+              " VALUES(?,?,?,?,?,?,?)",
+              (code, body.max_uses, expires, body.note.strip()[:100], me["id"], db.now(), body.group_id))
         items.append(invite_public(db.q1("SELECT * FROM invite_codes WHERE code=?", (code,))))
     return {"items": items}
 

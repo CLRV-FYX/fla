@@ -88,9 +88,10 @@ def register(body: RegIn):
     if cur.rowcount == 0:
         raise HTTPException(400, "邀请码已被用完")
     quota = int(db.get_setting("default_quota_mb", "500")) * 1024 * 1024
-    db.ex("INSERT INTO users(username,password_hash,nickname,quota_bytes,created_at) VALUES(?,?,?,?,?)",
+    gid = inv["group_id"] if "group_id" in inv.keys() else 1
+    db.ex("INSERT INTO users(username,password_hash,nickname,quota_bytes,created_at,group_id) VALUES(?,?,?,?,?,?)",
           (body.username, hash_password(body.password),
-           (body.nickname or "").strip()[:32] or body.username, quota, db.now()))
+           (body.nickname or "").strip()[:32] or body.username, quota, db.now(), gid))
     u = db.q1("SELECT * FROM users WHERE username=?", (body.username,))
     return {"token": make_token(u), "user": user_public(u)}
 

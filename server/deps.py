@@ -39,6 +39,11 @@ def require_admin(request: Request):
     return u
 
 
+def _group_name(gid):
+    r = db.q1("SELECT name FROM user_groups WHERE id=?", (gid,))
+    return r["name"] if r else ""
+
+
 def user_public(u):
     if u is None:
         return None
@@ -54,6 +59,9 @@ def user_public(u):
         "cert_icon": u["cert_icon"] if "cert_icon" in u.keys() else "",
         "cert_color": u["cert_color"] if "cert_color" in u.keys() else "",
         "chat_banned": bool(u["chat_banned"]) if "chat_banned" in u.keys() else False,
+        "group_id": u["group_id"] if "group_id" in u.keys() else 1,
+        "group_name": _group_name(u["group_id"] if "group_id" in u.keys() else 1),
+        "is_fake": bool(u["is_fake"]) if "is_fake" in u.keys() else False,
         "quota_bytes": u["quota_bytes"],
         "used_bytes": db.used_bytes(u["id"]),
         "must_change_password": bool(u["must_change_password"]),

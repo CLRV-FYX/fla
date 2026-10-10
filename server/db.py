@@ -239,6 +239,50 @@ CREATE TABLE IF NOT EXISTS chat_mentions(     -- v1.27: @我 的消息(红点提
 CREATE INDEX IF NOT EXISTS ix_msg_room ON chat_messages(room_id, id);
 CREATE INDEX IF NOT EXISTS ix_att_room ON chat_attachments(room_id, id);
 CREATE INDEX IF NOT EXISTS ix_member_uid ON chat_members(uid, room_id);
+/* v3.6: 用户组 / AI 渠道与模型 / AI 会话 */
+CREATE TABLE IF NOT EXISTS user_groups(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  descr TEXT NOT NULL DEFAULT '',
+  is_default INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ai_channels(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  base_url TEXT NOT NULL,                     -- OpenAI 兼容地址, 例如 https://api.xxx.com/v1
+  api_keys TEXT NOT NULL DEFAULT '',         -- 多个 token, 每行一个, 轮询使用
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ai_models(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id INTEGER NOT NULL,
+  model TEXT NOT NULL,                        -- 上游模型 id
+  display_name TEXT NOT NULL DEFAULT '',
+  intro TEXT NOT NULL DEFAULT '',             -- 可选介绍
+  groups TEXT NOT NULL DEFAULT '[]',         -- JSON 数组: 允许使用的用户组 id (管理员始终可用)
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ai_conversations(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  title TEXT NOT NULL DEFAULT '新对话',
+  model_id INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ai_messages(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conv_id INTEGER NOT NULL,
+  role TEXT NOT NULL,                         -- user | assistant
+  content TEXT NOT NULL,
+  model TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_ai_conv_user ON ai_conversations(user_id, id);
+CREATE INDEX IF NOT EXISTS ix_ai_msg_conv ON ai_messages(conv_id, id);
 CREATE TABLE IF NOT EXISTS qr_tickets(
   ticket TEXT PRIMARY KEY,
   uid INTEGER,
@@ -285,6 +329,22 @@ def init_db():
                          ("reply_to", "INTEGER")):
             if col not in gcols:
                 c.execute(f"ALTER TABLE chat_messages ADD COLUMN {col} {ddl}")
+    except Exception:
+        pass
+    # v3.6: 用户组 (默认组 id=1 = 邀请码用户组)、假用户标记、邀请码分组
+    try:
+        ucols2 = {r["name"] for r in c.execute("PRAGMA table_info(users)").fetchall()}
+        if "group_id" not in ucols2:
+            c.execute("ALTER TABLE users ADD COLUMN group_id INTEGER NOT NULL DEFAULT 1")
+        if "is_fake" not in ucols2:
+            c.execute("ALTER TABLE users ADD COLUMN is_fake INTEGER NOT NULL DEFAULT 0")
+        icols = {r["name"] for r in c.execute("PRAGMA table_info(invite_codes)").fetchall()}
+        if "group_id" not in icols:
+            c.execute("ALTER TABLE invite_codes ADD COLUMN group_id INTEGER NOT NULL DEFAULT 1")
+        if not c.execute("SELECT id FROM user_groups WHERE id=1").fetchone():
+            c.execute("INSERT INTO user_groups(id,name,descr,is_default,created_at) VALUES(1,?,?,1,?)",
+                      ("邀请码用户", "通过邀请码注册的用户(默认组)", now()))
+        c.commit()
     except Exception:
         pass
     # v1.26: 默认论坛板块 / 官方聊天室 / 权限开关

@@ -14,7 +14,10 @@ function view() {
     '<nav class="adm-nav">' +
     '<button data-s="overview">' + UI.icon('chart', 18) + ' 数据概览</button>' +
     '<button data-s="users">' + UI.icon('users', 18) + ' 用户管理</button>' +
+    '<button data-s="groups">' + UI.icon('users', 18) + ' 用户组</button>' +
     '<button data-s="invites">' + UI.icon('key', 18) + ' 邀请码</button>' +
+    '<button data-s="fake">' + UI.icon('plus', 18) + ' 假用户/首页数据</button>' +
+    '<button data-s="ai">' + UI.icon('sparkle', 18) + ' AI 渠道与模型</button>' +
     '<button data-s="anns">' + UI.icon('horn', 18) + ' 公告管理</button>' +
     '<button data-s="forum">' + UI.icon('forum', 18) + ' 论坛管理</button>' +
     '<button data-s="chat">' + UI.icon('chat', 18) + ' 聊天管理</button>' +
@@ -23,6 +26,7 @@ function view() {
     '<a class="adm-back" href="#/library">' + UI.icon('back', 15) + ' 返回前台</a>' +
     '</aside><main class="adm-main" id="adm-main"><div class="empty">加载中…</div></main></div>';
   bindLogout();
+  loadGroupsCache();
   $$('.adm-nav button').forEach(b => b.onclick = () => { sec = b.dataset.s; markNav(); load(); });
   markNav();
   load();
@@ -36,6 +40,9 @@ function load() {
   if (sec === 'overview') secOverview();
   if (sec === 'users') secUsers();
   if (sec === 'invites') secInvites();
+  if (sec === 'groups') secGroups();
+  if (sec === 'fake') secFake();
+  if (sec === 'ai') secAI();
   if (sec === 'settings') secSettings();
   if (sec === 'anns') secAnns();
   if (sec === 'forum') secForum();
@@ -138,6 +145,7 @@ function editUserModal(u) {
     '<label>证书预览</label><div class="eu-cert-preview" id="euprev"></div>' +
     '</div>' +
     '<label class="switch-row"><span>聊天禁言（不能在聊天区发言）</span><input type="checkbox" id="euban"' + (u.chat_banned ? ' checked' : '') + '></label>' +
+    '<label>用户组<select id="eugrp">' + groupsCache.map(g => '<option value="' + g.id + '"' + (g.id === u.group_id ? ' selected' : '') + '>' + UI.esc(g.name) + '</option>').join('') + '</select></label>' +
     '<label>空间配额 (MB)<input id="euquota" type="number" min="1" max="1000000" value="' + Math.round(u.quota_bytes / 1048576) + '">' +
     '<span class="muted">当前已用 ' + UI.fmtSize(u.used_bytes) + '</span></label></div>';
   m.foot.innerHTML = '<button class="btn" id="eucancel">取消</button> <button class="btn primary" id="eusave">保存</button>';
@@ -206,6 +214,7 @@ function editUserModal(u) {
         cert_color: certColor,
         chat_banned: m.body.querySelector('#euban').checked,
         quota_mb: parseInt(m.body.querySelector('#euquota').value, 10),
+        group_id: parseInt(m.body.querySelector('#eugrp').value, 10),
       });
       toast('已保存');
       m.close(); loadUsers();
@@ -256,6 +265,7 @@ async function secInvites() {
     '<label>可用次数<input id="i1uses" type="number" min="1" max="9999" value="1"></label>' +
     '<label>有效期<select id="i1dur">' + durOpts + '</select></label>' +
     '<label id="i1chwrap" style="display:none">自定义时长(小时)<input id="i1ch" type="number" min="0.1" step="0.1" value="1"></label>' +
+    '<label>用户组（通过此码注册的用户所属组）<select id="i1grp">' + groupOpts() + '</select></label>' +
     '<label>备注<input id="i1note" maxlength="100" placeholder="例如：数学教研组"></label>' +
     '<button class="btn primary" id="i1go">创建</button></div>' +
     '<div class="card inv-card"><h4>批量生成</h4>' +
@@ -264,6 +274,7 @@ async function secInvites() {
     '<label>每张可用次数<input id="i2uses" type="number" min="1" max="9999" value="1"></label>' +
     '<label>有效期<select id="i2dur">' + durOpts + '</select></label>' +
     '<label id="i2chwrap" style="display:none">自定义时长(小时)<input id="i2ch" type="number" min="0.1" step="0.1" value="1"></label>' +
+    '<label>用户组<select id="i2grp">' + groupOpts() + '</select></label>' +
     '<label>备注<input id="i2note" maxlength="100"></label>' +
     '<button class="btn primary" id="i2go">批量生成</button></div>' +
     '</div><div id="ilist" style="margin-top:18px"></div>';
@@ -279,7 +290,7 @@ async function secInvites() {
     try {
       await API.post('/api/admin/invites', {
         code: $('#i1code').value.trim(), max_uses: +$('#i1uses').value || 1,
-        duration_hours: durVal('#i1dur', '#i1ch'), note: $('#i1note').value,
+        duration_hours: durVal('#i1dur', '#i1ch'), note: $('#i1note').value, group_id: +$('#i1grp').value || 1,
       });
       toast('邀请码已创建'); loadInvites();
     } catch (e) { toast(e.message, 'err'); }
@@ -288,7 +299,7 @@ async function secInvites() {
     try {
       const r = await API.post('/api/admin/invites/batch', {
         count: +$('#i2count').value || 1, prefix: $('#i2prefix').value.trim(),
-        max_uses: +$('#i2uses').value || 1, duration_hours: durVal('#i2dur', '#i2ch'), note: $('#i2note').value,
+        max_uses: +$('#i2uses').value || 1, duration_hours: durVal('#i2dur', '#i2ch'), note: $('#i2note').value, group_id: +$('#i2grp').value || 1,
       });
       toast('已生成 ' + r.items.length + ' 个邀请码');
       loadInvites();
@@ -299,6 +310,7 @@ async function secInvites() {
 
 async function loadInvites() {
   const box = $('#ilist'); if (!box) return;
+  await loadGroupsCache();
   let list;
   try { list = await API.get('/api/admin/invites'); } catch (e) { box.innerHTML = '<div class="empty">' + UI.esc(e.message) + '</div>'; return; }
   if (!list.length) { box.innerHTML = '<div class="empty">还没有邀请码</div>'; return; }
@@ -308,7 +320,7 @@ async function loadInvites() {
       '<td>' + i.used_count + ' / ' + i.max_uses + '</td>' +
       '<td>' + stMap[i.status] + '</td>' +
       '<td>' + (i.expires_at ? UI.fmtDate(i.expires_at) : '永久') + '</td>' +
-      '<td>' + UI.esc(i.note || '—') + '</td>' +
+      '<td>' + UI.esc(i.note || '—') + ' <span class="chip">' + UI.esc(groupName(i.group_id)) + '</span></td>' +
       '<td>' + UI.fmtDate(i.created_at) + '</td>' +
       '<td><button class="btn xs danger" data-del="' + i.id + '">' + UI.icon('trash', 14) + '</button></td></tr>').join('') +
     '</tbody></table>';
@@ -546,4 +558,245 @@ async function secChat() {
     if (!ok) return;
     try { await API.del('/api/chat/rooms/' + b.closest('tr').dataset.id); secChat(); } catch (e) { toast(e.message, 'err'); }
   });
+}
+
+/* ================================================================
+ *  v3.6: 用户组 / 假用户与首页数据 / AI 渠道与模型
+ * ================================================================ */
+let groupsCache = [];
+async function loadGroupsCache() {
+  try { groupsCache = (await API.get('/api/admin/groups')).items; } catch (e) { }
+  return groupsCache;
+}
+function groupName(id) { const g = groupsCache.find(x => x.id === id); return g ? g.name : ('组#' + id); }
+function groupOpts(sel) {
+  return groupsCache.map(g => '<option value="' + g.id + '"' + ((sel || 1) === g.id ? ' selected' : '') + '>' + UI.esc(g.name) + '</option>').join('');
+}
+function groupChecks(selected) {
+  return '<div class="ai-grp-checks">' + groupsCache.map(g =>
+    '<label><input type="checkbox" data-grp="' + g.id + '"' + ((selected || []).includes(g.id) ? ' checked' : '') + '> ' + UI.esc(g.name) + '</label>').join('') + '</div>';
+}
+function readGroups(root) { return $$('[data-grp]:checked', root).map(x => +x.dataset.grp); }
+
+/* ---------- 用户组 ---------- */
+async function secGroups() {
+  const main = $('#adm-main');
+  await loadGroupsCache();
+  main.innerHTML = '<div class="sec-head"><h3>用户组</h3></div>' +
+    '<p class="muted">用户组决定可以使用哪些 AI 模型。「邀请码用户」是默认组：通过邀请码注册的用户默认属于它，不能删除。' +
+    '每个邀请码可以指定注册用户所属的组。</p>' +
+    '<div class="card"><table class="tbl"><thead><tr><th>组名</th><th>说明</th><th style="width:90px">成员</th><th style="width:170px"></th></tr></thead><tbody>' +
+    groupsCache.map(g => '<tr data-id="' + g.id + '"><td><b>' + UI.esc(g.name) + '</b>' + (g.is_default ? ' <span class="chip ok">默认</span>' : '') + '</td>' +
+      '<td>' + UI.esc(g.descr || '—') + '</td><td>' + g.users + '</td>' +
+      '<td><button class="btn xs" data-op="edit">编辑</button> ' + (g.is_default ? '' : '<button class="btn xs danger" data-op="del">删除</button>') + '</td></tr>').join('') +
+    '</tbody></table></div>' +
+    '<div class="card" style="margin-top:16px;max-width:520px"><h4>新建用户组</h4>' +
+    '<label>组名<input id="g-name" maxlength="30"></label><label>说明（可选）<input id="g-descr" maxlength="100"></label>' +
+    '<button class="btn primary" id="g-add">创建</button></div>';
+  $('#g-add').onclick = async () => {
+    try { await API.post('/api/admin/groups', { name: $('#g-name').value, descr: $('#g-descr').value }); toast('已创建'); secGroups(); }
+    catch (e) { toast(e.message, 'err'); }
+  };
+  $$('#adm-main [data-op]').forEach(b => b.onclick = async () => {
+    const id = +b.closest('tr').dataset.id;
+    const g = groupsCache.find(x => x.id === id);
+    try {
+      if (b.dataset.op === 'del') {
+        const ok = await UI.confirm('删除用户组「' + g.name + '」？组内成员将回落到默认组，AI 模型授权中的该组会被移除');
+        if (!ok) return;
+        await API.del('/api/admin/groups/' + id); toast('已删除'); secGroups();
+      } else {
+        const nm = prompt('组名', g.name); if (nm === null) return;
+        const ds = prompt('说明', g.descr || ''); if (ds === null) return;
+        await API.patch('/api/admin/groups/' + id, { name: nm, descr: ds }); toast('已保存'); secGroups();
+      }
+    } catch (e) { toast(e.message, 'err'); }
+  });
+}
+
+/* ---------- 假用户 & 首页展示数据 ---------- */
+async function secFake() {
+  const main = $('#adm-main');
+  await loadGroupsCache();
+  let st, disp;
+  try {
+    st = await API.get('/api/admin/fake-users/stats');
+    disp = await API.get('/api/admin/display');
+  } catch (e) { main.innerHTML = '<div class="empty">' + UI.esc(e.message) + '</div>'; return; }
+  const o = disp.offsets, sh = disp.shown;
+  main.innerHTML = '<div class="sec-head"><h3>假用户 & 首页数据</h3></div>' +
+    '<div class="inv-cards">' +
+    '<div class="card inv-card"><h4>批量创建假用户</h4>' +
+    '<p class="muted">假用户使用随机昵称，密码随机且不对外，无法登录，会加入「官方大厅」。当前假用户：<b>' + st.count + '</b> 个</p>' +
+    '<label>数量（1-500）<input id="f-count" type="number" min="1" max="500" value="20"></label>' +
+    '<label>用户名前缀<input id="f-prefix" maxlength="12" value="fake"></label>' +
+    '<label>所属用户组<select id="f-grp">' + groupOpts() + '</select></label>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="f-go">批量创建</button>' +
+    '<button class="btn danger" id="f-del">删除全部假用户</button></div></div>' +
+    '<div class="card inv-card"><h4>首页展示数据</h4>' +
+    '<p class="muted">首页显示 = 真实数值 + 偏移量（偏移可为负数）。用于彰显网站的欢迎程度，可随时修改。</p>' +
+    '<label>注册用户 偏移（真实 ' + (sh.users - o.show_users_offset) + '）<input id="d-u" type="number" value="' + o.show_users_offset + '"></label>' +
+    '<label>在线人数 偏移（真实 ' + (sh.online - o.show_online_offset) + '）<input id="d-o" type="number" value="' + o.show_online_offset + '"></label>' +
+    '<label>累计访问 偏移<input id="d-h" type="number" value="' + o.show_hits_offset + '"></label>' +
+    '<label>累计流量 偏移（MB）<input id="d-t" type="number" value="' + o.show_traffic_offset_mb + '"></label>' +
+    '<p class="muted">当前首页显示：用户 ' + sh.users + ' · 在线 ' + sh.online + ' · 访问 ' + sh.hits + ' · 流量 ' + UI.fmtSize(sh.traffic_bytes) + '</p>' +
+    '<button class="btn primary" id="d-save">保存展示数据</button></div></div>';
+
+  $('#f-go').onclick = async () => {
+    try {
+      const r = await API.post('/api/admin/fake-users', {
+        count: +$('#f-count').value || 1, prefix: $('#f-prefix').value.trim() || 'fake', group_id: +$('#f-grp').value || 1,
+      });
+      toast('已创建 ' + r.created + ' 个假用户'); secFake();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  $('#f-del').onclick = async () => {
+    const ok = await UI.confirm('删除全部假用户？他们发布的帖子和回复也会一并删除（不可恢复）');
+    if (!ok) return;
+    try { const r = await API.del('/api/admin/fake-users'); toast('已删除 ' + r.deleted + ' 个'); secFake(); }
+    catch (e) { toast(e.message, 'err'); }
+  };
+  $('#d-save').onclick = async () => {
+    try {
+      await API.put('/api/admin/display', {
+        show_users_offset: parseInt($('#d-u').value, 10) || 0,
+        show_online_offset: parseInt($('#d-o').value, 10) || 0,
+        show_hits_offset: parseInt($('#d-h').value, 10) || 0,
+        show_traffic_offset_mb: parseInt($('#d-t').value, 10) || 0,
+      });
+      toast('已保存，首页约 5 秒内刷新'); secFake();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+}
+
+/* ---------- AI 渠道与模型 ---------- */
+function chanCardHTML(c) {
+  return '<div class="ai-chan" data-id="' + c.id + '">' +
+    '<div class="ai-chan-row">' +
+      '<label>渠道名称<input data-f="name" maxlength="40" value="' + UI.esc(c.name) + '"></label>' +
+      '<label>接口地址（到 /v1 为止）<input data-f="base_url" value="' + UI.esc(c.base_url) + '"></label>' +
+      '<label class="switch-row"><span>启用</span><input type="checkbox" data-f="enabled"' + (c.enabled ? ' checked' : '') + '></label>' +
+    '</div>' +
+    '<label>Token（每行一个，轮换使用，当前 ' + c.keys_count + ' 个）<textarea data-f="api_keys" rows="2">' + UI.esc(c.api_keys) + '</textarea></label>' +
+    '<div class="ai-chan-acts"><button class="btn xs primary" data-op="csave">保存</button> ' +
+      '<button class="btn xs" data-op="cfetch">获取模型列表</button> ' +
+      '<button class="btn xs danger" data-op="cdel">删除渠道</button> ' +
+      '<span class="muted">已导入 ' + c.models + ' 个模型</span></div></div>';
+}
+
+async function secAI() {
+  const main = $('#adm-main');
+  await loadGroupsCache();
+  let cfg, chans, models;
+  try {
+    cfg = await API.get('/api/admin/ai/config');
+    chans = (await API.get('/api/admin/ai/channels')).items;
+    models = (await API.get('/api/admin/ai/models')).items;
+  } catch (e) { main.innerHTML = '<div class="empty">' + UI.esc(e.message) + '</div>'; return; }
+  const chanName = id => { const c = chans.find(x => x.id === id); return c ? c.name : ''; };
+  main.innerHTML = '<div class="sec-head"><h3>AI 渠道与模型</h3></div>' +
+    '<div class="card" style="max-width:760px;margin-bottom:16px"><h4>总开关与系统提示词</h4>' +
+    '<label class="switch-row"><span>开启 AI 功能（AI 助手 / 写作辅助 / AI 论坛）</span><input type="checkbox" id="ai-on"' + (cfg.enabled ? ' checked' : '') + '></label>' +
+    '<label>系统提示词（可选，留空使用默认）<textarea id="ai-sys" rows="3" maxlength="2000">' + UI.esc(cfg.system_prompt) + '</textarea></label>' +
+    '<button class="btn primary" id="ai-cfg-save">保存</button></div>' +
+
+    '<div class="card" style="margin-bottom:16px"><h4>渠道（OpenAI 兼容接口）</h4>' +
+    '<p class="muted">一个渠道可配置多个 Token（每行一个），自动轮换；某个 Token 报错会切换到下一个。' +
+    '保存后点「获取模型列表」即可直接从上游拉取可用模型，勾选导入并设置可用用户组。</p>' +
+    (chans.map(chanCardHTML).join('') || '<div class="empty">还没有渠道</div>') +
+    '<div class="ai-chan"><h4>新增渠道</h4><div class="ai-chan-row">' +
+      '<label>渠道名称<input id="nc-name" maxlength="40" placeholder="例如：DeepSeek"></label>' +
+      '<label>接口地址<input id="nc-url" placeholder="https://api.deepseek.com/v1"></label></div>' +
+    '<label>Token（每行一个）<textarea id="nc-keys" rows="2" placeholder="sk-xxxx"></textarea></label>' +
+    '<button class="btn primary" id="nc-add">添加渠道</button></div></div>' +
+
+    '<div class="card"><h4>已导入模型（' + models.length + '）</h4>' +
+    (models.length ? '<div class="ai-mtable-wrap"><table class="tbl ai-mtable"><thead><tr><th>模型</th><th>显示名称</th><th>介绍（可选）</th><th>可用用户组</th><th style="width:60px">启用</th><th style="width:130px"></th></tr></thead><tbody>' +
+      models.map(m => '<tr class="ai-mrow" data-id="' + m.id + '">' +
+        '<td><b>' + UI.esc(m.model) + '</b><br><span class="muted">' + UI.esc(m.channel) + '</span></td>' +
+        '<td><input data-f="display_name" maxlength="40" value="' + UI.esc(m.display_name) + '" placeholder="同模型名"></td>' +
+        '<td><input data-f="intro" maxlength="200" value="' + UI.esc(m.intro) + '" placeholder="例如：速度快，适合日常问答"></td>' +
+        '<td>' + groupChecks(m.groups) + '</td>' +
+        '<td><input type="checkbox" data-f="enabled"' + (m.enabled ? ' checked' : '') + '></td>' +
+        '<td><button class="btn xs primary" data-op="msave">保存</button> <button class="btn xs danger" data-op="mdel">删除</button></td>' +
+        '</tr>').join('') + '</tbody></table></div>'
+      : '<div class="empty">还没有导入模型，请先在上方渠道里点「获取模型列表」</div>') + '</div>';
+
+  $('#ai-cfg-save').onclick = async () => {
+    try { await API.put('/api/admin/ai/config', { enabled: $('#ai-on').checked, system_prompt: $('#ai-sys').value }); toast('已保存'); }
+    catch (e) { toast(e.message, 'err'); }
+  };
+  $('#nc-add').onclick = async () => {
+    try {
+      await API.post('/api/admin/ai/channels', { name: $('#nc-name').value, base_url: $('#nc-url').value, api_keys: $('#nc-keys').value, enabled: true });
+      toast('渠道已添加'); secAI();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  $$('#adm-main .ai-chan[data-id]').forEach(card => {
+    const id = +card.dataset.id;
+    card.querySelector('[data-op=csave]').onclick = async () => {
+      try {
+        await API.patch('/api/admin/ai/channels/' + id, {
+          name: card.querySelector('[data-f=name]').value,
+          base_url: card.querySelector('[data-f=base_url]').value,
+          api_keys: card.querySelector('[data-f=api_keys]').value,
+          enabled: card.querySelector('[data-f=enabled]').checked,
+        });
+        toast('已保存'); secAI();
+      } catch (e) { toast(e.message, 'err'); }
+    };
+    card.querySelector('[data-op=cfetch]').onclick = () => openFetchModal(id, chanName(id));
+    card.querySelector('[data-op=cdel]').onclick = async () => {
+      const ok = await UI.confirm('删除渠道「' + chanName(id) + '」及其下所有模型？');
+      if (!ok) return;
+      try { await API.del('/api/admin/ai/channels/' + id); toast('已删除'); secAI(); }
+      catch (e) { toast(e.message, 'err'); }
+    };
+  });
+  $$('#adm-main .ai-mrow').forEach(row => {
+    const id = +row.dataset.id;
+    row.querySelector('[data-op=msave]').onclick = async () => {
+      try {
+        await API.patch('/api/admin/ai/models/' + id, {
+          display_name: row.querySelector('[data-f=display_name]').value,
+          intro: row.querySelector('[data-f=intro]').value,
+          groups: readGroups(row),
+          enabled: row.querySelector('[data-f=enabled]').checked,
+        });
+        toast('已保存');
+      } catch (e) { toast(e.message, 'err'); }
+    };
+    row.querySelector('[data-op=mdel]').onclick = async () => {
+      const ok = await UI.confirm('从列表移除该模型？（不影响上游）');
+      if (!ok) return;
+      try { await API.del('/api/admin/ai/models/' + id); secAI(); } catch (e) { toast(e.message, 'err'); }
+    };
+  });
+}
+
+async function openFetchModal(chid, chName) {
+  let r;
+  try { r = await API.get('/api/admin/ai/channels/' + chid + '/upstream'); }
+  catch (e) { toast(e.message, 'err'); return; }
+  if (!r.items.length) { toast('上游没有返回模型', 'err'); return; }
+  const m = UI.modal({
+    title: '导入模型 - ' + chName, width: '600px',
+    body: '<p class="muted">勾选要导入的模型，并设置可以使用它们的用户组（不勾选任何组 = 仅管理员可用）。</p>' +
+      '<div class="ai-up-list">' + r.items.map(i =>
+        '<label class="ai-up-item"><input type="checkbox" value="' + UI.esc(i.id) + '"' + (i.added ? ' disabled' : '') + '> ' +
+        UI.esc(i.id) + (i.added ? ' <span class="muted">（已导入）</span>' : '') + '</label>').join('') + '</div>' +
+      '<div class="ai-up-acts"><button class="btn xs" id="up-all" type="button">全选未导入</button></div>' +
+      '<h4 style="margin-top:12px">可用用户组</h4>' + groupChecks([1]),
+  });
+  m.body.querySelector('#up-all').onclick = () => m.body.querySelectorAll('.ai-up-item input:not(:disabled)').forEach(x => x.checked = true);
+  m.foot.innerHTML = '<button class="btn" id="up-c">取消</button><button class="btn primary" id="up-ok">导入选中</button>';
+  m.foot.querySelector('#up-c').onclick = m.close;
+  m.foot.querySelector('#up-ok').onclick = async () => {
+    const models = Array.from(m.body.querySelectorAll('.ai-up-item input:checked')).map(x => x.value);
+    if (!models.length) { toast('请先勾选模型', 'err'); return; }
+    try {
+      const res = await API.post('/api/admin/ai/channels/' + chid + '/import', { models, groups: readGroups(m.body) });
+      toast('已导入 ' + res.added + ' 个模型'); m.close(); secAI();
+    } catch (e) { toast(e.message, 'err'); }
+  };
 }

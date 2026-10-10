@@ -9,7 +9,8 @@ from fastapi.staticfiles import StaticFiles
 
 from . import converter, db, security
 from .deps import user_public
-from .routers import admin, announcements, auth, chat, desktop, files, mobile, remote, social, tools, users
+from .routers import (admin, admin_extra, ai, announcements, auth, chat, desktop, files, mobile, remote, social,
+                      stats, tools, users)
 
 app = FastAPI(title="FLA", docs_url=None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
@@ -43,6 +44,10 @@ app.include_router(tools.router)           # v1.27: 课堂工具(名单解析/�
 app.include_router(remote.router)          # v1.28: 手机投屏与远程授课遥控
 app.include_router(desktop.router)         # v1.28: 桌面客户端免登录下载与自动更新
 app.include_router(mobile.router)          # v3.3: 安卓 APK 下载
+app.include_router(admin_extra.router)     # v3.6: 用户组 / 批量假用户 / 首页展示数据
+app.include_router(ai.router)              # v3.6: AI 对话 / 写作辅助 / AI 论坛
+app.include_router(ai.admin_router)        # v3.6: AI 渠道与模型管理
+app.include_router(stats.router)           # v3.6: 首页实时数据
 
 
 def _ensure_admin():
@@ -73,6 +78,7 @@ async def _start_rtmp():
 def startup():
     db.init_db()
     _ensure_admin()
+    stats.start()
     converter.start_worker()
     threading.Thread(target=converter.ensure_fonts, daemon=True).start()
 
@@ -100,5 +106,9 @@ try:
     app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
 except Exception as _e:
     print("[startup] GZipMiddleware unavailable:", _e)
+
+# v3.6: 流量统计中间件 (最外层, 统计真实发出的字节数)
+from .routers.stats import TrafficMiddleware  # noqa: E402
+app.add_middleware(TrafficMiddleware)
 
 app.mount("/", NoCacheStatic(directory=str(db.WEB), html=True), name="web")
