@@ -3211,3 +3211,23 @@ body.present-body { background: #000000; }
 .ai-up-item { display: flex; align-items: center; gap: 6px; margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; word-break: break-all; }
 .ai-up-acts { margin-top: 8px; }
 @media (max-width: 760px) { .ai-chan-row { grid-template-columns: 1fr; } }
+
+/* v3.6.1: AI 回复 Markdown 排版 */
+.ai-bubble p { margin: 0 0 8px; }
+.ai-bubble p:last-child, .ai-bubble ul:last-child, .ai-bubble ol:last-child { margin-bottom: 0; }
+.ai-bubble h3, .ai-bubble h4, .ai-bubble h5, .ai-bubble h6 { font-size: 15.5px; margin: 10px 0 6px; font-weight: 700; }
+.ai-bubble ul, .ai-bubble ol { margin: 4px 0 8px; padding-left: 20px; }
+.ai-bubble li { margin: 2px 0; }
+.ai-bubble blockquote { margin: 6px 0; padding: 4px 10px; border-left: 3px solid #d4d4d8; color: #52525b; }
+.ai-bubble hr { border: 0; border-top: 1px solid #e4e4e7; margin: 10px 0; }
+.ai-bubble a { color: #2563eb; text-decoration: underline; }
+.ai-bubble .ai-tbl-wrap { overflow-x: auto; margin: 6px 0; }
+.ai-bubble table { border-collapse: collapse; font-size: 13px; }
+.ai-bubble th, .ai-bubble td { border: 1px solid #e4e4e7; padding: 5px 9px; text-align: left; white-space: nowrap; }
+.ai-bubble th { background: #f4f4f5; }
+.ai-row.user .ai-bubble a { color: #bfdbfe; }
+
+/* v3.6.1 修: 手机上底部批量操作条被 left:50% 挤窄, "已选 0 项" 被拆成多行 */
+.batch-bar { width: max-content; max-width: calc(100vw - 24px); box-sizing: border-box; }
+.batch-count { white-space: nowrap; }
+.btn { white-space: nowrap; }

@@ -15,20 +15,85 @@ async function loadModels(force) {
   return modelCache;
 }
 
-/* 极简 Markdown: 先转义, 再处理代码块/行内代码/加粗/换行 (防 XSS) */
+/* Markdown 渲染 (先整体转义再解析, 防 XSS): 标题 / 列表 / 引用 / 表格 / 代码块 / 行内代码 / 粗斜体 / 删除线 / 链接 / 分割线
+   流式输出时未闭合的代码块会一直渲染为代码, 直到收到结束标记 */
+function mdInline(s) {
+  const codes = [];
+  s = s.replace(/`([^`\n]+)`/g, (_, c) => { codes.push(c); return '\u0000' + (codes.length - 1) + '\u0000'; });
+  s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, t, u) => '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + t + '</a>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+       .replace(/__([^_\n]+)__/g, '<b>$1</b>')
+       .replace(/~~([^~\n]+)~~/g, '<s>$1</s>')
+       .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>');
+  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => '<code>' + codes[+i] + '</code>');
+}
+
+function mdTable(lines) {
+  const cells = l => l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+  const head = cells(lines[0]);
+  const rows = lines.slice(2).map(cells);
+  return '<div class="ai-tbl-wrap"><table><thead><tr>' + head.map(c => '<th>' + mdInline(c) + '</th>').join('') +
+    '</tr></thead><tbody>' + rows.map(r => '<tr>' + head.map((_, i) => '<td>' + mdInline(r[i] || '') + '</td>').join('') + '</tr>').join('') +
+    '</tbody></table></div>';
+}
+
 function md(text) {
-  let s = UI.esc(text || '');
-  const parts = s.split(/```/);
-  s = parts.map((p, i) => {
-    if (i % 2 === 1) {
-      const body = p.replace(/^[^\n]*\n/, '');
-      return '<pre class="ai-code"><code>' + body.replace(/\n+$/, '') + '</code></pre>';
+  const src = UI.esc(text || '').replace(/\r\n?/g, '\n');
+  const lines = src.split('\n');
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    // 代码块
+    const fence = line.match(/^\s*```\s*([\w+-]*)\s*$/);
+    if (fence) {
+      const body = [];
+      i++;
+      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { body.push(lines[i]); i++; }
+      i++;
+      out.push('<pre class="ai-code"><code>' + body.join('\n') + '</code></pre>');
+      continue;
     }
-    return p.replace(/`([^`\n]+)`/g, '<code>$1</code>')
-      .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
-      .replace(/\n/g, '<br>');
-  }).join('');
-  return s;
+    if (!line.trim()) { i++; continue; }
+    // 标题
+    const h = line.match(/^\s*(#{1,6})\s+(.*)$/);
+    if (h) { const lv = Math.min(h[1].length + 2, 6); out.push('<h' + lv + '>' + mdInline(h[2]) + '</h' + lv + '>'); i++; continue; }
+    // 分割线
+    if (/^\s*([-*_])\s*(\1\s*){2,}$/.test(line)) { out.push('<hr>'); i++; continue; }
+    // 表格
+    if (line.includes('|') && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1]) && lines[i + 1].includes('-')) {
+      const tl = [line, lines[i + 1]];
+      i += 2;
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) { tl.push(lines[i]); i++; }
+      out.push(mdTable(tl));
+      continue;
+    }
+    // 引用
+    if (/^\s*&gt;/.test(line)) {
+      const q = [];
+      while (i < lines.length && /^\s*&gt;/.test(lines[i])) { q.push(lines[i].replace(/^\s*&gt;\s?/, '')); i++; }
+      out.push('<blockquote>' + mdInline(q.join('<br>')) + '</blockquote>');
+      continue;
+    }
+    // 列表 (无序 / 有序)
+    const ul = /^\s*[-*+]\s+/, ol = /^\s*\d+[.)]\s+/;
+    if (ul.test(line) || ol.test(line)) {
+      const ordered = ol.test(line);
+      const re = ordered ? ol : ul;
+      const items = [];
+      while (i < lines.length && re.test(lines[i])) { items.push(lines[i].replace(re, '')); i++; }
+      out.push((ordered ? '<ol>' : '<ul>') + items.map(x => '<li>' + mdInline(x) + '</li>').join('') + (ordered ? '</ol>' : '</ul>'));
+      continue;
+    }
+    // 段落 (合并连续行)
+    const para = [];
+    while (i < lines.length && lines[i].trim() && !/^\s*(#{1,6}\s|```|[-*+]\s|\d+[.)]\s|&gt;)/.test(lines[i]) && !(lines[i].includes('|') && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1]))) {
+      para.push(lines[i]); i++;
+    }
+    if (!para.length) { para.push(lines[i]); i++; }
+    out.push('<p>' + mdInline(para.join('<br>')) + '</p>');
+  }
+  return out.join('');
 }
 
 /* ================================================================

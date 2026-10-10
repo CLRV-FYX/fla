@@ -279,6 +279,8 @@ def send_message(cid: int, body: MsgIn, request: Request):
 
     def gen():
         buf = []
+        # 先发一段注释填充(SSE 注释会被客户端忽略), 冲破代理/网关的缓冲, 让首字立即出现
+        yield ": " + " " * 2048 + "\n\n"
         try:
             resp = _call(m["channel_id"], m["base_url"], m["api_keys"], "/chat/completions",
                          {"model": m["model"], "messages": messages, "stream": True}, timeout=120)
